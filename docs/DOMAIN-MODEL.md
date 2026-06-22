@@ -1,0 +1,237 @@
+# Domain Model — Gym Management System
+
+This model is designed for MVP (single gym) while keeping a clean migration path to multi-tenant SaaS. The single biggest design decision driving this model: **`gym_id` appears on every table from day one**, even though MVP will only ever have one row in the `Gym` table. See reasoning at the end.
+
+---
+
+## Entity-Relationship Diagram (Mermaid)
+
+```mermaid
+erDiagram
+    GYM ||--o{ USER : employs
+    GYM ||--o{ CLIENT : has
+    GYM ||--o{ MEMBERSHIP_PLAN : defines
+    GYM ||--o{ PRODUCT : sells
+    GYM ||--o{ TRANSACTION : records
+
+    CLIENT ||--o{ MEMBERSHIP : has
+    CLIENT ||--o{ ATTENDANCE : logs
+    CLIENT ||--o{ TRANSACTION : makes
+
+    MEMBERSHIP_PLAN ||--o{ MEMBERSHIP : "used by"
+    MEMBERSHIP ||--o{ ATTENDANCE : "active during"
+    MEMBERSHIP ||--o| MEMBERSHIP : "renewed from"
+
+    PRODUCT_CATEGORY ||--o{ PRODUCT : groups
+    PRODUCT ||--o{ INVENTORY_TRANSACTION : "stock moves"
+    PRODUCT ||--o{ TRANSACTION_LINE_ITEM : "sold as"
+
+    TRANSACTION ||--|{ TRANSACTION_LINE_ITEM : contains
+    TRANSACTION_LINE_ITEM ||--o| MEMBERSHIP : references
+    TRANSACTION_LINE_ITEM ||--o| PRODUCT : references
+    TRANSACTION_LINE_ITEM ||--o{ INVENTORY_TRANSACTION : triggers
+```
+
+---
+
+## Entities
+
+### `Gym` *(tenant root — future-proofing)*
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/PK | |
+| name | string | |
+| address | string | |
+| contact_info | string | phone/email |
+| default_membership_fee | decimal | |
+| default_walkin_fee | decimal | |
+| expiration_warning_days | int | drives "expiring soon" dashboard flag |
+| created_at / updated_at | timestamp | |
+
+**Reasoning:** In MVP there is exactly one row in this table. It exists anyway because adding `gym_id` as a foreign key to every other table *now* costs nothing, while adding it after the fact (post-launch, with real data) means rewriting every query and risking cross-tenant data leakage during migration. This is the cheapest insurance in the entire schema.
+
+---
+
+### `User` *(Owner account, future: staff accounts)*
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/PK | |
+| gym_id | FK → Gym | |
+| username | string | |
+| password_hash | string | never store plaintext |
+| role | enum | MVP: `OWNER` only. Future: `STAFF`, `MANAGER` |
+| created_at | timestamp | |
+
+---
+
+### `Client`
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/PK | |
+| gym_id | FK → Gym | |
+| full_name | string, required | |
+| contact_number | string, nullable | |
+| email | string, nullable | reserved for future notifications |
+| notes | text, nullable | freeform owner notes |
+| date_registered | date | |
+| status | derived, not stored | computed from latest membership + recent attendance, never a stale stored flag |
+| created_at / updated_at / deleted_at | timestamp | soft delete only |
+
+**Reasoning — why `status` is derived, not stored:** A stored "active/inactive" flag requires a background job to keep in sync with membership expiry dates, and it *will* drift out of sync. Computing it at query time (`CASE WHEN exists active membership THEN 'member' WHEN recent walk-in visits THEN 'walk-in' ELSE 'inactive' END`) guarantees correctness with no sync risk, at negligible query cost for single-gym scale.
+
+---
+
+### `MembershipPlan` *(catalog of durations/prices)*
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/PK | |
+| gym_id | FK → Gym | |
+| name | string | e.g. "1 Month", "Custom 45-Day" |
+| duration_days | int | |
+| default_price | decimal | |
+| is_active | bool | allows retiring old plans without deleting history |
+| created_at | timestamp | |
+
+**Reasoning:** Separating the *plan catalog* from the *individual membership instance* lets the owner manage default offerings (1/2/3 month + custom) without that catalog being entangled with what any specific client actually paid.
+
+---
+
+### `Membership` *(an individual client's purchased period)*
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/PK | |
+| client_id | FK → Client | |
+| membership_plan_id | FK → MembershipPlan, nullable | nullable to allow a fully custom one-off membership not tied to a catalog plan |
+| start_date | date | |
+| end_date | date | |
+| price_paid | decimal | **snapshot**, independent of plan's current default_price |
+| renewed_from_membership_id | FK → Membership, nullable, self-referencing | links renewal chains without overwriting history |
+| created_at | timestamp | |
+
+**Status is derived, not stored:** `ACTIVE` if `end_date >= today`, else `EXPIRED`. Same reasoning as Client.status above — avoids drift.
+
+**Business rule enforced at the application layer:** a client may have at most one membership with `end_date >= today` at any given time (no overlapping active memberships).
+
+---
+
+### `Attendance`
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/PK | |
+| gym_id | FK → Gym | |
+| client_id | FK → Client | |
+| visit_date | date | |
+| time_in | time | |
+| time_out | time, nullable | **not used in MVP fee logic**, but captured as a free nullable field now so future occupancy/duration analytics don't require a schema migration |
+| visit_type | enum | `MEMBER` / `WALK_IN` |
+| membership_id | FK → Membership, nullable | **snapshot link** — records which membership (if any) was active at time of visit, so later expiry/renewal never rewrites historical attendance meaning |
+| fee_charged | decimal, nullable | populated for WALK_IN visits |
+| created_at | timestamp | |
+
+**Reasoning for `membership_id` snapshot link:** Without it, a report asking "was this person a paying member on March 3rd" would require reconstructing membership date ranges retroactively — fragile and slow. Storing the link at the moment of check-in makes this a simple, permanently-correct lookup.
+
+---
+
+### `ProductCategory`
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/PK | |
+| gym_id | FK → Gym | |
+| name | string | e.g. "Beverage", "Supplement" |
+
+---
+
+### `Product`
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/PK | |
+| gym_id | FK → Gym | |
+| category_id | FK → ProductCategory | |
+| name | string | |
+| unit_type | enum | `UNIT` (e.g. bottled water) or `SERVING` (e.g. scoops from a tub) |
+| current_price | decimal | current/default selling price — **never read directly into a past transaction** |
+| current_stock | decimal | interpreted as units or servings depending on unit_type |
+| low_stock_threshold | decimal | drives dashboard alert |
+| is_active | bool | soft "discontinue" flag |
+| created_at / updated_at | timestamp | |
+
+---
+
+### `InventoryTransaction` *(stock movement ledger)*
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/PK | |
+| product_id | FK → Product | |
+| type | enum | `PURCHASE`, `SALE`, `ADJUSTMENT` |
+| quantity_delta | decimal | positive for purchase/adjustment-up, negative for sale/adjustment-down |
+| resulting_stock | decimal | snapshot of stock level immediately after this movement — enables point-in-time auditing without recomputation |
+| reference_transaction_line_item_id | FK → TransactionLineItem, nullable | links a SALE movement back to the sale that caused it |
+| note | string, nullable | required for ADJUSTMENT type (why was stock manually changed?) |
+| created_at | timestamp | |
+
+**Reasoning:** A single `current_stock` counter on `Product` cannot be audited. If the count is ever wrong, there's no way to find out why. This ledger is the system of record; `Product.current_stock` becomes a cached/derived value recomputable from the ledger if it ever drifts.
+
+---
+
+### `Transaction` *(sale header — replaces three separate "sales" concepts in the BRD)*
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/PK | |
+| gym_id | FK → Gym | |
+| client_id | FK → Client, nullable | nullable only for true anonymous walk-ins if ever allowed; in practice almost always populated since full name is required |
+| transaction_date | datetime | |
+| total_amount | decimal | sum of line items, computed/stored for fast reporting |
+| payment_method | enum | `CASH`, `GCASH`, `CARD`, `OTHER` |
+| status | enum | `COMPLETED`, `VOID` |
+| void_reason | string, nullable | required if status = VOID |
+| created_by | FK → User | |
+| created_at | timestamp | |
+
+**Reasoning — why one Transaction table instead of three (Membership Sale / Walk-In Sale / Product Sale) as the BRD's module list implies:** Real-world checkouts mix these (e.g., a member renews *and* buys a protein shake in the same visit). A single header with typed line items captures reality correctly and gives you one true revenue ledger to report from, instead of three disconnected tables that need to be unioned for every report.
+
+---
+
+### `TransactionLineItem`
+
+| Field | Type | Notes |
+|---|---|---|
+| id | UUID/PK | |
+| transaction_id | FK → Transaction | |
+| item_type | enum | `MEMBERSHIP`, `WALK_IN_FEE`, `PRODUCT` |
+| reference_membership_id | FK → Membership, nullable | populated when item_type = MEMBERSHIP |
+| reference_product_id | FK → Product, nullable | populated when item_type = PRODUCT |
+| description | string | human-readable snapshot (e.g. "1 Month Membership", "Whey Protein - 1 scoop") |
+| quantity | decimal | |
+| unit_price | decimal | **price snapshot at time of sale** |
+| subtotal | decimal | quantity × unit_price |
+
+**Reasoning:** `unit_price` is always copied at the moment of sale, never joined live from `Product.current_price` or `MembershipPlan.default_price`. This is the single most important correctness rule in the whole schema — without it, a price change next month silently rewrites the financial meaning of every past sale.
+
+---
+
+## Cross-Cutting Design Decisions
+
+1. **Soft deletes everywhere financial/historical data is involved** (`Client`, `Product`). Hard deletes are reserved for things with zero downstream references (e.g., an unused draft).
+2. **`gym_id` on every table** — see Gym entity reasoning above. This is the cheapest tenant-readiness investment available.
+3. **Derived status fields, not stored flags**, for anything computable from dates (Client status, Membership status). Avoids sync jobs and drift bugs.
+4. **Snapshots over live references** for anything involving money (price_paid, unit_price) — past transactions must never change meaning when current catalog data changes.
+5. **Ledgers over counters** for anything involving quantity (inventory) — a single mutable number can't be audited; an append-only movement log can.
+
+---
+
+## What's Deliberately *Not* in This Model (Future)
+
+- `Branch` entity (multi-location) — would sit between `Gym` and everything else; not needed until multi-branch is in scope.
+- `Role`/`Permission` join tables for granular RBAC — MVP only needs a single `role` enum value.
+- `Discount`/`Promotion` entity — manual price override on line items already covers MVP needs.
+- `SupplierCost` field on `Product` — needed for margin reporting, deferred until profit (not just revenue) reporting is prioritized.
