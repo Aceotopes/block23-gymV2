@@ -238,3 +238,101 @@ Each entry: what was decided, why, and what alternative was rejected.
 - Storing `client_type` as a column on `Client`. Same drift risk as the stored-status flag rejected in ADR-002.
 - Applying inactivity logic to `MEMBER` clients. Members have a paid commitment with a defined end date — "Expired" already captures lapsed membership. Inactivity during a paid period is not a signal the owner needs to act on.
 - Using a fixed 30-day default for the inactivity threshold. Owner preference is 7 days; the setting is configurable in any case.
+
+---
+
+## ADR-018: Expired MEMBER check-in triggers a renewal decision point
+
+**Date:** 2026-06-24
+**Status:** Accepted
+
+**Decision:** When a client with `client_type = MEMBER` and no active membership (`most recent end_date < today`) is selected for check-in, the system presents a binary choice: "Check in as walk-in" or "Renew membership now." Silent routing to the walk-in flow is not permitted.
+
+**Why:** Every expired-member check-in is the highest-conversion moment in the gym workflow — the member is physically present. The prior design (Flow 3) silently routed them into walk-in fee collection with no signal to the owner that a renewal opportunity existed. All data to detect this state already exists in the domain model; surfacing it costs zero schema changes.
+
+**Rejected:** Silent routing to walk-in for all clients with no active membership regardless of `client_type`. This treats a returning lapsed member identically to a first-time visitor — an identical UX for two fundamentally different commercial situations.
+
+---
+
+## ADR-019: Member attendance inactivity is a separate operational signal, not a status change
+
+**Date:** 2026-06-24
+**Status:** Accepted
+
+**Decision:** A new configurable setting `Gym.member_inactivity_warning_days` (default: 14) identifies active MEMBER clients who have not visited recently. This signal is surfaced as:
+- An "At risk" filter chip on the Client List
+- A Dashboard "At-risk members" live feed panel
+- An at-risk members report (US-8.14)
+
+The signal does **not** change `Client.status` — an at-risk member's status remains Active or Expiring Soon as determined by their membership dates. At-risk is an orthogonal attendance-recency dimension.
+
+**Why:** ADR-017 correctly rejected attendance inactivity as part of MEMBER client status derivation — the reasoning ("members have a paid commitment with a defined end date") remains valid for status. However, a paying member who stops attending is the system's primary churn signal, completely invisible under the prior design. Surfacing this as a separate filter and alert — not as a status — provides actionable retention intelligence without overloading the status semantics.
+
+**Rejected:**
+- Making "At risk" a 4th `Client.status` value for MEMBER clients. This creates semantic conflict: "Active" and "At risk" would be simultaneously true, breaking the mutual-exclusivity assumption of the status derivation.
+- No at-risk signal at all, relying on owner judgment. A paid gym management system should proactively surface its highest churn signal.
+
+**Relationship to ADR-017:** Extends, does not contradict. The status derivation for MEMBER clients is unchanged. At-risk is an additional derived dimension with its own setting and surfaces.
+
+---
+
+## ADR-020: Walk-in conversion event is derived, not stored
+
+**Date:** 2026-06-24
+**Status:** Accepted
+
+**Decision:** Walk-in → Member conversion is detected at query time: clients with `client_type = MEMBER` who have ≥ 1 Attendance record with `visit_type = WALK_IN` where `visit_date` predates their earliest `Membership.created_at`. No `converted_on` field on Client, no ConversionEvent table.
+
+**Why:** The data required to detect a conversion is already present in the Attendance and Membership tables. Storing a derived value creates a stored-vs-reality drift risk (ADR-002 pattern): if past attendance or membership records are corrected, a stored conversion date would become stale. The derivation query is deterministic and inexpensive at single-gym scale.
+
+**Rejected:** Adding a `converted_on` field to the Client entity or a separate ConversionEvent table. Both create the drift risk described above and store a value computable with a deterministic query — contrary to the principle established in ADR-002.
+
+**Consequence:** The conversion derivation query is the authoritative definition of "converted walk-in" and must be applied consistently everywhere conversion data is surfaced: US-8.8 (Frequent Walk-In Report), US-2.10 (profile conversion signal), Dashboard "Frequent walk-ins" panel.
+
+---
+
+## ADR-021: `created_by` added to the Attendance entity
+
+**Date:** 2026-06-24
+**Status:** Accepted
+
+**Decision:** `Attendance.created_by` (FK → User, required) is added to the schema, following the same pattern as `Transaction.created_by`. At MVP all records carry the single Owner account. The field is forward-compatible with staff accounts (US-1.5, P2) at zero migration cost.
+
+**Why:** When staff accounts are introduced, accountability for who logged each check-in is essential for operational oversight. Adding this FK now costs one column and one constraint, with zero behavior change at MVP. Adding it after the table is populated with real data requires a migration and permanently null historical records — unauditable.
+
+**Rejected:** Deferring `created_by` to when staff accounts are built. Same cost asymmetry that justified `gym_id` on every table (ADR-001): the migration cost at the point of need is disproportionate to the cost of a single FK column added now.
+
+---
+
+## ADR-022: Dedicated Check-In Station screen as primary check-in interface
+
+**Date:** 2026-06-24
+**Status:** Accepted — navigation placement amended by ADR-023
+
+**Decision:** A dedicated Check-In screen is the primary interface for daily attendance recording. It provides: persistent auto-focused name search, result cards showing membership status + expiry + today indicator, immediate action branching on client selection, and a today's check-ins running list.
+
+**Amendment (Design Review #4):** The original decision stated "top-level navigation entry." This is superseded by ADR-023, which places the Check-In screen as the default view within the Attendance module — not as a standalone top-level navbar entry. The UX specification of the screen itself is unchanged.
+
+**Why:** Check-in is the highest-frequency operation in the system — potentially 30–100 executions per day. The prior design had no dedicated screen; the owner navigated from the Client List (a management view) to perform an operational task, adding 2–3 navigation steps to every check-in. A purpose-built screen eliminates that overhead and surfaces contextual membership information without requiring a profile navigation.
+
+**Rejected:** Check-in exclusively via the Client List or Client Profile. This conflates administrative client management with real-time operational check-in. A management screen is designed for record browsing and editing, not sub-second transactional interactions.
+
+---
+
+## ADR-023: Attendance module uses a single top-level nav entry with three views
+
+**Date:** 2026-06-24
+**Status:** Accepted
+
+**Decision:** The Attendance module is a single top-level navbar entry containing three internal views:
+1. **Check-In** (default view — loads when Attendance is opened)
+2. **Attendance History** (gym-wide historical record with date filter presets)
+3. **Attendance Analytics** (aggregate metrics, trends, and operational signals)
+
+Check-In is not a separate top-level module. All attendance-related workflows, records, analytics, and corrections live within this one module.
+
+**Why:** A gym owner's mental model of "attendance" is unified — checking clients in, reviewing who came in, and analyzing engagement patterns are all facets of one operational domain. Splitting Check-In into a separate top-level navbar entry fragments this domain and implies Check-In and Attendance History are unrelated concerns. The Check-In view's "today's check-ins" running list already bridges operational (who is here now) and historical (today's record) concerns — it is visually adjacent to Attendance History, not to a separate module. Grouping all three views under one navbar entry reduces cognitive overhead and matches how the owner naturally thinks about attendance work.
+
+**Consequence:** ADR-022's "top-level navigation entry" clause is superseded. The UX of the Check-In screen itself — auto-focused search, result cards, branching logic, today's list — is entirely unchanged; only its placement in the navigation hierarchy changes.
+
+**Rejected:** Check-In as a separate top-level navbar item (ADR-022's original navigation claim). Rejected because it fragments a single operational domain across two navbar entries, creates two navigation targets for attendance-related work, and implies Check-In and Attendance History are unrelated workflows — which they are not.

@@ -10,6 +10,10 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 > **Design Review #2 (2026-06-23):** Clients Module wireframe reviewed against all planning documents. Two new P0 stories added to Clients (US-2.9, US-2.10); one new P0 story added to Membership (US-3.9); one new P0 story added to Auth & Settings (US-1.7 — walk-in inactivity threshold). Acceptance criteria updated for US-2.3, US-2.4, US-2.6, US-3.1, US-3.2, US-3.3. Client type (MEMBER/WALK_IN) and walk-in inactivity status introduced. Total MVP story count: 48 → 52. See DECISIONS.md ADR-014, ADR-015, ADR-016, ADR-017.
 
+> **Design Review #3 (2026-06-24):** Attendance Module deep review. Six new P0 stories: US-1.8 (member inactivity threshold), US-2.11 (at-risk member filter + dashboard panel), US-4.8 (Check-In Station screen), US-4.9 (today's check-ins view), US-8.13 (member engagement report), US-8.14 (at-risk members report). Acceptance criteria updated for US-4.1, US-4.2, US-4.3, US-8.8. At-risk member signal introduced for active MEMBER clients not attending (ADR-019). Expired MEMBER renewal prompt at check-in added (ADR-018). Walk-in conversion derivation defined (ADR-020). `created_by` and `correction_note` added to Attendance entity (ADR-021). Dedicated Check-In Station screen introduced (ADR-022). Total MVP story count: 52 → 58. See DECISIONS.md ADR-018, ADR-019, ADR-020, ADR-021, ADR-022.
+
+> **Design Review #4 (2026-06-24):** Attendance module restructured as a single top-level navbar module with three internal views: Check-In (default), Attendance History, and Attendance Analytics (ADR-023). ADR-022 amended to remove "top-level navigation" navigation claim. US-4.8 navigation placement AC updated. US-4.3 updated with explicit date filter presets. US-4.10 (NEW P0): Attendance Analytics view — KPI cards, trend charts, member/walk-in insights, operational signals, and alerts. Total MVP story count: 58 → 59. See DECISIONS.md ADR-023.
+
 ---
 
 ## 1. Authentication & Settings
@@ -33,6 +37,14 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - Setting is configurable in Settings → System Preferences with a numeric "Walk-in inactivity threshold (days)" field. Default: 7.
   - When the threshold is updated, all walk-in client statuses recalculate immediately on the next query — no manual backfill required (computed at runtime from Attendance records).
   - A walk-in client with no attendance records at all is treated as Inactive regardless of threshold value.
+  - Setting zero or a negative value is blocked with a validation error.
+
+**US-1.8 (P0)** — As the Gym Owner, I want to set a member attendance inactivity threshold (e.g., 14 days since last visit), so that active paying members who have stopped coming in are flagged as "at risk" before their membership lapses and they fail to renew.
+- Acceptance Criteria:
+  - Setting is configurable in Settings → System Preferences with a numeric "At-risk member threshold (days since last visit)" field. Default: 14.
+  - An at-risk member is defined as: `client_type = MEMBER`, active membership (`end_date >= today`), AND last `Attendance.visit_date` exceeds the threshold — OR an active MEMBER client with no Attendance records at all.
+  - At-risk is a derived operational signal, NOT a change to `Client.status` — an at-risk member's status remains Active or Expiring Soon as determined by their membership dates. The at-risk signal is surfaced in filters and alerts only. (ADR-019)
+  - When the threshold is updated, the at-risk signal recalculates immediately on the next query — no backfill required.
   - Setting zero or a negative value is blocked with a validation error.
 
 ### Future
@@ -97,6 +109,15 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - The "Walk-in only" client list filter sorts results by visit count descending by default, surfacing the highest-frequency walk-ins first.
   - A "Frequent walk-ins" live feed panel on the Dashboard shows the top 5 walk-in clients (no active membership) sorted by visit count, with their last visit date. "View all →" links to the client list filtered by Walk-in only.
 
+**US-2.11 (P0)** — As the Gym Owner, I want an "At risk" filter on the Client List and a dashboard panel showing at-risk members, so I can identify and contact paying members who have stopped attending before they lapse and fail to renew.
+- Acceptance Criteria:
+  - A new "At risk" filter chip is added to the Client List, updating the chip set to: `All` · `Active` · `At risk` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive`.
+  - "At risk" shows MEMBER clients with an active membership (`end_date >= today`) whose last visit exceeds `Gym.member_inactivity_warning_days`, or who have an active membership and no attendance records.
+  - "At risk" does not overlap with "Inactive" (WALK_IN clients only). A client can simultaneously match "At risk" and "Expiring soon" — both filter chips show them.
+  - "At risk" results sort by days since last visit descending (longest absence first) by default.
+  - An "At-risk members" live feed panel is added to the Dashboard: up to 5 clients with name, days since last visit, and membership expiry date. "View all →" links to the Client List filtered by "At risk."
+  - The at-risk signal is NOT displayed on the individual Client Profile header — it is a list-level and alert-level signal only.
+
 ### Future
 
 **US-2.7 (P2)** — As the Gym Owner, I want to merge two duplicate client profiles into one, so that I can clean up data entry mistakes without losing history.
@@ -160,15 +181,60 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - System records client, date, time-in, and visit type (MEMBER or WALK_IN).
   - If the client has an active membership at the moment of check-in, the visit is auto-tagged MEMBER and linked to that membership record (snapshot link).
   - If the client has no active membership, the visit defaults to WALK_IN and prompts for the walk-in fee.
+  - In the Check-In Station context, search result cards show: name, type badge (MEMBER/WALK_IN), membership status, expiry date (MEMBER clients only), and a "checked in today" indicator if an Attendance record already exists for today.
+  - When the owner selects a client with `client_type = MEMBER` and no active membership, the system presents a binary decision prompt: "Check in as walk-in (₱[fee])" or "Renew membership now →." Silent routing to the walk-in flow is not permitted. (ADR-018)
+  - After a successful check-in where the client's active membership is within `Gym.expiration_warning_days` of expiry, a non-blocking dismissible notice is displayed: "[Name]'s membership expires in N days. [Renew now →]." The notice does not delay or interrupt the check-in.
+  - When a client who already has an Attendance record for today is selected for check-in, the system prompts: "[Name] already checked in today at [time]. Check in again?" Confirm / Cancel. The second check-in is created only after explicit confirmation. (US-4.5 preserved.)
 
 **US-4.2 (P0)** — As the Gym Owner, I want to record a walk-in visit (with or without an existing client profile), so that I can charge and log one-time visitors.
-- Acceptance Criteria: Required field is full name only; system creates a lightweight client record if one doesn't already exist.
+- Acceptance Criteria:
+  - Required field is full name only; system creates a lightweight client record if one doesn't already exist.
+  - The quick-create form for a new walk-in captures: full name (required) and contact number (optional). The form is a minimal inline modal, not a full registration screen.
+  - Before the walk-in fee prompt, the system checks: does this client have a visit count ≥ `Gym.walkin_conversion_prompt_visits` and no Membership record? If yes, a dismissible conversion prompt is shown: "[Name] has visited N times without a membership. Register as a member now?" with routes to Add Membership (Flow 5) or "No, proceed with walk-in fee." The owner may dismiss without consequence.
 
 **US-4.3 (P0)** — As the Gym Owner, I want to view and filter attendance history by date range and visit type, so that I can answer questions like "who came in last Tuesday."
+- Acceptance Criteria:
+  - Attendance History is a dedicated view within the Attendance module (the second tab, after Check-In). It is distinct from the per-client Attendance History tab on the Client Profile. It shows all attendance records across all clients, filterable by date range and visit type.
+  - Date filter presets are always available: **Today** (default on open) · Yesterday · Last 7 Days · Last 30 Days · Custom Date Range. The selected filter persists within the session.
+  - Each row shows: client name, visit type, time in, and visit date.
 
 **US-4.4 (P0)** — As the Gym Owner, I want attendance history to remain available even after a client's membership expires or is deleted (soft-deleted), so that historical reporting stays accurate.
 
 **US-4.5 (P0 · was P1)** — As the Gym Owner, I want to allow a client to be checked in more than once on the same day, so that I don't accidentally block a legitimate second visit (e.g., morning + evening session). The dashboard reports unique-visitor counts separately from total check-ins.
+
+**US-4.8 (P0)** — As the Gym Owner, I want a dedicated Check-In Station screen with a persistent search field and a live check-in list, so that recording attendance is the fastest and most direct action in the system.
+- Acceptance Criteria:
+  - The Check-In screen is the default view of the Attendance module — the first thing the owner sees when opening Attendance. It is not a separate top-level navbar entry. (ADR-023)
+  - The name search field is auto-focused on page load — no additional click required to start typing.
+  - Search result cards show: client name, type badge (MEMBER/WALK_IN), membership status, expiry date (MEMBER clients only), and a "checked in today" indicator if applicable.
+  - Selecting a result immediately initiates the appropriate check-in branch: active member → single "Check In" action; MEMBER-type with expired membership → renewal decision prompt (ADR-018); walk-in or no membership → conversion prompt check, then fee collection flow.
+  - A "Today's Check-Ins" running list is visible below the search field: all clients checked in today, name, visit type, time in, reverse-chronological order. Updates immediately after each successful check-in.
+  - Today's total check-in count and unique visitor count are displayed at the top of the running list.
+  - After a successful check-in, the screen returns to search-focused state immediately.
+
+**US-4.9 (P0)** — As the Gym Owner, I want to view today's attendance as a running list I can reference throughout the day, so I know who has checked in without searching for each client individually.
+- Acceptance Criteria:
+  - Today's check-in list is also accessible as a standalone view within the Attendance section (not only on the Check-In Station screen).
+  - The list shows: client name, visit type (MEMBER / WALK_IN), time of check-in, in reverse-chronological order.
+  - Clients who checked in more than once today are shown as separate rows with a "2nd visit" label.
+  - Total check-ins and unique visitors for the day are shown at the top.
+
+**US-4.10 (P0)** — As the Gym Owner, I want an Attendance Analytics view within the Attendance module, so I can monitor gym engagement, identify trends, and surface at-risk patterns without navigating to a separate Reports section.
+- Acceptance Criteria:
+  - Attendance Analytics is the third view within the Attendance module, alongside Check-In and Attendance History. (ADR-023)
+  - **KPI Cards (always visible, fixed periods):** Today's Check-Ins; This Week's Check-Ins; This Month's Check-Ins; Member vs. Walk-In Ratio (percentage split for the current month, e.g., "73% Member · 27% Walk-In").
+  - **Charts (all governed by a global period selector — Last 7 Days / Last 30 Days / Last 3 Months / Custom Range):**
+    - Daily Attendance Trend (line chart): total check-ins and unique visitors per day over the selected period.
+    - Attendance by Day of Week (bar chart): average check-ins per weekday over the selected period — identifies peak days.
+    - Attendance by Hour (bar chart): check-ins bucketed by hour of day over the selected period — identifies peak hours.
+  - **Member Insights:** At-risk Members count (live, links to Client List "At risk" filter); Average Visits Per Member (active MEMBER clients, selected period); Member Utilization Rate (unique MEMBER clients who visited in the period ÷ total active MEMBER clients × 100%).
+  - **Walk-In Insights:** Frequent Walk-Ins count (walk-in clients with ≥ `Gym.walkin_conversion_prompt_visits` visits and no Membership record, live); Walk-In Conversion Candidates count (links to Client List "Walk-in only" filter sorted by visit count descending); Walk-In to Member Conversion Metrics (converted client count and conversion rate for the selected period, using the derived definition from ADR-020).
+  - **Operational Insights:** Peak Hours (top 3 busiest hours by check-in volume over the selected period); Peak Days (top 3 busiest days of the week over the selected period); New vs. Returning Visitors (clients whose first-ever Attendance record falls within the selected period = New; all others = Returning).
+  - **Alerts:** Active members inactive beyond `Gym.member_inactivity_warning_days` (live count + "View list" link to Client List "At risk" filter); Walk-in clients exceeding `Gym.walkin_conversion_prompt_visits` with no membership (live count + "View list" link); Attendance decline warning — if total check-ins in the selected period are ≥ 20% below the equivalent prior period, a warning banner is displayed.
+  - All panels and counts use the same derived definitions as the Client List filters and Dashboard panels — signals are consistent across the system.
+  - Analytics data includes historical attendance records from soft-deleted clients (for trend accuracy) but excludes them from active-member counts.
+  - Attendance Analytics contains no revenue data, membership financial history, or inventory data — attendance-domain scope only.
+  - No CSV export from Attendance Analytics — detailed filterable and exportable records belong in the Reports module (US-8.5, US-8.13, US-8.14).
 
 ### Future
 
@@ -289,10 +355,24 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 **US-8.7 (P0)** — As the Gym Owner, I want a best-selling products report (by units/servings sold and by revenue), so I know what to stock more of.
 
 **US-8.8 (P0)** — As the Gym Owner, I want a frequent walk-in clients report (high visit count, low membership conversion), so I can identify upsell opportunities.
+*(Conversion detection is derived: a client is classified as a converted walk-in when they have ≥ 1 Attendance record with `visit_type = WALK_IN` dated before their first Membership record's `created_at`. No conversion event entity is stored. ADR-020)*
 
 **US-8.9 (P0)** — As the Gym Owner, I want an inventory usage report showing stock movements per product over a date range (sold, restocked, adjusted), so I can spot unusual discrepancies.
 
 **US-8.10 (P0)** — As the Gym Owner, I want to export any report to CSV, so I can keep offline copies or open them in Excel for further analysis.
+
+**US-8.13 (P0)** — As the Gym Owner, I want a member engagement report showing how frequently each active member visits, so I can identify low-engagement members at risk of not renewing.
+- Acceptance Criteria:
+  - Report shows each active MEMBER client with: total all-time visits, visits this month, visits last month, days since last visit.
+  - Default sort: days since last visit descending (least engaged at top).
+  - Filterable by date range for the "visits in period" columns.
+  - Exportable to CSV.
+
+**US-8.14 (P0)** — As the Gym Owner, I want an at-risk members report listing active members who haven't visited in N days, so I can take targeted outreach action before their memberships expire without renewal.
+- Acceptance Criteria:
+  - Report lists all active MEMBER clients (`end_date >= today`) whose last attendance date exceeds `Gym.member_inactivity_warning_days`, sorted by days since last visit descending.
+  - For each client: name, membership expiry date, last visit date, days since last visit, total all-time visits.
+  - Exportable to CSV.
 
 ### Future
 
@@ -306,15 +386,15 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 | Module | P0 (Committed MVP) | P2 (Future) |
 |---|---|---|
-| Auth & Settings | 5 | 2 |
-| Clients | 8 | 2 |
+| Auth & Settings | 6 | 2 |
+| Clients | 9 | 2 |
 | Membership | 7 | 2 |
-| Attendance | 5 | 2 |
+| Attendance | 8 | 2 |
 | Client Payments | 3 | 2 |
 | POS & Product Sales | 10 | 2 |
 | Inventory | 4 | 2 |
-| Dashboard & Reports | 10 | 2 |
-| **Total** | **52** | **16** |
+| Dashboard & Reports | 12 | 2 |
+| **Total** | **59** | **16** |
 
 ---
 

@@ -6,6 +6,10 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 
 > **Design Review #2 (2026-06-23):** Clients Module overhauled after wireframe review — status filter chips, updated table columns, quick-stats strip, context-aware membership button, archive via overflow menu, walk-in conversion signals, attendance tab filters, voided payment indicator, "Show archived" toggle. Dashboard gains a 4th live feed panel (Frequent walk-ins). Membership Module gains Membership Plan catalog management. Settings Module gains "Membership Plans" section. See DECISIONS.md ADR-014, ADR-015, ADR-016.
 
+> **Design Review #3 (2026-06-24):** Attendance Module deep review. Check-In Station screen added as top-level navigation entry (ADR-022). Renewal decision prompt added for expired MEMBER check-in (ADR-018). At-risk member signal introduced: new setting, "At risk" filter chip, Dashboard 5th panel, and report (ADR-019). Walk-in conversion event defined as derived (ADR-020). `created_by` and `correction_note` added to Attendance entity (ADR-021). Six new P0 stories (US-1.8, US-2.11, US-4.8, US-4.9, US-8.13, US-8.14). Total MVP story count: 52 → 58. See DECISIONS.md ADR-018 through ADR-022.
+
+> **Design Review #4 (2026-06-24):** Attendance module restructured as a single top-level navbar module with three internal views: Check-In (default), Attendance History, and Attendance Analytics (ADR-023). ADR-022 amended. Check-In is no longer a standalone top-level navigation entry. Attendance History updated with date filter presets. Attendance Analytics view added as committed MVP scope (US-4.10). Total MVP story count: 58 → 59. See DECISIONS.md ADR-023.
+
 ---
 
 ## 1. Dashboard Module
@@ -33,10 +37,12 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - **Expiring soon members:** list of members whose memberships expire within the warning window, sorted by soonest first, with days-remaining indicator and color-coded urgency (red < 7 days, amber 7–14 days).
 - **Inventory alerts:** products below low-stock threshold with remaining count. For `SERVING_BASED_PRODUCT` items, shows remaining servings (e.g., "Whey Protein: 8 servings remaining").
 - **Frequent walk-ins:** top 5 walk-in clients (no active membership) sorted by visit count descending, with last visit date and visit count. "View all →" links to the Client List filtered to "Walk-in only." Supports same-visit conversion outreach. (ADR-016)
+- **At-risk members:** active MEMBER clients (`end_date >= today`) whose last visit exceeds `Gym.member_inactivity_warning_days`. Sorted by days since last visit descending. Shows up to 5 clients with: name, days since last visit, and membership expiry date. "View all →" links to the Client List filtered by "At risk." (ADR-019, US-2.11)
 
 **Business Rules Enforced:**
 - All chart and metric data excludes voided transactions (both `CLIENT_TRANSACTION` and `POS_SALE`).
 - "Expiring Soon" threshold uses `Gym.expiration_warning_days` setting throughout.
+- "At-risk members" panel uses `Gym.member_inactivity_warning_days` consistently with the Client List "At risk" filter and the At-risk Members Report.
 - Revenue figures are always MTD when "Month" period is selected.
 - Attendance charts distinguish total check-ins from unique visitors.
 
@@ -46,6 +52,8 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - Empty state (brand-new gym, zero data) — all charts render with empty axes and a "no data yet" label; KPI cards show zeros.
 - Partial period (e.g., "Month" selected on the 3rd) — chart shows available days only.
 - Voided transactions excluded from all revenue metrics and charts consistently.
+- At-risk members panel empty state: if no active MEMBER clients have exceeded the inactivity threshold, panel shows "All active members have visited recently."
+- At-risk panel shows only clients with active memberships — expired members are excluded (they belong to the "Expiring soon" and renewal outreach workflows).
 
 **Deferred:**
 - Customizable widget layout.
@@ -61,8 +69,9 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 **MVP Scope / Forms:**
 
 **Client List:**
-- Status filter chips always visible: `All` · `Active` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive`. Filters combine with name search. Filter state persists within the session. (ADR-014, ADR-017)
+- Status filter chips always visible: `All` · `Active` · `At risk` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive`. Filters combine with name search. Filter state persists within the session. (ADR-014, ADR-017, ADR-019)
   - `Active` — MEMBER clients with an active membership + WALK_IN clients whose last visit is within `Gym.walkin_inactivity_threshold_days`
+  - `At risk` — MEMBER clients with an active membership (`end_date >= today`) whose last `Attendance.visit_date` exceeds `Gym.member_inactivity_warning_days`, OR active MEMBER clients with no attendance records at all. Results sort by days since last visit descending by default. Does not overlap with "Inactive" (WALK_IN only). A client can match both "At risk" and "Expiring soon" simultaneously. (ADR-019)
   - `Expiring soon` — MEMBER clients within `Gym.expiration_warning_days` of membership end
   - `Expired` — MEMBER clients with no current active membership
   - `Walk-in only` — all WALK_IN type clients (Active and Inactive walk-ins combined)
@@ -105,6 +114,7 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - `client_type` and `status` are both derived at query time (ADR-002, ADR-017) — no stored columns, no sync job.
 - The "Expiring soon" filter uses the same `Gym.expiration_warning_days` threshold as the Dashboard widget.
 - The "Inactive" filter uses `Gym.walkin_inactivity_threshold_days` — a separately configurable setting.
+- The "At risk" filter uses `Gym.member_inactivity_warning_days` — a separately configurable setting distinct from walk-in inactivity. At-risk is an orthogonal attendance-recency signal that does not change `Client.status`. (ADR-019)
 
 **Edge Cases:**
 - **Possible duplicate on registration:** fuzzy name check warns before creating, but never blocks.
@@ -115,6 +125,9 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - **Archived client appears in attendance history query:** record is retained and visible in reports; the client row in the list is greyed out under "Show archived."
 - **Walk-in filter + name search + sort by visit count:** all three can be applied simultaneously; each constraint narrows results cumulatively.
 - **Inactivity threshold change:** when the owner updates `walkin_inactivity_threshold_days`, the derived status of all WALK_IN clients recalculates immediately — no backfill needed since it's computed on query.
+- **Active MEMBER client with no attendance records:** treated as at-risk immediately — expected for new memberships before the first visit, including future-dated memberships before `start_date`.
+- **At-risk member who visits again:** the at-risk signal clears on the next query automatically (derived at runtime, no stored state to update).
+- **Client simultaneously matching "At risk" and "Expiring soon":** both filter chips show the client. Name search and either filter chip can be combined cumulatively.
 
 **Deferred:**
 - Merge-duplicate-clients tool.
@@ -181,24 +194,86 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 
 **Purpose:** Digital check-in log replacing the paper attendance sheet, while preserving accurate historical context of each visit.
 
+**Module Structure (ADR-023):**
+```
+Attendance (single top-level nav entry)
+├── Check-In           (default view)
+├── Attendance History
+└── Attendance Analytics
+```
+
 **MVP Scope / Forms:**
-- **Record Attendance:** search client → system auto-determines `visit_type` based on current membership status → for WALK_IN, prompt for fee and record a `CLIENT_TRANSACTION` (walk-in fee, payment method required).
-- **View Attendance History:** chronological per-client and gym-wide views.
-- **Filter Attendance Records:** by date range and visit type.
+
+**Check-In Station screen (primary check-in interface — US-4.8, ADR-022):**
+- Default view within the Attendance module; name search field is auto-focused on load. (ADR-023)
+- Result cards show: name, type badge (MEMBER/WALK_IN), membership status, expiry date (MEMBER only), and a "checked in today" indicator if an Attendance record already exists for today.
+- Three check-in branches on client selection:
+  - **Active MEMBER:** duplicate check → single "Check In" action → attendance record created → expiry warning checked post-check-in.
+  - **MEMBER-type, no active membership (expired member):** renewal decision prompt (ADR-018) — "Check in as walk-in" or "Renew membership now."
+  - **WALK_IN or walk-in path:** conversion prompt check (if visit count ≥ `Gym.walkin_conversion_prompt_visits`) → walk-in fee collection → CLIENT_TRANSACTION created.
+- After successful check-in: client appears in Today's Check-Ins list; screen returns to auto-focused search.
+
+**Today's Check-Ins list (US-4.9):**
+- Visible on the Check-In Station screen and as a standalone view in the Attendance section.
+- Reverse-chronological list: client name, visit type, time in. Repeated same-day visits labeled "2nd visit."
+- Shows total check-ins and unique visitors for the current day.
+
+**Attendance History (US-4.3):**
+- Second view within the Attendance module (distinct from the per-client Attendance History tab on the Client Profile).
+- All attendance records across all clients, filterable by date range and visit type.
+- Date filter presets: **Today** (default on open) · Yesterday · Last 7 Days · Last 30 Days · Custom Date Range. Selected filter persists within the session.
+- Columns: client name, visit type, time in, visit date.
+
+**Attendance Record Correction (Flow 15):**
+- Limited to same-day records only; only `time_in` is editable.
+- Required reason note stored in `Attendance.correction_note`.
+- Prior-day records are read-only at MVP.
+- Attendance records cannot be deleted — correction only.
+
+**Attendance Analytics (US-4.10):**
+- Third view within the Attendance module. Read-only aggregate metrics, trends, and operational signals.
+- **KPI Cards (always visible, fixed periods):** Today's Check-Ins; This Week's Check-Ins; This Month's Check-Ins; Member vs. Walk-In Ratio (percentage split for current month).
+- **Charts (all governed by a period selector — Last 7 Days / Last 30 Days / Last 3 Months / Custom Range):**
+  - Daily Attendance Trend (line chart): total check-ins and unique visitors per day.
+  - Attendance by Day of Week (bar chart): average check-ins per weekday — identifies peak days.
+  - Attendance by Hour (bar chart): check-ins bucketed by hour of day — identifies peak hours.
+- **Member Insights panel:** At-risk Members count (live; links to Client List "At risk" filter); Average Visits Per Member (active MEMBER clients, selected period); Member Utilization Rate (unique visiting members ÷ total active members, selected period).
+- **Walk-In Insights panel:** Frequent Walk-Ins count (walk-in clients with ≥ `Gym.walkin_conversion_prompt_visits` visits and no membership, live; links to Client List "Walk-in only" sorted by visits); Walk-In Conversion Candidates count; Walk-In to Member Conversion Metrics (count and rate for selected period, derived per ADR-020).
+- **Operational Insights panel:** Peak Hours (top 3 busiest hours by check-in volume, selected period); Peak Days (top 3 busiest days of the week, selected period); New vs. Returning Visitors (clients whose first Attendance record falls within the period = New; all others = Returning).
+- **Alerts panel:** Active members inactive beyond `Gym.member_inactivity_warning_days` (live count + "View list" link); Walk-in clients exceeding `Gym.walkin_conversion_prompt_visits` with no membership (live count + "View list" link); Attendance decline warning if current period is ≥ 20% below the equivalent prior period.
+- Attendance-domain scope only: no revenue data, membership financial history, or inventory data.
+- No CSV export from Attendance Analytics — detailed exportable records belong in the Reports module (US-8.5, US-8.13, US-8.14).
+- All derived counts and rates use the same definitions as the Client List filters and Dashboard panels — signals are consistent across the system.
 
 **Business Rules Enforced:**
-- Every attendance record captures `client`, `date`, `time_in`, `visit_type`.
+- Every attendance record captures `client`, `date`, `time_in`, `visit_type`, and `created_by`.
 - `membership_id` is snapshotted onto the attendance record at check-in time, so later renewals/expirations never retroactively change what a past visit "was."
 - Attendance history is retained regardless of the client's current membership status or even if the client is later soft-deleted.
-- Multiple check-ins for the same client on the same day are **allowed** — Dashboard/report metrics distinguish "total check-ins" from "unique visitors per day."
+- Multiple check-ins for the same client on the same day are **allowed** — but require explicit confirmation before the second record is created. Dashboard/report metrics distinguish "total check-ins" from "unique visitors per day."
+- **Expired MEMBER at check-in (ADR-018):** When `client_type = MEMBER` and no active membership exists, the system presents a binary renewal decision prompt. Silent routing to walk-in is not permitted.
+- **Expiry warning at check-in:** After a successful check-in where the member's active membership is within `Gym.expiration_warning_days`, a non-blocking dismissible renewal notice is displayed.
+- **Pre-fee conversion prompt:** When a walk-in client's visit count reaches `Gym.walkin_conversion_prompt_visits` and they have no Membership record, a conversion prompt is shown before the fee is collected. Dismissible; the fee proceeds if dismissed.
+- **`Attendance.created_by` is mandatory (ADR-021):** Set to the authenticated user at check-in time.
+- **Attendance record correction is time-bounded:** Corrections limited to same-calendar-day records; require a reason note stored in `Attendance.correction_note`; only `time_in` is editable; no deletions permitted.
+- **Attendance Analytics scope boundary:** Analytics panels surface aggregate counts, trends, and operational signals only. Detailed filterable record lists and CSV exports belong in the Reports module (US-8.5, US-8.13, US-8.14). This prevents duplication and maintains a clear boundary between in-module operational intelligence and archive-quality reporting.
 
 **Edge Cases:**
-- Walk-in with no prior client record: lightweight client auto-created with just the name.
-- Data-entry correction: owner needs a way to edit a same-day attendance record's time — exposed as an edit action with the change reflected via `updated_at`, not a silent overwrite.
+- **Walk-in with no prior client record:** lightweight client quick-created with name (required) and contact number (optional) via an inline modal. Fuzzy duplicate name warning applies.
+- **Expired MEMBER at check-in:** renewal decision prompt — binary choice between walk-in and renewal. No silent routing. (ADR-018)
+- **Future-dated membership at check-in:** client has an upcoming membership (`start_date > today`). Check-in screen shows: "[Name]'s membership starts [date]. Checking in as walk-in today." Attendance record: `visit_type = WALK_IN`, `membership_id = null`.
+- **Archived (soft-deleted) client check-in attempt:** archived clients are excluded from Check-In Station search results. The owner must first reactivate the client (Flow 12) before check-in is possible.
+- **Walk-in fee voided after attendance recorded:** voiding the transaction (Flow 11) does NOT void or delete the Attendance record. The visit history is preserved. The discrepancy is visible in Client Payment History (VOID transaction alongside an existing attendance record).
+- **Conversion prompt dismissed:** owner proceeds to walk-in fee normally. No re-prompt on the same visit. The visit count still increments; the prompt appears again on the next qualifying visit.
+- **Same-day correction attempted on a prior-day record:** edit is disabled; record is read-only. No escalation path at MVP.
+- **Duplicate check-in confirmed intentionally:** second Attendance record is created normally; labeled "2nd visit" in the Today's Check-Ins list. Total check-in count increments; unique visitor count does not.
+- **Active MEMBER client who has never attended:** at-risk signal triggers immediately. Expected for pre-purchased memberships before the first visit.
 
 **Deferred:**
-- `time_out` capture and session-duration analytics (field reserved in schema now).
+- `time_out` capture and session-duration analytics (field reserved in schema now; analytics view will gain session-duration chart when time_out is available).
 - QR code / RFID-based check-in (explicit BRD exclusion).
+- Retroactive attendance entry (backfilling past dates when the system was unavailable) — explicitly out of scope at MVP.
+- Attendance record deletion — records can be corrected for `time_in` with a required reason note; full deletion is not available at MVP.
+- Owner-configurable attendance decline alert threshold — hardcoded at 20% below prior period for MVP; configurable threshold deferred to a future Settings addition.
 
 ---
 
@@ -335,8 +410,10 @@ This module's primary function is the **history/audit view** and the **void acti
 - **Attendance Reports:** Daily / Weekly / Monthly, with unique-visitor vs. total-check-in distinction.
 - **Membership Reports:** Active / Expired / Expiring Soon lists, filterable and exportable.
 - **Best Sellers:** top products by units/servings sold and by revenue over a selected period.
-- **Frequent Walk-In Report:** clients with high visit count and no active membership — ranked by visit count, directly supports the conversion-tracking goal.
+- **Frequent Walk-In Report:** clients with high visit count and no active membership — ranked by visit count, directly supports the conversion-tracking goal. Conversion detection uses the derived definition: MEMBER clients with WALK_IN attendance records predating their earliest Membership.created_at (ADR-020).
 - **Inventory Usage Report:** stock movement summary per product over a date range — units sold, restocked, and manually adjusted. Surfaces discrepancies between expected and actual stock.
+- **Member Engagement Report:** for each active MEMBER client — total all-time visits, visits this month, visits last month, days since last visit. Default sort: days since last visit descending (least engaged first). Filterable by date range. (US-8.13)
+- **At-risk Members Report:** active MEMBER clients (`end_date >= today`) whose last attendance date exceeds `Gym.member_inactivity_warning_days`. Columns: name, membership expiry date, last visit date, days since last visit, total all-time visits. Sorted by days since last visit descending. (US-8.14)
 - **CSV Export:** every report listed above can be exported to CSV.
 
 **Business Rules Enforced:**
@@ -344,6 +421,7 @@ This module's primary function is the **history/audit view** and the **void acti
 - Reports respect the price-snapshot rule: a report for last month reflects what was actually charged last month, even if prices have since changed.
 - Voided transactions (`status = VOID`) are excluded from all revenue totals consistently.
 - Revenue by Payment Method and Revenue by Category span both transaction types (`CLIENT_TRANSACTION` and `POS_SALE`).
+- Member Engagement and At-risk reports use `Gym.member_inactivity_warning_days` consistently with the Dashboard panel and Client List filter.
 
 **Edge Cases:**
 - Date range spanning a price change — report shows historically accurate figures (guaranteed by snapshot design).
@@ -363,7 +441,7 @@ This module's primary function is the **history/audit view** and the **void acti
 **MVP Scope / Forms:**
 - **Gym Information:** name, address, contact info.
 - **Pricing:** default membership fee, default walk-in fee.
-- **System Preferences:** membership expiration warning period (days); walk-in inactivity threshold (days, default: 7).
+- **System Preferences:** membership expiration warning period (days); walk-in inactivity threshold (days, default: 7); at-risk member threshold (days since last visit, default: 14); walk-in conversion prompt threshold (visits, default: 5).
 - **Membership Plans:** create, edit, and retire membership plan catalog entries. (ADR-015)
 
 **Membership Plans section:**
@@ -377,6 +455,8 @@ This module's primary function is the **history/audit view** and the **void acti
 **Business Rules Enforced:**
 - Changing a default price in Gym Information or in a Membership Plan affects only *future* transactions — it must never retroactively alter `price_paid` snapshots on existing records (enforced structurally by the Domain Model's snapshot design, ADR-003).
 - Deactivating a plan does not cascade to existing memberships created under that plan.
+- When `member_inactivity_warning_days` is updated, the at-risk signal for all active MEMBER clients recalculates immediately on the next query — no backfill required (computed at runtime from Attendance records).
+- Setting `member_inactivity_warning_days` or `walkin_conversion_prompt_visits` to zero or a negative value is blocked with a validation error (same rule as all other numeric threshold settings).
 
 **Edge Cases:**
 - Owner sets an unrealistic value (e.g., negative price, zero warning days, zero inactivity threshold) — basic input validation required for all numeric settings.

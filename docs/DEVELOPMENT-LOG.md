@@ -5,9 +5,123 @@ Newest entries at the top.
 
 ---
 
+## [#005] Attendance Module Structure Revision — Design Review #4 — 2026-06-24
+
+**Commit:** _(pending)_
+
+**Changes from previous commit:**
+
+- **DECISIONS.md:**
+  - ADR-022 status updated to "Accepted — navigation placement amended by ADR-023." "Top-level navigation entry" clause removed; amendment note added.
+  - ADR-023 added: Attendance module is a single top-level nav entry with three internal views (Check-In, Attendance History, Attendance Analytics). Check-In is the default view. All attendance-related workflows, records, analytics, and corrections live within this one module.
+
+- **USER-STORIES.md:**
+  - US-4.8: First AC updated — "top-level screen (not nested under Clients or Attendance)" replaced with "default view of the Attendance module." (ADR-023)
+  - US-4.3: First AC updated — Attendance History is the second view within the Attendance module. Date filter presets added: Today (default on open) · Yesterday · Last 7 Days · Last 30 Days · Custom Date Range.
+  - US-4.10 (NEW P0): Attendance Analytics view — KPI cards (Today/Week/Month check-ins, Member vs Walk-In Ratio), daily trend chart, day-of-week and peak-hour charts, Member Insights panel, Walk-In Insights panel, Operational Insights panel, and Alerts panel. Attendance-domain scope only; no CSV export from this view.
+  - Summary table updated: Attendance 7→8, Total 58→59.
+
+- **USER-FLOWS.md:**
+  - Flow 14: Entry point updated from "Check-In Station screen (top-level navigation)" to "Attendance module → Check-In view (default view)."
+
+- **MODULE-SPECS.md:**
+  - Module 4 (Attendance): Module structure section added — three named views (Check-In, Attendance History, Attendance Analytics) under one top-level navbar entry.
+  - Check-In Station: "Top-level navigation entry point" replaced with "Default view within the Attendance module." (ADR-023)
+  - Attendance History: Date filter presets added (Today · Yesterday · Last 7 Days · Last 30 Days · Custom Date Range; default: Today; session-persistent).
+  - Attendance Analytics: Full section added — KPI cards, three charts with period selector, Member Insights panel, Walk-In Insights panel, Operational Insights panel, Alerts panel. Scope boundary enforced: attendance-domain only, no revenue/inventory data, no CSV export.
+  - Business Rule added: Analytics scope boundary — aggregate insights in Analytics; detailed exportable records in Reports module.
+  - Deferred: Attendance decline alert threshold hardcoded at 20% for MVP; owner-configurable threshold deferred to a future Settings addition.
+
+- **ROADMAP.md:**
+  - Milestone 4 restructured: "Dedicated Check-In Station screen" bullet replaced with a three-view Attendance module entry covering Check-In (US-4.8), Attendance History (US-4.3), and Attendance Analytics (US-4.10).
+
+**Decisions made:**
+
+- Attendance module restructured as a single top-level nav entry with three views: Check-In (default), Attendance History, Analytics — ADR-023
+- ADR-022 amended: Check-In screen UX unchanged; navigation placement changed from standalone top-level to default view within Attendance module
+- Attendance Analytics confirmed as committed MVP scope — US-4.10
+
+**Issues / Notes:**
+
+- Attendance Analytics panels use the same derived definitions as existing Client List filters and Dashboard panels — "At risk" count, "Frequent walk-ins" count, and conversion rate all resolve from the same query logic established in ADR-019 and ADR-020. No new derivation rules introduced.
+- The 20% attendance decline alert threshold is hardcoded for MVP. Owner-configurable threshold is a future Settings addition — the 20% value is a sensible operational default and unlikely to need tuning until the owner has several months of data.
+- No CSV export from Attendance Analytics by design — this preserves a clear boundary between in-module operational intelligence (Analytics) and archive-quality reporting (Reports module, US-8.5, US-8.13, US-8.14). If the owner needs a list, they navigate to Reports.
+- No new user flow added for Attendance Analytics — the view is a pure read interface with a period selector; it has no decision branches that warrant flow documentation.
+
+---
+
+## [#004] Attendance Module Deep Review — Planning Doc Sync — 2026-06-24
+
+**Commit:** _(pending — design review session #3)_
+
+**Changes from previous commit:**
+
+- **DECISIONS.md:**
+  - ADR-018 added: Expired MEMBER check-in triggers a renewal decision point — no silent routing to walk-in
+  - ADR-019 added: Member attendance inactivity is a separate operational signal, not a status change
+  - ADR-020 added: Walk-in conversion event is derived, not stored
+  - ADR-021 added: `created_by` added to the Attendance entity
+  - ADR-022 added: Dedicated Check-In Station screen as primary check-in interface
+
+- **DOMAIN-MODEL.md:**
+  - `Gym` entity: added `member_inactivity_warning_days` (int, default: 14; drives at-risk MEMBER signal) and `walkin_conversion_prompt_visits` (int, default: 5; triggers pre-fee conversion prompt)
+  - `Client` entity: added at-risk signal note — derived operational signal for active MEMBER clients not attending; does not alter `Client.status` (ADR-019)
+  - `Attendance` entity: added `created_by` (FK → User, required; ADR-021) and `correction_note` (text, nullable; populated when time_in is edited)
+  - `Attendance` entity: added conversion derivation note (ADR-020)
+
+- **USER-STORIES.md:**
+  - US-1.8 (NEW P0): Member inactivity warning threshold setting — configurable at-risk threshold (default: 14 days)
+  - US-2.11 (NEW P0): At-risk member filter chip on Client List + Dashboard live feed panel
+  - US-4.8 (NEW P0): Dedicated Check-In Station screen — top-level nav, auto-focused search, result cards, today's list
+  - US-4.9 (NEW P0): Today's check-ins standalone view in Attendance section
+  - US-8.13 (NEW P0): Member engagement report — active members by visit frequency, least engaged first
+  - US-8.14 (NEW P0): At-risk members report — active members not attending within threshold
+  - US-4.1: four new acceptance criteria (result card preview, expired MEMBER prompt, expiry warning, duplicate confirmation)
+  - US-4.2: two new acceptance criteria (quick-create modal fields, pre-fee conversion prompt)
+  - US-4.3: two new acceptance criteria (gym-wide attendance screen, row columns)
+  - US-8.8: conversion derivation clarification note added (ADR-020)
+  - Summary table updated: Auth & Settings 5→6, Clients 8→9, Attendance 5→7, Dashboard & Reports 10→12, Total 52→58
+
+- **USER-FLOWS.md:**
+  - Flow 3: two new upstream branches added — expired MEMBER renewal decision prompt (ADR-018) and pre-fee walk-in conversion prompt
+  - Flow 4: duplicate check-in confirmation step added; post-check-in expiry warning step added; return-to-search state specified
+  - Flow 7: conversion trigger description updated (upstream + profile paths); conversion logging replaced with derivation definition (ADR-020)
+  - Flow 14 (NEW): Check-In Station — full check-in screen flow with all three client branches
+  - Flow 15 (NEW): Attendance Record Correction — same-day time_in edit with required reason note
+
+- **MODULE-SPECS.md:**
+  - Module 1 (Dashboard): 5th live feed panel "At-risk members" added (ADR-019, US-2.11); new business rule and two new edge cases added
+  - Module 2 (Clients): "At risk" filter chip added to 7-chip set; "At risk" chip defined with ADR-019 reference; at-risk business rule added; three new edge cases added
+  - Module 4 (Attendance): MVP Scope section fully rewritten — Check-In Station, Today's Check-Ins, Gym-wide History, Attendance Record Correction all specified; Business Rules expanded with 5 new rules (ADR-018, ADR-019 prompt, ADR-021, correction bounds); Edge Cases expanded from 2 to 9; Deferred section updated with 2 new explicit callouts
+  - Module 8 (Reports): Member Engagement Report (US-8.13) and At-risk Members Report (US-8.14) added; Frequent Walk-In Report updated with ADR-020 conversion derivation reference; new business rule added
+  - Module 9 (Settings): System Preferences updated with 2 new fields (`member_inactivity_warning_days`, `walkin_conversion_prompt_visits`); 2 new business rules added
+
+- **ROADMAP.md:**
+  - Milestone 1: US-1.8 added
+  - Milestone 2: US-2.11 added
+  - Milestone 4: rewritten — US-4.8 promoted to first item; US-4.1, US-4.2, US-4.3 descriptions updated; US-4.9 added; attendance record correction item added
+  - Milestone 8: Dashboard item updated (5th panel); US-8.13 and US-8.14 added
+
+**Decisions made:**
+
+- Expired MEMBER check-in triggers a renewal decision point — not silent walk-in routing — ADR-018
+- Member attendance inactivity is a separate operational signal (not a status change) — ADR-019
+- Walk-in conversion event is derived from Attendance + Membership records, not stored — ADR-020
+- `created_by` added to Attendance entity now, not deferred — ADR-021
+- Dedicated Check-In Station screen added as top-level navigation — ADR-022
+
+**Issues / Notes:**
+
+- ADR-019 extends ADR-017 without contradiction: MEMBER client status derivation (Active/Expiring soon/Expired) is unchanged. At-risk is an orthogonal attendance-recency signal surfaced as a filter, dashboard panel, and report — not as a status value.
+- The "At risk" filter chip does not overlap with "Inactive" (WALK_IN clients only). A client can simultaneously match "At risk" (membership current, not attending) and "Expiring soon" (near end_date).
+- Attendance record deletion is intentionally not permitted at MVP — only same-day time_in correction with a required reason note.
+- `walkin_conversion_prompt_visits` (default: 5) is configurable in Settings → System Preferences, consistent with the pattern of all other threshold settings.
+
+---
+
 ## [#003] Clients Module Wireframe Review — Planning Doc Sync — 2026-06-23
 
-**Commit:** _(pending — design review session #2)_
+**Commit:** _(done — design review session #2)_
 
 **Changes from previous commit:**
 

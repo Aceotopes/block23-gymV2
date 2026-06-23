@@ -48,6 +48,8 @@ erDiagram
 | default_walkin_fee | decimal | |
 | expiration_warning_days | int | drives "expiring soon" dashboard flag |
 | walkin_inactivity_threshold_days | int | default: 7; drives walk-in "Inactive" status |
+| member_inactivity_warning_days | int | default: 14; drives the "At risk" MEMBER client signal — active MEMBER clients who haven't visited within this window are surfaced in the "At risk" filter chip, Dashboard panel, and At-risk Members Report (ADR-019) |
+| walkin_conversion_prompt_visits | int | default: 5; walk-in clients who reach this cumulative visit count with no Membership record trigger the pre-fee conversion prompt during check-in |
 | created_at / updated_at | timestamp | |
 
 **Reasoning:** In MVP there is exactly one row in this table. It exists anyway because adding `gym_id` as a foreign key to every other table *now* costs nothing, while adding it after the fact (post-launch, with real data) means rewriting every query and risking cross-tenant data leakage during migration. This is the cheapest insurance in the entire schema.
@@ -92,6 +94,8 @@ erDiagram
   - `INACTIVE`: `max(Attendance.date)` exceeds the threshold, or client has no attendance records at all
 
 **Reasoning:** A stored status flag requires a background sync job and *will* drift. Both `client_type` and `status` are computed at query time from Membership and Attendance records that already exist — zero additional storage, zero sync risk, guaranteed correctness. See ADR-002 and ADR-017.
+
+**At-risk signal (derived, not stored — ADR-019):** A MEMBER client with an active membership (`end_date >= today`) and no Attendance record within `Gym.member_inactivity_warning_days` days is considered at-risk. This is a query-time operational signal, NOT a `Client.status` value — an at-risk member's status remains Active or Expiring Soon as determined by their membership dates. At-risk is surfaced in the "At risk" Client List filter chip, the Dashboard "At-risk members" panel, and the At-risk Members Report (US-8.14). A client with an active membership and zero attendance records at all is treated as at-risk immediately.
 
 ---
 
@@ -145,9 +149,13 @@ erDiagram
 | visit_type | enum | `MEMBER` / `WALK_IN` |
 | membership_id | FK → Membership, nullable | **snapshot link** — records which membership (if any) was active at time of visit, so later expiry/renewal never rewrites historical attendance meaning |
 | fee_charged | decimal, nullable | populated for WALK_IN visits |
+| created_by | FK → User, required | records which user logged the check-in; forward-compatible with staff accounts (US-1.5, P2) without migration; follows `Transaction.created_by` pattern (ADR-021) |
+| correction_note | text, nullable | populated when `time_in` is edited post-creation (Flow 15); stores the owner's reason for the correction; null on all unedited records |
 | created_at | timestamp | |
 
 **Reasoning for `membership_id` snapshot link:** Without it, a report asking "was this person a paying member on March 3rd" would require reconstructing membership date ranges retroactively — fragile and slow. Storing the link at the moment of check-in makes this a simple, permanently-correct lookup.
+
+**Conversion derivation (ADR-020):** Walk-in-to-member conversion is detected at query time: MEMBER-type clients who have ≥ 1 Attendance record with `visit_type = WALK_IN` where `visit_date` predates their earliest `Membership.created_at`. No conversion event entity or stored conversion date exists — the derivation uses existing Attendance and Membership records and must be applied consistently across all surfaces that display conversion data (US-8.8, US-2.10, Dashboard "Frequent walk-ins" panel).
 
 ---
 

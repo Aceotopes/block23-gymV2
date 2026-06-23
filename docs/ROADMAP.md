@@ -14,6 +14,7 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [ ] Default membership and walk-in fee configuration (US-1.3)
 - [ ] Expiring-soon warning threshold setting (US-1.4)
 - [ ] Walk-in inactivity threshold setting — drives the "Inactive" client status (US-1.7)
+- [ ] Member inactivity warning threshold setting — drives the "At risk" MEMBER client signal (US-1.8)
 
 ### Milestone 2 — Client Management
 - [ ] New client registration — name required, contact optional (US-2.1)
@@ -24,6 +25,7 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [ ] Soft-delete / archive clients via overflow menu; "Show archived" toggle on Client List (US-2.6)
 - [ ] Status and type filter chips on Client List: All / Active / Expiring soon / Expired / Walk-in only / Inactive; client type (MEMBER/WALK_IN) badge on list and profile (US-2.9)
 - [ ] Walk-in conversion signals on Client Profile + Dashboard "Frequent walk-ins" feed (US-2.10)
+- [ ] At-risk member "At risk" filter chip on Client List + Dashboard "At-risk members" live feed panel (US-2.11)
 
 ### Milestone 3 — Membership Management
 - [ ] Create membership with plan selection and price override; blocking state with "Go to Renew" redirect if active membership exists (US-3.1)
@@ -35,11 +37,16 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [ ] Membership plan catalog management in Settings: create, edit, retire plans (US-3.9)
 
 ### Milestone 4 — Attendance
-- [ ] Record member check-in by name search — auto-tag MEMBER or WALK_IN (US-4.1)
-- [ ] Record walk-in visit; create lightweight client if name not found (US-4.2)
-- [ ] Attendance history with date range and visit type filters (US-4.3)
+- [ ] Attendance module — three internal views (ADR-023):
+  - **Check-In view (default):** auto-focused search, result cards (status + expiry + today indicator), check-in branching, today's check-ins running list (US-4.8)
+  - **Attendance History view:** all records filterable by date presets (Today · Yesterday · Last 7 Days · Last 30 Days · Custom Date Range) and visit type (US-4.3)
+  - **Attendance Analytics view:** KPI cards (Today/Week/Month check-ins, Member vs Walk-In Ratio), daily trend chart, day-of-week and peak-hour charts, Member Insights, Walk-In Insights, Operational Insights, and Alerts panel (US-4.10)
+- [ ] Record member check-in — expired MEMBER renewal prompt (ADR-018), expiry warning post-check-in, duplicate check-in confirmation (US-4.1)
+- [ ] Record walk-in visit: pre-fee conversion prompt for high-frequency walk-ins, quick-create inline modal (name + optional contact), create lightweight client if not found (US-4.2)
+- [ ] Today's check-ins standalone view in Attendance History (US-4.9)
 - [ ] Attendance records preserved after membership expiry or client soft-delete (US-4.4)
-- [ ] Allow multiple check-ins per client per day (US-4.5)
+- [ ] Allow multiple check-ins per client per day — explicit confirmation required for same-day duplicates (US-4.5)
+- [ ] Attendance record correction: same-day time_in edit with required reason note (Flow 15)
 
 ### Milestone 5 — Client Payments
 - [ ] Payment method (Cash, GCash, Card, Other) recorded on every membership and walk-in fee transaction (US-5.1)
@@ -64,7 +71,7 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [ ] Manual inventory adjustments with required reason note (covered by US-7.2)
 
 ### Milestone 8 — Dashboard & Reports
-- [ ] Dashboard: KPI strip, trend charts (revenue/attendance/top products), live feeds (POS sales, expiring members, inventory alerts, frequent walk-ins) (US-8.1, US-2.10)
+- [ ] Dashboard: KPI strip, trend charts (revenue/attendance/top products), live feeds (POS sales, expiring members, inventory alerts, frequent walk-ins, at-risk members) (US-8.1, US-2.10, US-2.11)
 - [ ] Revenue reports by period and source (membership / walk-in / product) (US-8.2)
 - [ ] Revenue by payment method (Cash, GCash, Card, Other) (US-8.3)
 - [ ] Revenue by product category (US-8.4)
@@ -74,6 +81,8 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [ ] Frequent walk-in clients report (high visits, low membership conversion) (US-8.8)
 - [ ] Inventory usage report: movements per product over a date range (US-8.9)
 - [ ] CSV export for all reports (US-8.10)
+- [ ] Member engagement report: active members ranked by visit frequency, least engaged first (US-8.13)
+- [ ] At-risk members report: active members not attending within threshold, ranked by days since last visit (US-8.14)
 
 ---
 

@@ -4,6 +4,10 @@ All flows assume the Gym Owner is logged in. Decision points are marked with `?`
 
 > **Design Review #2 (2026-06-23):** Flow 5 blocking state confirmed; Flow 6 updated with context-aware button labels; Flow 7 updated with walk-in conversion signal UX path. New flows added: Flow 12 (Archive Client), Flow 13 (Manage Membership Plans). See DECISIONS.md ADR-014, ADR-015, ADR-016.
 
+> **Design Review #3 (2026-06-24):** Flow 3 updated with expired MEMBER renewal decision branch and pre-fee walk-in conversion prompt. Flow 4 updated with post-check-in expiry warning and duplicate check-in confirmation. Flow 7 updated with conversion derivation clarification. New flows added: Flow 14 (Check-In Station), Flow 15 (Attendance Record Correction). See DECISIONS.md ADR-018, ADR-019, ADR-020, ADR-021, ADR-022.
+
+> **Design Review #4 (2026-06-24):** Flow 14 entry point updated — Check-In is now the default view within the Attendance module, not a top-level navigation entry. See DECISIONS.md ADR-023.
+
 ---
 
 ## Flow 1: Owner Login
@@ -67,6 +71,28 @@ Does client have an ACTIVE membership? ──Yes──→ This is actually a MEM
     │
     No
     ↓
+Client has client_type = MEMBER but no active membership? (expired member visiting)
+    │
+   Yes ──→ Renewal decision prompt (ADR-018):
+    │        "[Name]'s membership expired [date].
+    │         Check in as walk-in (₱fee)  ·  Renew membership now"
+    │         │
+    │         ├── Owner selects walk-in → proceed to conversion prompt check below
+    │         └── Owner selects Renew → redirect to Flow 6
+    │
+    No (client is WALK_IN type)
+    ↓
+Client visit count ≥ Gym.walkin_conversion_prompt_visits with no Membership record?
+    │
+   Yes ──→ Conversion prompt:
+    │        "[Name] has visited N times without a membership.
+    │         Register as a member now?  ·  Yes → Flow 5  ·  No, walk-in fee"
+    │         │
+    │         ├── Owner selects member → redirect to Flow 5 (New Membership)
+    │         └── Owner dismisses → proceed to fee prompt below
+    │
+    No / dismissed
+    ↓
 System prompts Walk-In Fee (defaults to gym setting, owner may override)
     ↓
 Owner records payment method
@@ -91,24 +117,37 @@ Owner searches by name
     ↓
 Client found, active membership confirmed
     ↓
+Client already has an Attendance record for today?
+    │
+   Yes ──→ System shows: "[Name] already checked in today at [time]. Check in again?"
+    │        │
+    │        ├── Owner confirms → proceed
+    │        └── Owner cancels → return to search (no record created)
+    │
+    No
+    ↓
 Owner clicks "Check In"
     ↓
 Attendance record created:
   visit_type = MEMBER
   membership_id = [current active membership] (snapshot link)
   fee_charged = 0
+  created_by = [authenticated user]
     ↓
-Confirmation shown, dashboard "Today's Attendance" increments
+Confirmation shown, client appears in Today's Check-Ins list
+    ↓
+Membership expiry within Gym.expiration_warning_days?
+    │
+   Yes ──→ Non-blocking dismissible notice displayed:
+    │        "[Name]'s membership expires in N days. [Renew now →]"
+    │        Owner may dismiss or follow link to Flow 6
+    │
+    No
+    ↓
+Check-In Station returns to auto-focused search state
 ```
 
-**Edge case — second visit same day:**
-```
-Owner attempts check-in again same day for same client
-    ↓
-System allows it (does not block)
-    ↓
-Dashboard distinguishes "Total Check-ins" vs "Unique Visitors" so double-counting doesn't distort attendance reports
-```
+**Edge case — second visit same day:** System prompts confirmation before creating a second same-day record. After confirmation, the record is created normally. Dashboard distinguishes "Total Check-ins" vs "Unique Visitors" so double-counting doesn't distort attendance reports.
 
 ---
 
@@ -187,6 +226,10 @@ Old membership record remains in history, untouched (never overwritten)
 
 ## Flow 7: Walk-In → Member Conversion (same visit)
 
+Conversion can be initiated at two points:
+- **(A) Before the walk-in fee is collected** — if the client's visit count reaches `Gym.walkin_conversion_prompt_visits`, a conversion prompt appears during check-in (Flow 3). Owner follows the prompt directly to the Add Membership step below.
+- **(B) After the walk-in visit is recorded** — owner opens the Client Profile (existing path). Both routes reach the same Add Membership flow.
+
 ```
 Walk-in client arrives, pays walk-in fee (Flow 3 completes)
     ↓
@@ -213,7 +256,12 @@ A CLIENT_TRANSACTION is created with 2 line items:
 Attendance record's visit_type updated to MEMBER
     (client now has an active membership for today)
     ↓
-Walk-in→Member conversion logged for reporting
+Walk-in→Member conversion is recorded implicitly (ADR-020):
+    The Membership record's created_at documents when the client became a member.
+    Prior Attendance records with visit_type = WALK_IN remain intact.
+    Conversion is derived for all reports by querying: MEMBER clients who have
+    WALK_IN attendance records predating their earliest Membership.created_at.
+    No separate conversion event entity is created.
 ```
 
 **Note:** If the client also wants to purchase a product during this visit, that is handled as a separate, standalone POS sale — see Flow 8. Client transactions (membership fees, walk-in fees) and POS sales are always separate flows.
@@ -415,6 +463,85 @@ Plan disappears from the Add/Renew membership modal
 All existing memberships created under this plan remain fully intact
     ↓
 Plan remains visible in Settings with "Inactive" badge (can be reactivated)
+```
+
+---
+
+## Flow 14: Check-In Station
+
+```
+Owner opens Attendance module → Check-In view (default view)
+    ↓
+Name search field is auto-focused — no click required to begin typing
+    ↓
+Owner types client name (partial match supported)
+    ↓
+Result cards show: name · type badge (MEMBER/WALK_IN) · membership status
+                   · expiry date (MEMBER only) · "today" indicator if already checked in
+    ↓
+Owner selects a client
+    ↓
+Which path?
+    │
+    ├── Active MEMBER ──────────────────────────────────────────────→
+    │       Single "Check In" button displayed
+    │       → Duplicate check today? Prompt confirmation if yes
+    │       → Attendance record created (MEMBER, membership_id snapshotted, created_by set)
+    │       → Expiry warning displayed if within Gym.expiration_warning_days
+    │       → Client appears in Today's Check-Ins list
+    │       → Screen returns to auto-focused search
+    │
+    ├── MEMBER-type, no active membership (expired) ────────────────→
+    │       Renewal decision prompt (ADR-018):
+    │       "[Name]'s membership expired [date].
+    │        Check in as walk-in (₱fee)  ·  Renew membership now"
+    │       ├── Walk-in selected → proceed to conversion prompt check, then fee flow
+    │       └── Renew selected → redirect to Flow 6
+    │
+    └── WALK_IN type client ────────────────────────────────────────→
+            Visit count ≥ Gym.walkin_conversion_prompt_visits and no membership?
+            ├── Yes → Conversion prompt → owner selects member (Flow 5) or dismisses
+            └── No / dismissed → Fee collection flow
+            → Walk-in fee entered, payment method selected
+            → CLIENT_TRANSACTION created (WALK_IN_FEE)
+            → Attendance record created (WALK_IN, membership_id = null, created_by set)
+            → Client appears in Today's Check-Ins list
+            → Screen returns to auto-focused search
+```
+
+---
+
+## Flow 15: Attendance Record Correction
+
+```
+Owner locates attendance record in one of:
+  - Today's Check-Ins list (on Check-In Station screen)
+  - Client Profile → Attendance History tab
+    ↓
+Owner clicks the edit icon on the record
+    ↓
+Is the record from today (current calendar day)?
+    │
+    No ──→ Edit is disabled
+    │        Message: "Records older than today cannot be edited."
+    │        No escalation path at MVP.
+    │
+   Yes
+    ↓
+time_in field is editable; all other fields (visit_type, membership_id, client) are read-only
+    ↓
+Owner enters corrected time_in value
+    ↓
+Reason note field is displayed and required — owner enters explanation
+    ↓
+Owner confirms
+    ↓
+Attendance record updated:
+  time_in = corrected value
+  correction_note = owner's reason
+  updated_at = now
+    ↓
+Attendance history shows the corrected time with a small "edited" indicator
 ```
 
 ---
