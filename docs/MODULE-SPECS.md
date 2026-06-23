@@ -2,6 +2,8 @@
 
 Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Rules Enforced, Edge Case Handling, and Deferred (Future) Items.
 
+> **Design Review #1 (2026-06-22):** Module 5 renamed from "Sales" to "Client Payments" and scoped to membership fees and walk-in fees only. New Module 6 (POS & Product Sales) added for product transactions. Client Profile "Purchase History" tab removed. Product entity updated with cost_price, image, product_type, and servings_per_container. Three new reports added. See DECISIONS.md ADR-011 and ADR-012.
+
 ---
 
 ## 1. Dashboard Module
@@ -19,33 +21,33 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 **Period selector:** Today / Week / Month toggle filters all chart data accordingly. KPI cards always show the most contextually relevant period (today for check-ins, MTD for revenue).
 
 **Charts (all rendered client-side from API data):**
-- **Revenue trend** (line chart, multi-series): daily revenue over the selected period, broken into 3 lines — Membership, Walk-In, Product. Gives the owner an immediate sense of which revenue source is driving or dragging.
-- **Membership status breakdown** (donut chart): Active / Expiring Soon / Expired with legend and counts. Provides an at-a-glance membership health ratio.
-- **Daily attendance** (grouped bar chart): Member vs. Walk-in check-ins per day over the selected period. Reveals usage patterns and walk-in vs. member split.
-- **Top products** (horizontal bar chart): top 5 products by units/servings sold over the selected period. Supports inventory planning and upsell decisions.
+- **Revenue trend** (line chart, multi-series): daily revenue over the selected period, broken into 3 lines — Membership, Walk-In, Product. Sourced from both `CLIENT_TRANSACTION` and `POS_SALE` records.
+- **Membership status breakdown** (donut chart): Active / Expiring Soon / Expired with legend and counts.
+- **Daily attendance** (grouped bar chart): Member vs. Walk-in check-ins per day over the selected period.
+- **Top products** (horizontal bar chart): top 5 products by units/servings sold over the selected period.
 
 **Live feed panels (below charts):**
-- **Recent transactions:** last 5 sales with client avatar/initials, item summary, payment method, amount, and time-ago. Links to full transaction history.
-- **Expiring soon members:** list of members whose memberships expire within the warning window, sorted by soonest first, with days-remaining indicator and color-coded urgency (red < 7 days, amber 7–14 days). "View all" links to the full expiring-soon report.
-- **Inventory alerts:** products below low-stock threshold with remaining count.
+- **Recent POS sales:** last 5 product transactions with item summary, payment method, amount, and time-ago.
+- **Expiring soon members:** list of members whose memberships expire within the warning window, sorted by soonest first, with days-remaining indicator and color-coded urgency (red < 7 days, amber 7–14 days).
+- **Inventory alerts:** products below low-stock threshold with remaining count. For `SERVING_BASED_PRODUCT` items, shows remaining servings (e.g., "Whey Protein: 8 servings remaining").
 
 **Business Rules Enforced:**
-- All chart and metric data excludes voided transactions.
-- "Expiring Soon" threshold uses `Gym.expiration_warning_days` setting throughout (KPI card, chart, and member list are consistent).
-- Revenue figures are always MTD when "Month" period is selected; chart x-axis shows daily breakdowns within the period.
-- Attendance charts distinguish total check-ins from unique visitors (multiple same-day check-ins don't silently inflate the bar).
+- All chart and metric data excludes voided transactions (both `CLIENT_TRANSACTION` and `POS_SALE`).
+- "Expiring Soon" threshold uses `Gym.expiration_warning_days` setting throughout.
+- Revenue figures are always MTD when "Month" period is selected.
+- Attendance charts distinguish total check-ins from unique visitors.
 
-**Performance requirement:** Must load within 3 seconds (NFR). At MVP scale (single gym, hundreds-to-low-thousands of records), live aggregation on indexed queries is sufficient. If data volume grows, introduce a pre-aggregated `daily_stats` table (populated nightly) as a drop-in replacement for the live queries — the API response shape stays identical so the frontend doesn't change.
+**Performance requirement:** Must load within 3 seconds (NFR).
 
 **Edge Cases:**
-- Empty state (brand-new gym, zero data) — all charts render with empty axes and a "no data yet" label; KPI cards show zeros. No errors or blank crashes.
-- Partial period (e.g., "Month" selected on the 3rd of the month) — chart shows available days only; revenue KPI shows correct MTD, not a projected full-month figure.
+- Empty state (brand-new gym, zero data) — all charts render with empty axes and a "no data yet" label; KPI cards show zeros.
+- Partial period (e.g., "Month" selected on the 3rd) — chart shows available days only.
 - Voided transactions excluded from all revenue metrics and charts consistently.
 
 **Deferred:**
-- Customizable/configurable widget layout (drag-to-reorder, show/hide panels).
-- Scheduled summary email (e.g., daily digest delivered to owner's inbox).
-- Comparison mode (current period vs. prior period side-by-side on the same chart).
+- Customizable widget layout.
+- Scheduled summary email.
+- Comparison mode (current period vs. prior period).
 
 ---
 
@@ -57,20 +59,22 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - **Register Client:** `full_name` (required), `contact_number` (optional), `notes` (optional).
 - **Edit Client:** all fields editable except system-generated `date_registered`.
 - **Search Client:** partial-match search on `full_name`, returns within 2 seconds (NFR).
-- **Client Profile view:** personal info + tabs for Membership History, Attendance History, Purchase History.
+- **Client Profile view:** personal info + tabs for Membership History and Attendance History.
+
+*(Purchase History tab removed — POS product sales are not linked to clients. See ADR-011.)*
 
 **Business Rules Enforced:**
 - A client can exist indefinitely with zero memberships (pure walk-in history).
 - Soft delete only (`deleted_at`) — a client is never hard-removed if they have any attendance or transaction history.
 
 **Edge Cases:**
-- **Possible duplicate on registration:** system performs a fuzzy name check and warns before creating a new record, but never blocks (owner has final judgment — see Flow 2).
+- **Possible duplicate on registration:** system performs a fuzzy name check and warns before creating a new record, but never blocks.
 - **Client with no contact info at all:** fully valid state, must not break search or profile views.
 
 **Deferred:**
 - Merge-duplicate-clients tool.
 - Photo/ID upload.
-- Client self-service portal (clients viewing their own profile) — not relevant until/unless multi-user/SaaS direction is pursued.
+- Client self-service portal.
 
 ---
 
@@ -85,23 +89,23 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - **Monitor Expiration:** surfaced via Dashboard + a dedicated filterable list (Active / Expired / Expiring Soon).
 
 **Business Rules Enforced:**
-- **One active membership per client at a time** — creating a new membership while one is still active is blocked, with a redirect prompt to "Renew" instead (Flow 5).
+- **One active membership per client at a time** — creating a new membership while one is still active is blocked, with a redirect prompt to "Renew" instead.
 - **Renewal date math (confirmed rule):**
   - Renewing while current membership is still active → new period extends from the *existing end date*.
   - Renewing after expiry → new period starts from *today*.
 - Membership price is always a **snapshot** (`price_paid`), independent of the plan's current default price.
 - Expired memberships remain fully visible and queryable — never hidden or deleted.
-- An expired member is **not blocked from attendance**; they simply attend as a walk-in (with the fee charged) until they renew.
-- Membership cannot be paused/frozen (explicit BRD exclusion, retained).
+- An expired member is **not blocked from attendance**; they simply attend as a walk-in until they renew.
+- Membership cannot be paused/frozen (explicit BRD exclusion).
 
 **Edge Cases:**
 - Future-dated membership start (pre-purchase) — must not count as "active" until its start_date arrives.
-- Custom duration plans (e.g., 45 days) must support the exact same renewal math as standard plans.
+- Custom duration plans must support the exact same renewal math as standard plans.
 
 **Deferred:**
 - Membership freeze/pause.
 - Membership transfer between clients.
-- Family/group membership (one payment, multiple linked clients).
+- Family/group membership.
 
 ---
 
@@ -110,109 +114,181 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 **Purpose:** Digital check-in log replacing the paper attendance sheet, while preserving accurate historical context of each visit.
 
 **MVP Scope / Forms:**
-- **Record Attendance:** search client → system auto-determines `visit_type` based on current membership status → for WALK_IN, prompt for fee and route into a Transaction (see Sales module).
+- **Record Attendance:** search client → system auto-determines `visit_type` based on current membership status → for WALK_IN, prompt for fee and record a `CLIENT_TRANSACTION` (walk-in fee, payment method required).
 - **View Attendance History:** chronological per-client and gym-wide views.
 - **Filter Attendance Records:** by date range and visit type.
 
 **Business Rules Enforced:**
-- Every attendance record captures `client`, `date`, `time_in`, `visit_type` (per BRD).
+- Every attendance record captures `client`, `date`, `time_in`, `visit_type`.
 - `membership_id` is snapshotted onto the attendance record at check-in time, so later renewals/expirations never retroactively change what a past visit "was."
 - Attendance history is retained regardless of the client's current membership status or even if the client is later soft-deleted.
-- Multiple check-ins for the same client on the same day are **allowed**, not blocked (real-world morning + evening sessions happen) — but Dashboard/report metrics distinguish "total check-ins" from "unique visitors per day" so this doesn't silently inflate traffic numbers.
+- Multiple check-ins for the same client on the same day are **allowed** — Dashboard/report metrics distinguish "total check-ins" from "unique visitors per day."
 
 **Edge Cases:**
-- Walk-in with no prior client record: lightweight client auto-created with just the name (Flow 3).
-- Data-entry correction: owner needs a way to edit a same-day attendance record's time (e.g., logged 9am instead of 9pm) — exposed as an edit action with the change reflected via `updated_at`, not a hidden silent overwrite.
+- Walk-in with no prior client record: lightweight client auto-created with just the name.
+- Data-entry correction: owner needs a way to edit a same-day attendance record's time — exposed as an edit action with the change reflected via `updated_at`, not a silent overwrite.
 
 **Deferred:**
-- `time_out` capture and session-duration analytics (field reserved in schema now, feature built later).
-- QR code / RFID-based check-in (explicit BRD exclusion, retained).
+- `time_out` capture and session-duration analytics (field reserved in schema now).
+- QR code / RFID-based check-in (explicit BRD exclusion).
 
 ---
 
-## 5. Sales Module
+## 5. Client Payments Module
 
-**Purpose:** Unified transaction recording for memberships, walk-in fees, and product sales — replacing three disconnected manual logs.
+**Purpose:** Record and audit all money collected directly from clients — membership fees and walk-in fees. Both always require a client. Product sales are handled by the POS module (Module 6) and are entirely separate.
 
 **MVP Scope / Forms:**
-- **New Sale / Checkout:** a single cart that can hold any combination of line item types: `MEMBERSHIP`, `WALK_IN_FEE`, `PRODUCT` (with quantity).
-- **Payment method selection:** Cash / GCash / Card / Other — captured per transaction.
-- **Transaction History:** complete chronological ledger, filterable by date and item type.
-- **Void Transaction:** owner-initiated reversal with a required reason note (Flow 11).
+- **Payment Method Selection:** Cash / GCash / Card / Other — captured on every client transaction (walk-in fee or membership payment).
+- **Client Payment History:** chronological list of all `CLIENT_TRANSACTION` records, filterable by date, client, and payment method.
+- **Void Transaction:** owner-initiated reversal with a required reason note.
+
+**How client payments are created:**
+Client payment records are always created as a byproduct of other flows — never standalone from this module:
+- A **walk-in fee** transaction is created within the Walk-In Attendance flow (Flow 3).
+- A **membership fee** transaction is created within the Membership Creation or Renewal flow (Flows 5 and 6).
+This module's primary function is the **history/audit view** and the **void action**.
 
 **Business Rules Enforced:**
-- Every line item stores a **price snapshot** (`unit_price`) at time of sale — never a live lookup against current catalog prices.
-- A `PRODUCT` line item triggers a corresponding `InventoryTransaction` (type=SALE) that decrements stock.
-- Stock validation: a product line item cannot exceed available stock without an explicit "Force Sale" override, which is itself logged as a flagged adjustment (see Inventory module). **Confirmed decision:** block by default; override is available but must be an explicit, separate action.
-- Voided transactions are excluded from all revenue totals/reports but remain visible in the raw transaction list with a `VOID` status badge and reason — they are never deleted.
+- Every `CLIENT_TRANSACTION` requires a `client_id` — anonymous client transactions do not exist.
+- A `CLIENT_TRANSACTION` may only contain `MEMBERSHIP` and `WALK_IN_FEE` line items — `PRODUCT` items are not permitted in client transactions.
+- Price snapshot rule: the price at time of transaction is stored; live catalog prices are never queried to reconstruct past amounts.
+- Voided transactions are excluded from all revenue totals and reports but remain visible in the raw list with a `VOID` status badge and reason.
+- **Voiding a payment does not cancel the associated membership.** Financial correction and membership management are separate actions — the owner handles the membership record independently.
 
 **Edge Cases:**
-- Same-visit walk-in→membership conversion (Flow 7) — must produce one coherent Transaction, not two disconnected ones, so reporting isn't fragmented. **Confirmed decision:** no automatic fee-credit calculation. If the owner wants to discount the membership because a walk-in fee was already paid that day, they do so manually via the existing price-override field on the MEMBERSHIP line item — this avoids adding partial-credit math to the checkout logic.
-- Partial cart abandonment (owner starts a sale, navigates away) — cart state should not silently create a phantom transaction; only an explicit "Complete Sale" action commits the Transaction record.
+- Owner voids a membership payment: the membership record itself is unaffected and remains active. If the owner also needs to cancel or adjust the membership, that is a separate action in the Membership module.
+- Walk-in fee already charged, same visit client decides to buy a membership: see Flow 7 (Walk-in → Member Conversion). The walk-in fee and membership are recorded as a single `CLIENT_TRANSACTION` with two line items (WALK_IN_FEE + MEMBERSHIP). No automatic credit calculation — owner adjusts membership price manually if desired.
 
 **Deferred:**
-- Formal refund workflow with partial-amount handling and reason taxonomy (void covers MVP's correction need; refund is a richer future feature).
-- Discount/promo code engine (manual price override already covers MVP need).
-- Receipt printing/emailing (explicit BRD exclusion, retained).
-- Installment/partial payment tracking on a single membership purchase.
+- Partial refund workflow (void covers MVP's correction need).
+- Discount/promo code engine (manual price override covers MVP need).
+- Receipt printing/emailing.
 
 ---
 
-## 6. Inventory Module
+## 6. POS Module
 
-**Purpose:** Track product stock (by unit) and supplement servings, with full auditability of how stock levels changed over time.
+**Purpose:** Lightweight point-of-sale for product transactions. A client is not required — this screen operates independently of the client and membership management flows. Also covers all product catalog management.
 
 **MVP Scope / Forms:**
-- **Create/Update Product:** `name`, `category`, `unit_type` (UNIT or SERVING), `current_price`, `low_stock_threshold`.
-- **Record Inventory Purchase (Restock):** quantity received → creates an `InventoryTransaction` (type=PURCHASE), increases stock.
-- **Monitor Current Stock:** per-product current level, with low-stock visual flagging.
-- **Monitor Remaining Servings:** for SERVING-type products (e.g., "Gold Standard Whey: 42 of 70 servings remaining").
+
+**Product Management:**
+- **Create/Edit Product:**
+  - `name` (required)
+  - `category` (required — select from ProductCategory)
+  - `image` (optional — upload product photo for POS grid display)
+  - `selling_price` (required — price per unit or per serving)
+  - `cost_price` (required — purchase cost per unit or serving; used for future margin reporting)
+  - `product_type` (required — `STANDARD_PRODUCT` or `SERVING_BASED_PRODUCT`)
+  - `servings_per_container` (required if `SERVING_BASED_PRODUCT` — e.g., 70 for a tub of protein)
+  - `low_stock_threshold` (required — triggers dashboard alert)
+  - `is_active` (toggle — controls POS grid visibility)
+- **Archive Product:** sets `is_active = false`; product disappears from POS grid but all sales and inventory history remain fully intact.
+- **Product Categories:** create/edit product categories (e.g., Beverages, Supplements).
+
+**Product Types:**
+- `STANDARD_PRODUCT`: sold per unit (e.g., Water ₱25/bottle, Gatorade ₱45/bottle, Sting ₱25/can). `current_stock` = unit count.
+- `SERVING_BASED_PRODUCT`: sold per scoop/serving (e.g., Gold Standard Whey ₱50/scoop, 70 servings per tub). `current_stock` = remaining serving count.
+
+**POS Screen:**
+- **Product Grid:** displays all `is_active = true` products with image, name, and price. Tap to add to cart.
+- **Product Search:** real-time name filter within the POS screen.
+- **Shopping Cart:** running list of added items with quantity, unit price, and line total.
+- **Quantity Adjustment:** increase/decrease quantity or remove items from cart before checkout.
+- **Checkout:** shows cart total → owner selects payment method → confirms → sale is recorded.
+- **Quick Sale Buttons:** optionally configurable shortcuts for top-selling items (UX implementation detail).
+
+**POS History:**
+- Chronological log of all `POS_SALE` records, filterable by date and payment method.
+- **Void POS Sale:** requires a reason note; reversal is additive (adjustment entries in inventory ledger), original sale record preserved.
 
 **Business Rules Enforced:**
-- Every stock change — sale, restock, or manual correction — is recorded as a discrete `InventoryTransaction` row, not just a silent counter update. `Product.current_stock` is a cached value that should always be reconstructable by summing its movement ledger.
-- Manual stock adjustments (e.g., correcting a miscount) require a note explaining the reason — this is the only way to maintain trust in the numbers over time.
-- A SERVING-type product's stock decrements by the scoop/serving count sold, not by container count.
+- A client is not required for a POS sale. `client_id` is null on all `POS_SALE` transactions.
+- **Price snapshot:** `unit_price` is copied from `Product.selling_price` at the moment the item is added to the cart. Changing a product's price later never alters a past sale.
+- Each `PRODUCT` line item in a completed POS sale triggers an `InventoryTransaction` (type=`SALE`) that decrements `current_stock`.
+- **Stock validation:** selling a quantity that would take stock below zero is blocked by default. Owner can proceed via an explicit "Force Sale" confirmation, which logs a flagged `ADJUSTMENT` entry — the override is never silent.
+- Archived products (`is_active = false`) do not appear in the POS grid. They remain available in inventory management and historical reports.
+- Cart state is not persisted between sessions — navigating away without completing checkout discards the cart without creating any transaction record.
 
 **Edge Cases:**
-- **Selling the last serving exactly to zero** — valid, must not be treated as an error.
-- **Attempting to sell more than available stock** — **confirmed decision:** blocked by default. The owner can override via an explicit "Force Sale" action, which is itself logged as a flagged `ADJUSTMENT` entry in the inventory ledger so the override is visible for later review, never silent.
-- Product discontinued (`is_active = false`) but has remaining stock or a sales history — must remain visible in historical reports even though it's hidden from the active "New Sale" product picker.
+- **Selling the last serving exactly to zero:** valid, must not be treated as an error.
+- **SERVING_BASED_PRODUCT stock management:** `current_stock` tracks whole servings only. If a partial serving remains in a container after the last "full" serving is recorded as sold, the owner handles any write-off via a manual inventory adjustment.
+- **Product archived mid-transaction:** if a product is archived while it exists in an open cart on another session, the cart completes normally — archiving is a catalog-forward action, not a retroactive block.
 
 **Deferred:**
-- Supplier cost tracking and profit-margin calculation.
-- Automated reorder thresholds / supplier notifications.
+- Discount code / promotional pricing engine.
+- Receipt printing/emailing.
 - Barcode scanning for product entry.
+- Client-linked POS sale (optional client association for loyalty tracking).
 
 ---
 
-## 7. Reports Module
+## 7. Inventory Module
 
-**Purpose:** Turn raw transactional/attendance data into the business insight the BRD's "Reporting Goals" call for.
+**Purpose:** Track and audit all stock movements — POS sales deductions, restocks, and manual corrections — with full auditability of how stock levels changed over time.
+
+**MVP Scope / Forms:**
+- **Restock (Record Purchase):** select product → enter quantity received.
+  - For `STANDARD_PRODUCT`: quantity in units (e.g., 24 bottles of water).
+  - For `SERVING_BASED_PRODUCT`: quantity in containers → system multiplies by `servings_per_container` (e.g., 2 tubs × 70 servings = +140 servings to `current_stock`).
+  - Creates an `InventoryTransaction` (type=`PURCHASE`).
+- **Current Stock View:** all products with current stock level, low-stock visual flagging. `SERVING_BASED_PRODUCT` items show "X of Y servings remaining."
+- **Inventory Movement History:** chronological log of all `InventoryTransaction` records per product (`PURCHASE` / `SALE` / `ADJUSTMENT`).
+- **Manual Adjustment:** enter delta quantity + required reason note → creates `InventoryTransaction` (type=`ADJUSTMENT`).
+
+**Business Rules Enforced:**
+- Every stock change — POS sale, restock, or manual correction — is recorded as a discrete `InventoryTransaction` row. `Product.current_stock` is a cached value that must always be reconstructable by summing the movement ledger.
+- Manual adjustments require a reason note — non-negotiable for auditability.
+- `SERVING_BASED_PRODUCT`: restocking adds `quantity_received × servings_per_container` servings to `current_stock`.
+- Discontinued products (`is_active = false`) remain visible in Inventory Management and movement history even after archiving.
+
+**Edge Cases:**
+- **Selling the last serving exactly to zero:** valid, no error.
+- **Force Sale override:** if stock would go below zero, owner must explicitly confirm. The override logs a flagged `ADJUSTMENT` entry so the discrepancy is visible.
+- **Discontinued product with remaining stock:** product is archived but stock is not zeroed. Owner manually adjusts if needed.
+
+**Deferred:**
+- Per-restock cost tracking and supplier information (cost_price is on Product for margin foundation; per-restock cost detail is deferred).
+- Automated reorder threshold notifications.
+- Barcode scanning for restock entry.
+
+---
+
+## 8. Reports Module
+
+**Purpose:** Turn raw transactional and attendance data into the business insight the owner needs.
 
 **MVP Scope:**
-- **Revenue Reports:** Daily / Weekly / Monthly, broken down by source (Membership / Walk-In / Product). Voided transactions excluded.
-- **Attendance Reports:** Daily / Weekly / Monthly, with unique-visitor vs. total-check-in distinction (see Attendance module).
-- **Membership Reports:** Active / Expired / Expiring Soon lists, filterable and exportable to the Dashboard's "Expiring Soon" follow-up workflow.
-- **Product Reports:** Best Sellers (by revenue and by quantity), Inventory Usage (movement summary over a date range).
-- **Walk-In Conversion Report:** frequent walk-in visitors who have not converted to membership, ranked by visit count/spend — directly supports the BRD's stated conversion-tracking goal (this report doesn't exist anywhere explicitly in the BRD's module list but is implied by Business Rules section 7 — "Walk-In Conversion Rules" — and should be treated as MVP, not future, since it's the payoff of data the system is already required to track).
-- **CSV Export:** every report listed above can be exported to CSV. **Confirmed decision (scope addition):** formatted/branded PDF export remains deferred (see below), but raw CSV export is committed MVP scope — it's low build cost relative to value for an owner migrating off Excel, who will likely want to keep familiar spreadsheet workflows alongside the new system.
+
+- **Revenue Reports:** Daily / Weekly / Monthly, broken down by source (Membership / Walk-In / Product). Draws from both `CLIENT_TRANSACTION` and `POS_SALE` records. Voided transactions excluded.
+- **Revenue by Payment Method:** total revenue per payment method (Cash / GCash / Card / Other) over any selected period. Covers both client transactions and POS sales.
+- **Revenue by Product Category:** total product revenue per category (Beverages, Supplements, etc.) over any selected period.
+- **Attendance Reports:** Daily / Weekly / Monthly, with unique-visitor vs. total-check-in distinction.
+- **Membership Reports:** Active / Expired / Expiring Soon lists, filterable and exportable.
+- **Best Sellers:** top products by units/servings sold and by revenue over a selected period.
+- **Frequent Walk-In Report:** clients with high visit count and no active membership — ranked by visit count, directly supports the conversion-tracking goal.
+- **Inventory Usage Report:** stock movement summary per product over a date range — units sold, restocked, and manually adjusted. Surfaces discrepancies between expected and actual stock.
+- **CSV Export:** every report listed above can be exported to CSV.
 
 **Business Rules Enforced:**
-- All reports read from the Transaction/TransactionLineItem ledger and the Attendance table directly — no separate "reporting database" needed at MVP scale.
+- All reports read from the `Transaction` / `TransactionLineItem` ledger and the `Attendance` table directly.
 - Reports respect the price-snapshot rule: a report for last month reflects what was actually charged last month, even if prices have since changed.
+- Voided transactions (`status = VOID`) are excluded from all revenue totals consistently.
+- Revenue by Payment Method and Revenue by Category span both transaction types (`CLIENT_TRANSACTION` and `POS_SALE`).
 
 **Edge Cases:**
-- Date range spanning a membership price change — report must show historically accurate figures (guaranteed by the snapshot design in Domain Model).
-- Empty date ranges (no data) must render a clear "no data for this period" state, not an error or blank crash.
+- Date range spanning a price change — report shows historically accurate figures (guaranteed by snapshot design).
+- Empty date ranges — render a clear "no data for this period" state, not a blank crash.
 
 **Deferred:**
-- Exportable PDF report output (CSV export is now committed MVP scope — see above; PDF/formatted-document export remains deferred).
-- Profit-margin reporting (requires supplier cost data, deferred with Inventory module).
-- Scheduled/automated report emails.
+- PDF report export.
+- Profit-margin reporting — requires `cost_price × quantity_sold` aggregation. Foundation is laid at MVP by storing `cost_price` on `Product`; the report itself is deferred until the owner prioritizes it (US-8.12).
+- Scheduled / automated report emails.
 
 ---
 
-## 8. Settings Module
+## 9. Settings Module
 
 **Purpose:** Centralize gym-specific configuration.
 
@@ -222,27 +298,26 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - **System Preferences:** membership expiration warning period (days).
 
 **Business Rules Enforced:**
-- Changing a default price here affects only *future* transactions/plans — it must never retroactively alter `price_paid` snapshots on existing Membership or TransactionLineItem records (enforced structurally by the Domain Model's snapshot design, not by application logic alone).
+- Changing a default price here affects only *future* transactions — it must never retroactively alter `price_paid` snapshots on existing records (enforced structurally by the Domain Model's snapshot design).
 
 **Edge Cases:**
-- Owner sets an unrealistic value (e.g., negative price, zero warning days) — basic input validation required (non-negative numbers, sensible ranges).
+- Owner sets an unrealistic value (e.g., negative price, zero warning days) — basic input validation required.
 
 **Deferred:**
-- Multi-user permission settings (irrelevant until multi-staff accounts exist).
-- Branch-level settings (irrelevant until multi-branch is in scope).
+- Multi-user permission settings.
+- Branch-level settings.
 - Localization/language settings.
 
 ---
 
 ## Resolved Scope Decisions
 
-These were flagged as open implementation questions and have since been confirmed:
-
 | Decision | Resolution | Reasoning |
 |---|---|---|
-| Insufficient stock at sale time | Block by default, with an explicit logged "Force Sale" override | Prevents silent data corruption while still allowing the rare legitimate edge case (e.g., miscounted backstock), with full auditability via the inventory ledger |
-| Same-day multiple check-ins | Allowed by default; dashboard/reports distinguish total check-ins from unique visitors | Matches real-world usage (morning + evening sessions); low risk to reverse later if needed |
-| Walk-in-fee credit toward membership (Flow 7) | No automatic credit calculation; manual price-override field covers it | Keeps checkout transaction logic simple; the valuable part (conversion tracking via the Walk-In Conversion Report) doesn't depend on automated credit math |
-| Reports export | CSV export is committed MVP scope; PDF/formatted export remains deferred | High value relative to build cost for an owner transitioning off Excel; PDF adds real formatting/layout work that doesn't pay for itself at MVP stage |
-
-No further open questions block the start of UI/wireframe work or the API contract.
+| Insufficient stock at sale time | Block by default, with an explicit logged "Force Sale" override | Prevents silent data corruption while still allowing the rare legitimate edge case |
+| Same-day multiple check-ins | Allowed; dashboard/reports distinguish total check-ins from unique visitors | Matches real-world usage |
+| Walk-in-fee credit toward membership (Flow 7) | No automatic credit; manual price-override field covers it | Keeps checkout logic simple |
+| Reports export | CSV export is committed MVP scope; PDF/formatted export remains deferred | High value relative to build cost for an owner transitioning off Excel |
+| POS sales and client linking | POS sales do not require a client | Product purchases are quick cash transactions; the business value is inventory and revenue tracking, not per-customer purchase history |
+| Mixed checkout (client + products in one transaction) | Removed — client transactions and POS sales are separate flows | Does not reflect how the gym actually operates; adds UI complexity for the dominant use case |
+| cost_price on Product | Promoted to MVP scope | Zero marginal cost when building the POS module; enables future margin reporting without a schema migration |

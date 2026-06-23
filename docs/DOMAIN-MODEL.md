@@ -156,11 +156,14 @@ erDiagram
 | gym_id | FK → Gym | |
 | category_id | FK → ProductCategory | |
 | name | string | |
-| unit_type | enum | `UNIT` (e.g. bottled water) or `SERVING` (e.g. scoops from a tub) |
-| current_price | decimal | current/default selling price — **never read directly into a past transaction** |
-| current_stock | decimal | interpreted as units or servings depending on unit_type |
-| low_stock_threshold | decimal | drives dashboard alert |
-| is_active | bool | soft "discontinue" flag |
+| product_type | enum | `STANDARD_PRODUCT` (sold per unit, e.g. bottled water) or `SERVING_BASED_PRODUCT` (sold per scoop/serving, e.g. protein powder) |
+| selling_price | decimal | price per unit or per serving — **never read directly into a past transaction** |
+| cost_price | decimal, nullable | purchase cost per unit or serving — stored at MVP to enable future margin reporting without a schema migration |
+| image_url | string, nullable | product photo displayed in the POS grid |
+| current_stock | decimal | unit count for STANDARD_PRODUCT; remaining serving count for SERVING_BASED_PRODUCT |
+| servings_per_container | int, nullable | SERVING_BASED_PRODUCT only — e.g., 70 for a standard protein tub |
+| low_stock_threshold | decimal | drives dashboard low-stock alert |
+| is_active | bool | soft "discontinue" flag — archived products are hidden from POS but history is preserved |
 | created_at / updated_at | timestamp | |
 
 ---
@@ -182,13 +185,14 @@ erDiagram
 
 ---
 
-### `Transaction` *(sale header — replaces three separate "sales" concepts in the BRD)*
+### `Transaction` *(unified revenue ledger — covers both client payments and POS sales)*
 
 | Field | Type | Notes |
 |---|---|---|
 | id | UUID/PK | |
 | gym_id | FK → Gym | |
-| client_id | FK → Client, nullable | nullable only for true anonymous walk-ins if ever allowed; in practice almost always populated since full name is required |
+| transaction_type | enum | `CLIENT_TRANSACTION` (membership/walk-in fees — client required) or `POS_SALE` (product sales — no client required) |
+| client_id | FK → Client, nullable | required when `transaction_type = CLIENT_TRANSACTION`; null for `POS_SALE` transactions |
 | transaction_date | datetime | |
 | total_amount | decimal | sum of line items, computed/stored for fast reporting |
 | payment_method | enum | `CASH`, `GCASH`, `CARD`, `OTHER` |
@@ -197,7 +201,7 @@ erDiagram
 | created_by | FK → User | |
 | created_at | timestamp | |
 
-**Reasoning — why one Transaction table instead of three (Membership Sale / Walk-In Sale / Product Sale) as the BRD's module list implies:** Real-world checkouts mix these (e.g., a member renews *and* buys a protein shake in the same visit). A single header with typed line items captures reality correctly and gives you one true revenue ledger to report from, instead of three disconnected tables that need to be unioned for every report.
+**Reasoning — why one Transaction table:** A single `Transaction` table provides one unified revenue ledger for all money flowing through the gym. `CLIENT_TRANSACTION` records always carry a `client_id` and contain only `MEMBERSHIP` or `WALK_IN_FEE` line items. `POS_SALE` records have no client and contain only `PRODUCT` line items. The `transaction_type` enum makes the distinction explicit at the data level while keeping revenue reporting simple — all income is queryable from one table regardless of whether it came from a membership fee or a protein shake sale. See ADR-006 and ADR-012.
 
 ---
 
@@ -215,7 +219,9 @@ erDiagram
 | unit_price | decimal | **price snapshot at time of sale** |
 | subtotal | decimal | quantity × unit_price |
 
-**Reasoning:** `unit_price` is always copied at the moment of sale, never joined live from `Product.current_price` or `MembershipPlan.default_price`. This is the single most important correctness rule in the whole schema — without it, a price change next month silently rewrites the financial meaning of every past sale.
+**Constraint:** A `TransactionLineItem`'s `item_type` must match its parent `Transaction`'s `transaction_type`: `CLIENT_TRANSACTION` records may only contain `MEMBERSHIP` and `WALK_IN_FEE` items; `POS_SALE` records may only contain `PRODUCT` items. Mixing types across `transaction_type` boundaries is not permitted.
+
+**Reasoning:** `unit_price` is always copied at the moment of sale, never joined live from `Product.selling_price` or `MembershipPlan.default_price`. This is the single most important correctness rule in the whole schema — without it, a price change next month silently rewrites the financial meaning of every past sale.
 
 ---
 

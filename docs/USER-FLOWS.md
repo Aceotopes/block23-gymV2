@@ -172,59 +172,73 @@ Old membership record remains in history, untouched (never overwritten)
 ## Flow 7: Walk-In → Member Conversion (same visit)
 
 ```
-Walk-in client arrives, pays walk-in fee (Flow 3 begins)
+Walk-in client arrives, pays walk-in fee (Flow 3 completes)
     ↓
 Mid-visit, client decides to buy a membership
     ↓
-Owner opens "Add Membership" from the same checkout screen
+Owner opens Client Profile → "Add Membership"
     ↓
 Owner selects a Membership Plan; price defaults from plan
     ↓
-(Optional) Owner manually overrides the membership price if they want to 
-    account for the walk-in fee already paid today — this is a manual 
-    judgment call, not an automated calculation (see reasoning below)
+(Optional) Owner manually overrides the membership price if they want to
+    account for the walk-in fee already paid today — manual judgment call,
+    not an automated calculation (confirmed: no auto credit)
     ↓
-Single combined Transaction created with 2 line items 
-    (WALK_IN_FEE, MEMBERSHIP) at whatever prices were entered
+A CLIENT_TRANSACTION is created with 2 line items:
+    WALK_IN_FEE (already paid) + MEMBERSHIP at the entered prices
     ↓
-Attendance record's visit_type is updated to MEMBER (since they now have an active membership for today)
+Attendance record's visit_type updated to MEMBER
+    (client now has an active membership for today)
     ↓
-Walk-in→Member conversion event logged for reporting (supports "frequent walk-in / conversion opportunity" report)
+Walk-in→Member conversion logged for reporting
 ```
 
-**Reasoning:** This flow doesn't exist anywhere in the original BRD, but it's the literal moment the BRD's stated goal — "identify frequent walk-in clients" for conversion — actually happens. Without designing this explicitly, the conversion-tracking metric becomes a report nobody can act on in the moment.
+**Note:** If the client also wants to purchase a product during this visit, that is handled as a separate, standalone POS sale — see Flow 8. Client transactions (membership fees, walk-in fees) and POS sales are always separate flows.
 
-**Scope decision:** an earlier draft of this flow included an automatic "apply walk-in fee as credit" calculation. That's been dropped — it added partial-credit math to checkout logic for a fairly rare moment, and the core value (the conversion-tracking report itself) doesn't depend on it. The existing manual price-override field already covers an owner who wants to give a discount in this moment.
+**Reasoning:** This flow captures the literal moment the BRD's conversion goal happens. The combined WALK_IN_FEE + MEMBERSHIP CLIENT_TRANSACTION is valid because both items are client-linked. The "apply walk-in fee as credit" automatic calculation was dropped — the existing manual price-override field covers any owner who wants to offer a discount in this moment.
 
 ---
 
-## Flow 8: Product Sale (standalone or combined with membership/walk-in)
+## Flow 8: POS Product Sale (standalone, no client required)
 
 ```
-Owner opens "New Sale" (can be initiated standalone or from a check-in screen)
+Owner opens POS screen
     ↓
-Owner adds one or more products to cart, with quantity
+Product grid loads — all active products with image, name, and price
     ↓
-For each product line:
-    Available stock/servings >= requested quantity? 
+Owner taps a product to add it to cart
+    ↓
+For each product added:
+    Available stock/servings >= requested quantity?
         │
-        ├── No ──→ Block line item, show "Insufficient stock: X remaining" 
-        │          (owner can override only via explicit "Force Sale" confirmation, 
-        │           which logs a negative-stock adjustment for visibility)
+        ├── No ──→ Show: "Only X remaining"
+        │          Owner proceeds via explicit "Force Sale" confirmation
+        │          (logs a flagged ADJUSTMENT entry in inventory ledger)
         │
-        └── Yes ──→ Add to cart at current product price (snapshot taken at add-to-cart time)
+        └── Yes ──→ Item added to cart; price snapshot taken at this moment
     ↓
-Owner optionally adds membership/walk-in fee line items to the same cart (see Flow 7)
+Owner adjusts quantities in cart if needed
     ↓
-Owner confirms total, selects payment method
+Owner taps "Checkout"
     ↓
-Transaction + TransactionLineItems created
+Owner selects payment method (Cash / GCash / Card / Other)
     ↓
-For each PRODUCT line item:
-    InventoryTransaction (type=SALE) created, stock/servings decremented
+Owner confirms total
     ↓
-Dashboard revenue + inventory counters update
+POS Sale created:
+    transaction_type = POS_SALE
+    client_id = null (no client required)
+    TransactionLineItems created for each product (unit_price = snapshot)
+    ↓
+For each line item:
+    InventoryTransaction (type=SALE) created
+    Product.current_stock decremented accordingly
+    ↓
+Dashboard revenue and inventory counters update
 ```
+
+**No client is required for this flow.**
+If the client is also paying a membership fee or walk-in fee during the same visit, those are recorded as separate CLIENT_TRANSACTION records via their respective flows (Flows 3, 5, or 6) — they are never combined with a POS sale into a single transaction.
 
 ---
 

@@ -70,16 +70,18 @@ Each entry: what was decided, why, and what alternative was rejected.
 
 ---
 
-## ADR-006: Single `Transaction` table with typed line items
+## ADR-006: Single `Transaction` table with typed line items and `transaction_type` enum
 
-**Date:** 2026-06-22
-**Status:** Accepted
+**Date:** 2026-06-22 (updated Design Review #1)
+**Status:** Accepted — reasoning updated
 
-**Decision:** All sales (membership purchase, walk-in fee, product sale) are recorded as a single `Transaction` header with typed `TransactionLineItem` rows, not as three separate tables.
+**Decision:** All revenue (client payments and POS sales) is recorded through a single `Transaction` table with typed `TransactionLineItem` rows, distinguished by a `transaction_type` enum (`CLIENT_TRANSACTION` or `POS_SALE`).
 
-**Why:** Real-world checkouts routinely mix types — a client renews their membership and buys a drink in the same visit. Three separate tables would require unioning them for every revenue report, and would make it impossible to represent a mixed checkout as a single financial event.
+**Why (updated):** A single Transaction table provides one unified revenue ledger — all income is queryable from one place regardless of whether it came from a membership fee or a product sale. The `transaction_type` enum makes the two distinct patterns explicit at the data level without requiring separate tables. Revenue reports, payment method breakdowns, and category reports all read from one source.
 
-**Rejected:** Separate `MembershipSale`, `WalkInSale`, `ProductSale` tables as implied by the BRD's module structure. This accurately reflects the UI's module separation but misrepresents financial reality.
+**Note — original reasoning retired:** The original justification ("real-world checkouts mix membership + product in the same cart") has been explicitly rejected. Mixed checkout does not reflect how the gym actually operates. The single-table conclusion stands, but for the unified-ledger reason above.
+
+**Rejected:** Separate tables (`ClientPaymentTable`, `POSSaleTable`). Would require unions for every revenue report. Does not simplify reporting compared to a single table with a `transaction_type` filter.
 
 ---
 
@@ -125,6 +127,47 @@ Each entry: what was decided, why, and what alternative was rejected.
 **Date:** 2026-06-22
 **Status:** Accepted
 
-**Decision:** CSV export of all reports is committed MVP scope (US-7.9). PDF export (US-7.7) is Post-MVP.
+**Decision:** CSV export of all reports is committed MVP scope (US-8.10). PDF export (US-8.11) is Post-MVP.
 
 **Why:** CSV covers the core owner need — getting data out, opening in Excel, keeping offline copies. PDF formatting is a separate, higher-effort enhancement with no blocking need in MVP.
+
+---
+
+## ADR-011: POS product sales do not require a client
+
+**Date:** 2026-06-22
+**Status:** Accepted
+
+**Decision:** Product sales through the POS module are anonymous by default. `Transaction.client_id` is null for all `POS_SALE` records. No client selection step exists in the POS checkout flow.
+
+**Why:** The business value of product sales is revenue tracking and inventory management — not per-customer purchase history. The gym owner's stated priorities are daily revenue, top-selling products, inventory levels, and remaining protein servings. Knowing which specific client bought a Gatorade provides no actionable value. Requiring a client selection step for every quick cash sale creates friction that directly degrades the POS experience.
+
+**Rejected:** Requiring a client for all transactions (the original unified checkout design). This would slow down every product sale and misalign the system with how quick counter sales actually work.
+
+---
+
+## ADR-012: Mixed checkout removed — client transactions and POS sales are separate flows
+
+**Date:** 2026-06-22
+**Status:** Accepted
+
+**Decision:** A single transaction cannot contain both client-linked items (`MEMBERSHIP`, `WALK_IN_FEE`) and product items (`PRODUCT`). Client payments and POS sales are always separate, independent flows.
+
+**Why:** Real gym operations naturally separate these. Membership payments and walk-in fees happen at check-in as part of a client-centric workflow. Product sales happen at a counter as quick, often client-anonymous transactions. Combining them into one cart was a theoretical optimization that doesn't match actual behavior and added UI complexity to the dominant use case (quick product sale).
+
+**Consequence:** The Walk-in → Member Conversion flow (Flow 7) is unaffected — it creates a `CLIENT_TRANSACTION` with `WALK_IN_FEE + MEMBERSHIP` line items, both of which are client-linked. If the client also wants to buy a product during that visit, a separate POS sale is opened.
+
+**Rejected:** Unified mixed checkout (the original design). The example "member renews and buys protein shake in one transaction" was the primary driver of ADR-006's original reasoning. That example is now the rejected alternative: it doesn't reflect how this gym operates.
+
+---
+
+## ADR-013: `cost_price` promoted to MVP scope
+
+**Date:** 2026-06-22
+**Status:** Accepted
+
+**Decision:** `Product.cost_price` is a standard product field at MVP (was US-6.6, P2 in the original design).
+
+**Why:** The POS module is being built from the ground up in this design review. Adding `cost_price` to the product creation form at this point costs almost nothing — it's one additional field. The marginal build cost is near zero, while the cost of adding it later (after products are created and populated) is a schema migration plus a data-backfill exercise. Profit-margin reporting (which uses this field) remains Post-MVP.
+
+**Consequence:** `cost_price` on `Product` is MVP; `Product.cost_price` may be null for products where the owner doesn't track cost. Profit-margin reports (US-8.12) remain P2.
