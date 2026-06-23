@@ -171,3 +171,70 @@ Each entry: what was decided, why, and what alternative was rejected.
 **Why:** The POS module is being built from the ground up in this design review. Adding `cost_price` to the product creation form at this point costs almost nothing — it's one additional field. The marginal build cost is near zero, while the cost of adding it later (after products are created and populated) is a schema migration plus a data-backfill exercise. Profit-margin reporting (which uses this field) remains Post-MVP.
 
 **Consequence:** `cost_price` on `Product` is MVP; `Product.cost_price` may be null for products where the owner doesn't track cost. Profit-margin reports (US-8.12) remain P2.
+
+---
+
+## ADR-014: Client list includes status filters and membership expiry column
+
+**Date:** 2026-06-23
+**Status:** Accepted
+
+**Decision:** The Client List page includes persistent filter chips (All / Active / Expiring soon / Expired / Walk-in) and replaces the "Joined" column with a "Membership expiry" column. Filters combine with name search.
+
+**Why:** The primary daily use of the Client List is identifying who needs renewal outreach or immediate action. Without status filters, the list forces the owner to scroll all records to find a relevant subset. The "Joined" date is permanent, low-value data for routine operations; membership expiry is actionable daily information. Filters map directly to the derived status values already computed by ADR-002 — no additional storage or queries are required.
+
+**Rejected:** Unfiltered client list with a "Joined" column. This was the initial wireframe design, rejected after Clients Module design review as insufficient for daily use at scale.
+
+---
+
+## ADR-015: Membership Plan catalog management is MVP scope, placed in Settings
+
+**Date:** 2026-06-23
+**Status:** Accepted
+
+**Decision:** Plan creation, editing, and retirement are committed MVP scope (US-3.9). The plan management UI lives in the Settings module under a "Membership Plans" section. The `MembershipPlan` entity (already in the domain model with `name`, `duration_days`, `default_price`, `is_active`) now has a corresponding management interface.
+
+**Why:** The wireframe revealed that the Add/Renew membership modal displayed hardcoded plan options with no owner control. Without plan management, the system cannot reflect the owner's actual pricing structure — a critical gap for a system designed to replace paper/Excel workflows. The entity has always existed in the schema; only the UI was missing.
+
+**Consequence:** US-3.9 added as P0 story. Changing a plan's `default_price` affects only future transactions — existing `price_paid` snapshots are never altered (ADR-003 guarantees this structurally). Retiring a plan sets `is_active = false`; all existing memberships created under that plan remain intact.
+
+**Rejected:** Hardcoded plan options with no management UI. This contradicts the `MembershipPlan` entity's design intent and would make the system non-configurable.
+
+---
+
+## ADR-016: Walk-in conversion signals surface in the Clients module, not only in Reports
+
+**Date:** 2026-06-23
+**Status:** Accepted
+
+**Decision:** Walk-in visit counts and conversion signals appear directly on the Client Profile header for walk-in-status clients. A "Walk-in only" filter on the Client List, sortable by visit count, supports in-context conversion outreach. The Dashboard adds a "Frequent walk-ins" live feed panel (top 5 walk-in clients with no active membership, sorted by visit count). The Reports module's US-8.8 (Frequent Walk-In Report) remains and provides the full detailed view.
+
+**Why:** The BRD's stated conversion goal occurs at the point of client interaction, not at report-review time. An owner interacting with a client during a walk-in visit has no conversion prompt under the original design — they would need to separately open Reports to discover the opportunity. The underlying data (Attendance records, Client status) already exists; surfacing it in the Clients module is zero schema cost and zero additional data storage.
+
+**Rejected:** Walk-in conversion data surfaced in Reports only. This was the original design. Signals that arrive after the client has left cannot drive same-visit conversion — the primary conversion opportunity.
+
+---
+
+## ADR-017: Explicit `client_type` and walk-in inactivity status
+
+**Date:** 2026-06-23
+**Status:** Accepted
+
+**Decision:** Two new derived concepts are added to the Client entity:
+
+1. **`client_type`** (`MEMBER` | `WALK_IN`) — derived at query time: a client is `MEMBER` if they have at least one `Membership` record (regardless of whether it is active or expired); `WALK_IN` if they have zero Membership records. An expired member who now only visits as a walk-in retains `MEMBER` type — they are a known returning customer, not a first-time visitor. Neither value is stored as a column.
+
+2. **Walk-in inactivity status** — the `Client.status` derivation now branches by `client_type`:
+   - `MEMBER` clients: existing logic unchanged (Active / Expiring soon / Expired, from membership end_date).
+   - `WALK_IN` clients: `ACTIVE` if last attendance date is within `Gym.walkin_inactivity_threshold_days` of today; `INACTIVE` if last visit exceeds the threshold or the client has no attendance records.
+
+3. **New gym setting**: `Gym.walkin_inactivity_threshold_days` (int, default: 7) — configurable by the owner in Settings → System Preferences.
+
+4. **Filter chip update**: Client List gains an "Inactive" chip that surfaces `WALK_IN` clients with `INACTIVE` status. The "Active" chip covers both active members and active walk-ins. "Inactive" covers inactive walk-ins only — not expired members (who are captured by "Expired").
+
+**Why:** Walk-in clients with no visits for 7+ days represent lapsed interest. Without a distinct status, the owner has no lightweight signal for which walk-in clients to prioritize for outreach vs. which are actively using the gym. The type/status split also makes the Client List semantically unambiguous — "Active" means "currently engaging with the gym," regardless of how that engagement is structured. Computing both values from existing records (Membership and Attendance tables) requires no new stored columns and adds no sync risk.
+
+**Rejected:**
+- Storing `client_type` as a column on `Client`. Same drift risk as the stored-status flag rejected in ADR-002.
+- Applying inactivity logic to `MEMBER` clients. Members have a paid commitment with a defined end date — "Expired" already captures lapsed membership. Inactivity during a paid period is not a signal the owner needs to act on.
+- Using a fixed 30-day default for the inactivity threshold. Owner preference is 7 days; the setting is configurable in any case.

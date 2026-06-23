@@ -45,9 +45,9 @@ Each document has a defined ownership scope. Write changes to the right document
 | `docs/USER-FLOWS.md` | End-to-end interaction sequences, decision branches, and edge case handling in the UI/workflow layer. |
 | `docs/DOMAIN-MODEL.md` | Entity definitions, field-level rationale, relationships, and schema design decisions. |
 | `docs/MODULE-SPECS.md` | Per-module business rules, form fields, edge cases, and deferred items. The operational layer between stories and the domain. |
-| `ROADMAP.md` | Milestone scope, delivery sequencing, and post-MVP backlog. |
-| `DECISIONS.md` | Numbered ADRs — what was decided, why, and what was rejected. Every significant design decision goes here. |
-| `DEVELOPMENT-LOG.md` | One entry per commit, newest first. Records what changed and which decisions were made. |
+| `docs/ROADMAP.md` | Milestone scope, delivery sequencing, and post-MVP backlog. |
+| `docs/DECISIONS.md` | Numbered ADRs — what was decided, why, and what was rejected. Every significant design decision goes here. |
+| `docs/DEVELOPMENT-LOG.md` | One entry per commit, newest first. Records what changed and which decisions were made. |
 
 ## Document Synchronization Map
 

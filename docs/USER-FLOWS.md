@@ -2,6 +2,8 @@
 
 All flows assume the Gym Owner is logged in. Decision points are marked with `?`; edge-case branches are called out explicitly since these are the parts most BRDs gloss over.
 
+> **Design Review #2 (2026-06-23):** Flow 5 blocking state confirmed; Flow 6 updated with context-aware button labels; Flow 7 updated with walk-in conversion signal UX path. New flows added: Flow 12 (Archive Client), Flow 13 (Manage Membership Plans). See DECISIONS.md ADR-014, ADR-015, ADR-016.
+
 ---
 
 ## Flow 1: Owner Login
@@ -113,17 +115,26 @@ Dashboard distinguishes "Total Check-ins" vs "Unique Visitors" so double-countin
 ## Flow 5: New Membership Purchase
 
 ```
-Owner opens Client Profile → "Add Membership"
+Owner opens Client Profile
     ↓
-Client already has an ACTIVE membership? ──Yes──→ Block. Show: 
-                                                    "Client has an active membership until [date]. 
-                                                     Did you mean to Renew instead?" → redirect to Flow 6
+Profile shows context-aware membership action button:
+    "Add membership" (no prior membership) ──→ this flow
+    "Renew" (expired/expiring) ──────────────→ Flow 6
+    "Renew early" (active, not near expiry) ─→ Flow 6
+    ↓
+Owner clicks "Add membership"
+    ↓
+Client already has an ACTIVE membership? ──Yes──→ Block. Show:
+                                                    "[Client name] has an active membership 
+                                                     until [end date]. Did you mean to Renew instead?"
+                                                    + "Go to Renew" button → redirect to Flow 6
     │
     No
     ↓
-Owner selects a Membership Plan (1/2/3 month, or custom duration)
+Owner selects a Membership Plan from active plan catalog
+    (Custom duration option → "Duration (days)" numeric input field appears inline, required)
     ↓
-Price defaults from plan, owner may override (override value is what gets recorded)
+Price defaults from plan's default_price, owner may override (override value is what gets recorded)
     ↓
 Owner selects start date (defaults to today, can be future-dated for pre-purchase)
     ↓
@@ -143,11 +154,16 @@ Owner optionally logs attendance for today in same flow (if client is visiting n
 ## Flow 6: Membership Renewal
 
 ```
-Owner opens Client Profile → "Renew Membership"
+Owner opens Client Profile
+    ↓
+Context-aware button shows "Renew" (expired or expiring soon)
+                        or "Renew early" (active, not near expiry threshold)
+    ↓
+Owner clicks the renewal button
     ↓
 System shows current membership status: ACTIVE (ends [date]) or EXPIRED (ended [date])
     ↓
-Owner selects renewal plan/duration + price (override allowed)
+Owner selects renewal plan/duration from active plan catalog + price (override allowed)
     ↓
 Renewal date calculation:
     │
@@ -174,9 +190,16 @@ Old membership record remains in history, untouched (never overwritten)
 ```
 Walk-in client arrives, pays walk-in fee (Flow 3 completes)
     ↓
-Mid-visit, client decides to buy a membership
+Owner opens Client Profile for the checked-in client
     ↓
-Owner opens Client Profile → "Add Membership"
+Quick-stats strip shows walk-in visit count with conversion signal:
+    "X visits — no membership" (if walk-in-only client)
+    ↓
+Owner identifies conversion opportunity (in-person, in the moment)
+    ↓
+Context-aware button shows "Add membership" (client has no membership history)
+    ↓
+Owner clicks "Add membership"
     ↓
 Owner selects a Membership Plan; price defaults from plan
     ↓
@@ -301,6 +324,98 @@ Revenue reports automatically exclude VOID transactions from totals,
 ```
 
 **Reasoning:** "Business records must be preserved" (NFR) and "correct mistakes" are in tension unless corrections are modeled as additive reversals rather than destructive edits. This flow resolves that tension.
+
+---
+
+## Flow 12: Archive Client (Soft Delete)
+
+```
+Owner opens Client Profile
+    ↓
+Owner clicks the overflow menu (⋯) in the profile header
+    ↓
+Overflow menu shows: Edit · Archive client
+    ↓
+Owner clicks "Archive client"
+    ↓
+Confirmation dialog: "Archive [Name]? They will be hidden from the active client list.
+                      All history is preserved."
+    ↓
+Owner confirms
+    ↓
+Client.deleted_at = now (soft delete)
+    ↓
+Client disappears from the default Client List view
+    ↓
+Client remains visible in Client List when "Show archived" toggle is enabled (greyed out)
+    ↓
+All attendance, membership, and transaction history remains fully intact and queryable
+```
+
+**Reactivation path:**
+```
+Owner enables "Show archived" toggle on Client List → locates archived client
+    ↓
+Owner opens Client Profile (archived state banner visible)
+    ↓
+Overflow menu (⋯) shows: Reactivate client
+    ↓
+Owner clicks "Reactivate client" → Client.deleted_at = null
+    ↓
+Client reappears in the default Client List view
+```
+
+---
+
+## Flow 13: Manage Membership Plans (Settings)
+
+```
+Owner opens Settings → "Membership Plans"
+    ↓
+Plan list shows all plans (name · duration · default price · status badge)
+```
+
+**Add a new plan:**
+```
+Owner clicks "Add plan"
+    ↓
+Enters: name (required), duration type (required), default price (required)
+    ↓
+Duration type:
+    ├── 1 month / 2 months / 3 months → duration_days computed automatically
+    └── Custom days → "Duration (days)" numeric input field required
+    ↓
+Plan saved with is_active = true
+    ↓
+Plan immediately appears in the Add/Renew membership modal
+```
+
+**Edit a plan:**
+```
+Owner clicks edit on an existing plan
+    ↓
+All fields editable
+    ↓
+Changing default_price → only affects future memberships
+    (existing price_paid snapshots are never altered — ADR-003)
+```
+
+**Retire a plan:**
+```
+Owner clicks "Retire" on an active plan
+    ↓
+Last active plan? ──Yes──→ Block. Show: "At least one active plan is required."
+    │
+    No
+    ↓
+is_active = false
+    ↓
+Plan disappears from the Add/Renew membership modal
+    ↓
+All existing memberships created under this plan remain fully intact
+    ↓
+Plan remains visible in Settings with "Inactive" badge (can be reactivated)
+```
 
 ---
 

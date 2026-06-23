@@ -13,22 +13,26 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [ ] Gym settings: name, address, contact info (US-1.2)
 - [ ] Default membership and walk-in fee configuration (US-1.3)
 - [ ] Expiring-soon warning threshold setting (US-1.4)
+- [ ] Walk-in inactivity threshold setting — drives the "Inactive" client status (US-1.7)
 
 ### Milestone 2 — Client Management
 - [ ] New client registration — name required, contact optional (US-2.1)
 - [ ] Edit client profile (US-2.2)
-- [ ] Client search by name with partial match (US-2.3)
-- [ ] Client profile view: personal info, membership history, attendance history (US-2.4)
+- [ ] Client search by name with partial match; combined with status filter chips (US-2.3)
+- [ ] Client profile view: personal info, quick-stats strip, membership history (voided indicator), attendance history (filters), context-aware membership button (US-2.4)
 - [ ] Support pure walk-in clients with no membership (US-2.5)
-- [ ] Soft-delete / archive clients (US-2.6)
+- [ ] Soft-delete / archive clients via overflow menu; "Show archived" toggle on Client List (US-2.6)
+- [ ] Status and type filter chips on Client List: All / Active / Expiring soon / Expired / Walk-in only / Inactive; client type (MEMBER/WALK_IN) badge on list and profile (US-2.9)
+- [ ] Walk-in conversion signals on Client Profile + Dashboard "Frequent walk-ins" feed (US-2.10)
 
 ### Milestone 3 — Membership Management
-- [ ] Create membership with plan selection and price override (US-3.1)
-- [ ] Renew membership — extend from end date if not expired, from today if expired (US-3.2)
-- [ ] Custom plan durations (US-3.3)
+- [ ] Create membership with plan selection and price override; blocking state with "Go to Renew" redirect if active membership exists (US-3.1)
+- [ ] Renew membership with context-aware button labels — extend from end date if not expired, from today if expired (US-3.2)
+- [ ] Custom plan duration — inline "Duration (days)" input when "Custom duration" selected (US-3.3)
 - [ ] Full membership history per client (US-3.4)
 - [ ] Expired memberships remain visible; client still allowed as walk-in (US-3.5)
 - [ ] Expiring-soon membership list (US-3.6)
+- [ ] Membership plan catalog management in Settings: create, edit, retire plans (US-3.9)
 
 ### Milestone 4 — Attendance
 - [ ] Record member check-in by name search — auto-tag MEMBER or WALK_IN (US-4.1)
@@ -60,7 +64,7 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [ ] Manual inventory adjustments with required reason note (covered by US-7.2)
 
 ### Milestone 8 — Dashboard & Reports
-- [ ] Dashboard: KPI strip, trend charts (revenue/attendance/top products), live feeds (POS sales, expiring members, inventory alerts) (US-8.1)
+- [ ] Dashboard: KPI strip, trend charts (revenue/attendance/top products), live feeds (POS sales, expiring members, inventory alerts, frequent walk-ins) (US-8.1, US-2.10)
 - [ ] Revenue reports by period and source (membership / walk-in / product) (US-8.2)
 - [ ] Revenue by payment method (Cash, GCash, Card, Other) (US-8.3)
 - [ ] Revenue by product category (US-8.4)

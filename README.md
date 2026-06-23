@@ -35,6 +35,6 @@ To be decided.
 
 ## Navigation
 
-- [Roadmap](ROADMAP.md) — delivery phases and milestones
-- [Decisions](DECISIONS.md) — architecture decision log
-- [Development Log](DEVELOPMENT-LOG.md) — per-commit change history
+- [Roadmap](docs/ROADMAP.md) — delivery phases and milestones
+- [Decisions](docs/DECISIONS.md) — architecture decision log
+- [Development Log](docs/DEVELOPMENT-LOG.md) — per-commit change history

@@ -4,6 +4,8 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 
 > **Design Review #1 (2026-06-22):** Module 5 renamed from "Sales" to "Client Payments" and scoped to membership fees and walk-in fees only. New Module 6 (POS & Product Sales) added for product transactions. Client Profile "Purchase History" tab removed. Product entity updated with cost_price, image, product_type, and servings_per_container. Three new reports added. See DECISIONS.md ADR-011 and ADR-012.
 
+> **Design Review #2 (2026-06-23):** Clients Module overhauled after wireframe review — status filter chips, updated table columns, quick-stats strip, context-aware membership button, archive via overflow menu, walk-in conversion signals, attendance tab filters, voided payment indicator, "Show archived" toggle. Dashboard gains a 4th live feed panel (Frequent walk-ins). Membership Module gains Membership Plan catalog management. Settings Module gains "Membership Plans" section. See DECISIONS.md ADR-014, ADR-015, ADR-016.
+
 ---
 
 ## 1. Dashboard Module
@@ -30,6 +32,7 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - **Recent POS sales:** last 5 product transactions with item summary, payment method, amount, and time-ago.
 - **Expiring soon members:** list of members whose memberships expire within the warning window, sorted by soonest first, with days-remaining indicator and color-coded urgency (red < 7 days, amber 7–14 days).
 - **Inventory alerts:** products below low-stock threshold with remaining count. For `SERVING_BASED_PRODUCT` items, shows remaining servings (e.g., "Whey Protein: 8 servings remaining").
+- **Frequent walk-ins:** top 5 walk-in clients (no active membership) sorted by visit count descending, with last visit date and visit count. "View all →" links to the Client List filtered to "Walk-in only." Supports same-visit conversion outreach. (ADR-016)
 
 **Business Rules Enforced:**
 - All chart and metric data excludes voided transactions (both `CLIENT_TRANSACTION` and `POS_SALE`).
@@ -56,20 +59,62 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 **Purpose:** Central client registry replacing scattered paper/Excel records.
 
 **MVP Scope / Forms:**
+
+**Client List:**
+- Status filter chips always visible: `All` · `Active` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive`. Filters combine with name search. Filter state persists within the session. (ADR-014, ADR-017)
+  - `Active` — MEMBER clients with an active membership + WALK_IN clients whose last visit is within `Gym.walkin_inactivity_threshold_days`
+  - `Expiring soon` — MEMBER clients within `Gym.expiration_warning_days` of membership end
+  - `Expired` — MEMBER clients with no current active membership
+  - `Walk-in only` — all WALK_IN type clients (Active and Inactive walk-ins combined)
+  - `Inactive` — WALK_IN clients whose last visit exceeds `Gym.walkin_inactivity_threshold_days`, or who have never visited
+- Table columns: Full Name, Type (MEMBER / WALK_IN badge), Status (derived), Membership Expiry (members only — blank for walk-in clients), Contact Number, Actions.
+- Name search: partial-match, returns within 2 seconds (NFR).
+- **Show archived toggle:** when enabled, archived clients appear in a visually distinct state (greyed out) interleaved with active results. Default off.
+- "+ New Client" button in the toolbar. (No "+ Add membership" toolbar shortcut — membership is created from the Client Profile.)
+
+**Register/Edit Client forms:**
 - **Register Client:** `full_name` (required), `contact_number` (optional), `notes` (optional).
 - **Edit Client:** all fields editable except system-generated `date_registered`.
-- **Search Client:** partial-match search on `full_name`, returns within 2 seconds (NFR).
-- **Client Profile view:** personal info + tabs for Membership History and Attendance History.
+
+**Client Profile:**
+- **Type badge** displayed prominently in the profile header: `MEMBER` or `WALK_IN`. Status badge displayed alongside it (e.g., "MEMBER · Active", "WALK_IN · Inactive").
+- **Quick-stats strip (header):** total all-time visits · visits this month · for MEMBER clients: days until membership expiry · for WALK_IN clients: walk-in visit count and days since last visit.
+- **Walk-in conversion signal:** for WALK_IN type clients, the quick-stats strip prominently shows "X visits — no membership," serving as a direct conversion cue. (ADR-016)
+- **Context-aware membership action button:**
+  - "Add membership" — client has no membership history.
+  - "Renew" — client's membership is expired or expiring soon (within warning threshold).
+  - "Renew early" — client has an active membership not near expiry.
+- **Overflow menu (⋯) on profile header:** Edit profile · Archive client · (if archived: Reactivate client).
+- **Tabs:**
+  - *Membership History:* chronological list of all Membership records. Rows where the associated payment transaction is voided display a "VOID" badge on the payment column — the membership record itself is unchanged, only the financial indicator is flagged.
+  - *Attendance History:* chronological check-in log with date range filter and visit type filter (MEMBER / WALK_IN).
 
 *(Purchase History tab removed — POS product sales are not linked to clients. See ADR-011.)*
 
+**Archive Client (soft delete):**
+- Accessible from the Client Profile overflow menu (⋯), not a primary button.
+- Requires confirmation: "Archive [Name]? They will be hidden from the active client list. All history is preserved."
+- Archived clients are hidden from the default Client List view; visible only with "Show archived" toggle enabled.
+- Archived clients retain all attendance, membership, and payment history — fully intact and queryable.
+- Reactivation (un-archive) available from the same overflow menu.
+
 **Business Rules Enforced:**
-- A client can exist indefinitely with zero memberships (pure walk-in history).
+- A client can exist indefinitely with zero memberships (pure walk-in history); their `client_type` is `WALK_IN`.
+- Once a client has any Membership record, `client_type` is permanently `MEMBER` — it does not revert if the membership expires.
 - Soft delete only (`deleted_at`) — a client is never hard-removed if they have any attendance or transaction history.
+- `client_type` and `status` are both derived at query time (ADR-002, ADR-017) — no stored columns, no sync job.
+- The "Expiring soon" filter uses the same `Gym.expiration_warning_days` threshold as the Dashboard widget.
+- The "Inactive" filter uses `Gym.walkin_inactivity_threshold_days` — a separately configurable setting.
 
 **Edge Cases:**
-- **Possible duplicate on registration:** system performs a fuzzy name check and warns before creating a new record, but never blocks.
-- **Client with no contact info at all:** fully valid state, must not break search or profile views.
+- **Possible duplicate on registration:** fuzzy name check warns before creating, but never blocks.
+- **Client with no contact info at all:** fully valid, must not break search or profile views.
+- **Newly registered walk-in client who has never visited:** `client_type = WALK_IN`, `status = INACTIVE` immediately (no attendance records = last visit exceeds any threshold). This is expected — they were registered but haven't come in yet.
+- **Walk-in client viewed from the Dashboard "Frequent walk-ins" panel:** links directly to Client Profile; context-aware button shows "Add membership."
+- **Future-dated membership:** profile header status badge reads "Upcoming," not "Active," until `start_date` arrives. `client_type` is `MEMBER` from the moment the membership record is created.
+- **Archived client appears in attendance history query:** record is retained and visible in reports; the client row in the list is greyed out under "Show archived."
+- **Walk-in filter + name search + sort by visit count:** all three can be applied simultaneously; each constraint narrows results cumulatively.
+- **Inactivity threshold change:** when the owner updates `walkin_inactivity_threshold_days`, the derived status of all WALK_IN clients recalculates immediately — no backfill needed since it's computed on query.
 
 **Deferred:**
 - Merge-duplicate-clients tool.
@@ -83,24 +128,47 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 **Purpose:** Manage the full lifecycle of paid membership periods per client.
 
 **MVP Scope / Forms:**
-- **Create Membership:** select `MembershipPlan` (or define custom duration inline), `price` (defaults from plan, overridable), `start_date` (defaults today, can be future-dated).
-- **Renew Membership:** select plan/duration + price; system auto-computes new dates per the renewal rule below.
-- **View Membership History:** chronological list of all Membership records for a client, including the renewal chain.
-- **Monitor Expiration:** surfaced via Dashboard + a dedicated filterable list (Active / Expired / Expiring Soon).
+
+**Membership Plan Catalog (managed in Settings → Membership Plans):**
+- The `MembershipPlan` table is the authoritative source for plan options in the Add/Renew modal. (ADR-015)
+- Plans have: `name`, `duration_type` (1 month / 2 months / 3 months / Custom days), `default_price`, `is_active`.
+- See Module 9 (Settings) for plan management UI specification.
+
+**Create Membership:**
+- Select `MembershipPlan` from the active plan catalog (populated from `MembershipPlan` where `is_active = true`).
+- If "Custom duration" plan is selected, a "Duration (days)" numeric input field appears inline and is required.
+- `price` defaults from the selected plan's `default_price`, but is always overridable per transaction (price snapshot, not a live reference — ADR-003).
+- `start_date` defaults to today but can be future-dated (pre-purchase).
+- **Blocking state:** if the client already has an active (non-expired) membership, the Create Membership action is blocked. The blocking message reads: "[Client name] has an active membership until [end date]. Did you mean to Renew instead?" with a "Go to Renew" action that routes directly to the renewal flow.
+
+**Renew Membership:**
+- Same plan/duration selector as Create, same price-override mechanic.
+- System auto-computes new dates per the confirmed renewal math below.
+- The new Membership record is linked to the prior one via `renewed_from_membership_id`, preserving the full renewal chain.
+
+**View Membership History:**
+- Chronological list of all Membership records for a client, including the renewal chain and VOID badge where the associated payment was voided.
+
+**Monitor Expiration:**
+- Surfaced via Dashboard (Expiring Soon panel) + a dedicated filterable list (Active / Expired / Expiring Soon).
 
 **Business Rules Enforced:**
 - **One active membership per client at a time** — creating a new membership while one is still active is blocked, with a redirect prompt to "Renew" instead.
 - **Renewal date math (confirmed rule):**
   - Renewing while current membership is still active → new period extends from the *existing end date*.
   - Renewing after expiry → new period starts from *today*.
-- Membership price is always a **snapshot** (`price_paid`), independent of the plan's current default price.
+- Membership price is always a **snapshot** (`price_paid`), independent of the plan's current default price (ADR-003).
 - Expired memberships remain fully visible and queryable — never hidden or deleted.
-- An expired member is **not blocked from attendance**; they simply attend as a walk-in until they renew.
+- An expired member is **not blocked from attendance**; they attend as a walk-in until they renew.
 - Membership cannot be paused/frozen (explicit BRD exclusion).
+- Editing a plan's `default_price` in Settings does not alter any existing `price_paid` snapshots.
+- Retiring a plan (`is_active = false`) does not affect existing memberships created under that plan.
 
 **Edge Cases:**
-- Future-dated membership start (pre-purchase) — must not count as "active" until its start_date arrives.
-- Custom duration plans must support the exact same renewal math as standard plans.
+- **Future-dated membership start (pre-purchase):** must not count as "active" until `start_date` arrives; profile displays "Upcoming" badge.
+- **Custom duration plans:** support the exact same renewal math as standard duration plans.
+- **Plan retired after membership created:** existing memberships remain valid; plan just no longer appears in the modal selector.
+- **Voided payment on a membership:** the membership record remains fully active. Cancelling or adjusting the membership is a separate manual action.
 
 **Deferred:**
 - Membership freeze/pause.
@@ -295,13 +363,24 @@ This module's primary function is the **history/audit view** and the **void acti
 **MVP Scope / Forms:**
 - **Gym Information:** name, address, contact info.
 - **Pricing:** default membership fee, default walk-in fee.
-- **System Preferences:** membership expiration warning period (days).
+- **System Preferences:** membership expiration warning period (days); walk-in inactivity threshold (days, default: 7).
+- **Membership Plans:** create, edit, and retire membership plan catalog entries. (ADR-015)
+
+**Membership Plans section:**
+- Displays all plans as a table: Name · Duration · Default Price · Status (Active / Inactive).
+- **Add plan:** name (required), duration type (1 month / 2 months / 3 months / Custom days), default price (required), active status (default: active).
+- **Edit plan:** all fields editable. Editing `default_price` does not alter past `price_paid` snapshots (ADR-003).
+- **Retire plan:** sets `is_active = false`. Plan disappears from the Add/Renew membership modal. Existing memberships under the plan are unaffected.
+- Retired plans remain listed in Settings (with an "Inactive" badge) and can be reactivated.
+- At least one active plan must exist at all times — the UI prevents deactivating the last active plan.
 
 **Business Rules Enforced:**
-- Changing a default price here affects only *future* transactions — it must never retroactively alter `price_paid` snapshots on existing records (enforced structurally by the Domain Model's snapshot design).
+- Changing a default price in Gym Information or in a Membership Plan affects only *future* transactions — it must never retroactively alter `price_paid` snapshots on existing records (enforced structurally by the Domain Model's snapshot design, ADR-003).
+- Deactivating a plan does not cascade to existing memberships created under that plan.
 
 **Edge Cases:**
-- Owner sets an unrealistic value (e.g., negative price, zero warning days) — basic input validation required.
+- Owner sets an unrealistic value (e.g., negative price, zero warning days, zero inactivity threshold) — basic input validation required for all numeric settings.
+- Owner attempts to deactivate the last active plan — blocked with a message: "At least one active plan is required."
 
 **Deferred:**
 - Multi-user permission settings.

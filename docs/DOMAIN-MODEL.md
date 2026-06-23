@@ -47,6 +47,7 @@ erDiagram
 | default_membership_fee | decimal | |
 | default_walkin_fee | decimal | |
 | expiration_warning_days | int | drives "expiring soon" dashboard flag |
+| walkin_inactivity_threshold_days | int | default: 7; drives walk-in "Inactive" status |
 | created_at / updated_at | timestamp | |
 
 **Reasoning:** In MVP there is exactly one row in this table. It exists anyway because adding `gym_id` as a foreign key to every other table *now* costs nothing, while adding it after the fact (post-launch, with real data) means rewriting every query and risking cross-tenant data leakage during migration. This is the cheapest insurance in the entire schema.
@@ -77,10 +78,20 @@ erDiagram
 | email | string, nullable | reserved for future notifications |
 | notes | text, nullable | freeform owner notes |
 | date_registered | date | |
-| status | derived, not stored | computed from latest membership + recent attendance, never a stale stored flag |
+| client_type | derived, not stored | `MEMBER` if client has ≥1 Membership record; `WALK_IN` if zero. Never changes back to WALK_IN after a membership is created. |
+| status | derived, not stored | branches by client_type — see derivation logic below |
 | created_at / updated_at / deleted_at | timestamp | soft delete only |
 
-**Reasoning — why `status` is derived, not stored:** A stored "active/inactive" flag requires a background job to keep in sync with membership expiry dates, and it *will* drift out of sync. Computing it at query time (`CASE WHEN exists active membership THEN 'member' WHEN recent walk-in visits THEN 'walk-in' ELSE 'inactive' END`) guarantees correctness with no sync risk, at negligible query cost for single-gym scale.
+**Status derivation logic (ADR-017):**
+- **`MEMBER` type clients** — derived from membership dates:
+  - `ACTIVE`: has a membership where `start_date ≤ today ≤ end_date`
+  - `EXPIRING_SOON`: active membership with `end_date` within `Gym.expiration_warning_days`
+  - `EXPIRED`: most recent membership has `end_date < today` and no current active membership
+- **`WALK_IN` type clients** — derived from attendance recency:
+  - `ACTIVE`: `max(Attendance.date)` is within `Gym.walkin_inactivity_threshold_days` of today
+  - `INACTIVE`: `max(Attendance.date)` exceeds the threshold, or client has no attendance records at all
+
+**Reasoning:** A stored status flag requires a background sync job and *will* drift. Both `client_type` and `status` are computed at query time from Membership and Attendance records that already exist — zero additional storage, zero sync risk, guaranteed correctness. See ADR-002 and ADR-017.
 
 ---
 
@@ -97,6 +108,8 @@ erDiagram
 | created_at | timestamp | |
 
 **Reasoning:** Separating the *plan catalog* from the *individual membership instance* lets the owner manage default offerings (1/2/3 month + custom) without that catalog being entangled with what any specific client actually paid.
+
+**Management UI:** Plan creation, editing, and retirement are handled in Settings → Membership Plans. The Add/Renew membership modal populates its plan selector from `MembershipPlan` where `is_active = true`. See ADR-015.
 
 ---
 

@@ -8,6 +8,8 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 > **Design Review #1 (2026-06-22):** Sales Module redesigned. Module 5 (formerly "Sales & Transactions") is now "Client Payments" — covering only membership fees and walk-in fees, both of which always require a client. Product sales are extracted into a new standalone Module 6 "POS & Product Sales," which operates without a required client link. Client purchase history has been removed from the Client Profile. See DECISIONS.md ADR-011 and ADR-012 for rationale.
 
+> **Design Review #2 (2026-06-23):** Clients Module wireframe reviewed against all planning documents. Two new P0 stories added to Clients (US-2.9, US-2.10); one new P0 story added to Membership (US-3.9); one new P0 story added to Auth & Settings (US-1.7 — walk-in inactivity threshold). Acceptance criteria updated for US-2.3, US-2.4, US-2.6, US-3.1, US-3.2, US-3.3. Client type (MEMBER/WALK_IN) and walk-in inactivity status introduced. Total MVP story count: 48 → 52. See DECISIONS.md ADR-014, ADR-015, ADR-016, ADR-017.
+
 ---
 
 ## 1. Authentication & Settings
@@ -25,6 +27,13 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 **US-1.3 (P0)** — As the Gym Owner, I want to set the default membership fee and default walk-in fee, so that new registrations use sensible defaults without me typing them every time.
 
 **US-1.4 (P0)** — As the Gym Owner, I want to set a "membership expiring soon" warning threshold (e.g., 5 days), so that the dashboard can flag members who need renewal outreach.
+
+**US-1.7 (P0)** — As the Gym Owner, I want to set a walk-in inactivity threshold (e.g., 7 days), so that walk-in clients who haven't visited within that period are flagged as Inactive.
+- Acceptance Criteria:
+  - Setting is configurable in Settings → System Preferences with a numeric "Walk-in inactivity threshold (days)" field. Default: 7.
+  - When the threshold is updated, all walk-in client statuses recalculate immediately on the next query — no manual backfill required (computed at runtime from Attendance records).
+  - A walk-in client with no attendance records at all is treated as Inactive regardless of threshold value.
+  - Setting zero or a negative value is blocked with a validation error.
 
 ### Future
 
@@ -46,14 +55,47 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 **US-2.2 (P0)** — As the Gym Owner, I want to edit a client's profile information, so that I can correct typos or update their contact number.
 
 **US-2.3 (P0)** — As the Gym Owner, I want to search for a client by name, so that I can quickly find them during check-in or checkout.
-- Acceptance Criteria: Search returns results within 2 seconds (per NFR), supports partial name match.
+- Acceptance Criteria:
+  - Search returns results within 2 seconds (per NFR), supports partial name match.
+  - Search can be combined with status filters — results respect both the name query and the active filter simultaneously.
 
 **US-2.4 (P0)** — As the Gym Owner, I want to view a client's full profile — personal info, membership history, and attendance history — so that I have a complete picture of their relationship with the gym.
 *(Product purchase history is intentionally excluded — POS sales are not linked to clients. See DECISIONS.md ADR-011.)*
+- Acceptance Criteria:
+  - Profile header displays a `MEMBER` or `WALK_IN` type badge alongside the client's status badge (e.g., "MEMBER · Active", "WALK_IN · Inactive").
+  - Profile header displays a quick-stats strip: total all-time visits, visits this month, days until membership expiry (MEMBER clients), and walk-in visit count + days since last visit (WALK_IN clients).
+  - Membership history tab shows a visual indicator (e.g., "VOID" badge) when the associated payment transaction was voided. The membership record itself remains unchanged; only the financial indicator is flagged.
+  - Attendance history tab includes date range and visit type (MEMBER / WALK_IN) filters.
+  - A future-dated membership (start_date > today) displays an "Upcoming" status badge, not "Active." The client's type badge still shows `MEMBER` from the moment the membership record is created.
 
 **US-2.5 (P0)** — As the Gym Owner, I want a client to exist in the system without ever having a membership (pure walk-in), so that I can track casual visitors too.
 
 **US-2.6 (P0 · was P1)** — As the Gym Owner, I want to mark a client as inactive/archived (soft delete) instead of permanently deleting them, so that historical attendance and payment records remain intact.
+- Acceptance Criteria:
+  - Archive action is accessible from the Client Profile (in an overflow "⋯" menu alongside Edit, not a primary button).
+  - Archiving requires a confirmation step: "Archive [Name]? They will be hidden from the active client list. All history is preserved."
+  - Archived clients are hidden from the default Client List view.
+  - A "Show archived" toggle on the Client List reveals archived clients in a visually distinct state (greyed out).
+  - Archived clients retain all attendance, membership, and payment history — fully intact and queryable.
+  - A soft-deleted client can be reactivated (un-archived) from the same overflow menu.
+
+**US-2.9 (P0)** — As the Gym Owner, I want to filter the client list by type and status, so that I can quickly find clients who need renewal outreach, conversion follow-up, or re-engagement without scrolling through all records.
+- Acceptance Criteria:
+  - Filter chips are always visible on the Client List: `All` · `Active` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive`.
+  - `Active` — shows MEMBER clients with an active membership AND WALK_IN clients whose last visit is within the inactivity threshold.
+  - `Expiring soon` — shows MEMBER clients within `Gym.expiration_warning_days` of membership end.
+  - `Expired` — shows MEMBER clients with no current active membership.
+  - `Walk-in only` — shows all WALK_IN type clients (both Active and Inactive walk-ins).
+  - `Inactive` — shows WALK_IN clients whose last visit exceeds `Gym.walkin_inactivity_threshold_days`, or who have no attendance records.
+  - Filters combine with name search: a filter chip and a name query are applied simultaneously.
+  - "All" chip resets the filter to show all non-archived clients.
+  - Filter state persists within the session (navigating to a profile and returning preserves the active filter).
+
+**US-2.10 (P0)** — As the Gym Owner, I want to see walk-in visit frequency and conversion signals on a client's profile, so that I can identify and act on membership conversion opportunities in the moment.
+- Acceptance Criteria:
+  - For walk-in-only clients (no active or past membership), the profile header quick-stats strip prominently shows total walk-in visits with a conversion signal: "X visits — no membership."
+  - The "Walk-in only" client list filter sorts results by visit count descending by default, surfacing the highest-frequency walk-ins first.
+  - A "Frequent walk-ins" live feed panel on the Dashboard shows the top 5 walk-in clients (no active membership) sorted by visit count, with their last visit date. "View all →" links to the client list filtered by Walk-in only.
 
 ### Future
 
@@ -70,6 +112,7 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 **US-3.1 (P0)** — As the Gym Owner, I want to create a membership for a client by selecting a plan (1/2/3 months or custom duration) and price, so that I can register new paying members.
 - Acceptance Criteria:
   - System blocks creating a new active membership if the client already has an active (non-expired) membership — one active membership per client at a time.
+  - The blocking message reads: "[Client name] has an active membership until [end date]. Did you mean to Renew instead?" with a "Go to Renew" action that routes directly to the renewal flow.
   - Price defaults from the plan but can be overridden per transaction; the overridden price is what's recorded (price snapshot), not a live reference to the plan price.
 
 **US-3.2 (P0)** — As the Gym Owner, I want to renew an expired or expiring membership, so that the client can continue using the gym.
@@ -77,14 +120,28 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - If renewing **before** expiry, the new period **extends from the current end date** (not from today) — confirmed business rule.
   - If renewing **after** expiry, the new period starts from the renewal date.
   - The renewal creates a new Membership record linked to the previous one (`renewed_from_membership_id`), preserving full history.
+  - The action button on the Client Profile is context-aware: displays "Add membership" for clients with no membership history; "Renew" for clients with an expired or expiring-soon membership; "Renew early" for clients with a currently active membership not near expiry.
 
 **US-3.3 (P0)** — As the Gym Owner, I want to create custom membership plans with non-standard durations (e.g., 45 days), so that I can offer flexible deals.
+- Acceptance Criteria:
+  - When "Custom duration" is selected in the membership modal, a "Duration (days)" numeric input field appears inline.
+  - The custom duration field is required before the form can be submitted.
+  - Custom duration plans follow the same renewal date math as standard plans (ADR — renewal extends from end_date if active, from today if expired).
 
 **US-3.4 (P0)** — As the Gym Owner, I want to view a client's full membership history, so that I can see all past plans, prices paid, and renewal patterns.
 
 **US-3.5 (P0)** — As the Gym Owner, I want expired memberships to remain visible in the system and to still allow the client to enter as a walk-in, so that no business history is lost and expired members aren't blocked from the gym.
 
 **US-3.6 (P0 · was P1)** — As the Gym Owner, I want to see which memberships are expiring within my configured warning period, so that I can proactively reach out for renewals.
+
+**US-3.9 (P0)** — As the Gym Owner, I want to create, edit, and retire membership plans in Settings, so that the plan options in the Add/Renew modal always reflect my actual pricing structure.
+- Acceptance Criteria:
+  - A "Membership Plans" section in Settings lists all plans (name, duration, default price, active status).
+  - I can create a new plan with: name, duration type (1 month / 2 months / 3 months / Custom days), default price, and active/inactive status.
+  - I can edit any plan field at any time. Editing a plan's default price does not alter any past `price_paid` snapshots — only future transactions are affected (ADR-003).
+  - I can retire (deactivate) a plan by setting it to inactive. Retired plans no longer appear in the Add/Renew membership modal. All existing memberships created under that plan are unaffected.
+  - Retired plans remain visible in Settings (with an inactive badge) and can be reactivated.
+  - The Add/Renew membership modal populates its plan selector from `MembershipPlan` where `is_active = true`, in order of creation.
 
 ### Future
 
@@ -249,15 +306,15 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 | Module | P0 (Committed MVP) | P2 (Future) |
 |---|---|---|
-| Auth & Settings | 4 | 2 |
-| Clients | 6 | 2 |
-| Membership | 6 | 2 |
+| Auth & Settings | 5 | 2 |
+| Clients | 8 | 2 |
+| Membership | 7 | 2 |
 | Attendance | 5 | 2 |
 | Client Payments | 3 | 2 |
 | POS & Product Sales | 10 | 2 |
 | Inventory | 4 | 2 |
 | Dashboard & Reports | 10 | 2 |
-| **Total** | **48** | **16** |
+| **Total** | **52** | **16** |
 
 ---
 
