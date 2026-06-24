@@ -12,6 +12,8 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 
 > **Design Review #5 (2026-06-24):** Payments, POS, and Inventory modules comprehensively updated for operational and business value. Dashboard KPI strip expanded to 6 cards; Today's Collections live feed panel added; Inventory alerts enhanced with stockout estimates. Client Payments gains Collections Summary view and structured void reason categories. POS gains cash change calculator, whole-container sale mode, gross margin display, and category tabs. Inventory gains valuation, days-until-stockout, shrinkage indicator, adjustment reason categories, restock cost capture, and reorder_point. Reports gains Gross Profit Report (US-8.12, promoted to P0) and shrinkage breakdown in Inventory Usage Report. See DECISIONS.md ADR-026, ADR-027, ADR-028.
 
+> **Design Review #6 (2026-06-24):** Reports Module comprehensive review and expansion. Eight new P0 reports added (US-8.15–US-8.22). US-8.2 updated — annual and custom-range period options added. US-8.5 updated — full spec with member/walk-in breakdown, period-over-period toggle, and export. US-8.7 updated — slow-moving sort option added. See DECISIONS.md ADR-029.
+
 ---
 
 ## 1. Dashboard Module
@@ -470,17 +472,25 @@ This module's primary function is the **history/audit view**, the **void action*
 
 **MVP Scope:**
 
-- **Revenue Reports:** Daily / Weekly / Monthly, broken down by source (Membership / Walk-In / Product). Draws from both `CLIENT_TRANSACTION` and `POS_SALE` records. Voided transactions excluded.
+- **Revenue Reports:** Daily / Weekly / Monthly / **This Year** / **Custom Date Range**, broken down by source (Membership / Walk-In / Product). Draws from both `CLIENT_TRANSACTION` and `POS_SALE` records. Voided transactions excluded. (US-8.2)
 - **Revenue by Payment Method:** total revenue per payment method (Cash / GCash / Card / Other) over any selected period. Covers both client transactions and POS sales.
 - **Revenue by Product Category:** total product revenue per category (Beverages, Supplements, etc.) over any selected period.
-- **Attendance Reports:** Daily / Weekly / Monthly, with unique-visitor vs. total-check-in distinction.
+- **Attendance Reports:** Period selector: Daily / Weekly / Monthly / This Year / Custom Date Range. One row per period unit — columns: total check-ins, unique visitors, member check-ins, walk-in check-ins, member unique visitors, walk-in unique visitors. Optional period-over-period comparison toggle (equivalent prior period side-by-side, with % change). Voided transactions do not affect Attendance records. Exportable to CSV. (US-8.5)
 - **Membership Reports:** Active / Expired / Expiring Soon lists, filterable and exportable.
-- **Best Sellers:** top products by units/servings sold and by revenue over a selected period.
+- **Best Sellers:** top products by units/servings sold and by revenue over a selected period. Secondary sort option (ascending) surfaces lowest-performing items. For dedicated dead-stock analysis, see Slow-Moving / Dead Stock Report (US-8.21). (US-8.7)
 - **Frequent Walk-In Report:** clients with high visit count and no active membership — ranked by visit count, directly supports the conversion-tracking goal. Conversion detection uses the derived definition: MEMBER clients with WALK_IN attendance records predating their earliest Membership.created_at (ADR-020).
 - **Inventory Usage Report:** stock movement summary per product over a date range — units sold, restocked, and manually adjusted. Includes a **Shrinkage section**: total negative adjustment quantity per product, broken down by `adjustment_reason_category` where set. Surfaces discrepancies between expected and actual stock. (US-8.9)
 - **Gross Profit Report:** per product, for the selected period — units/servings sold, revenue (sum of `unit_price × quantity`), COGS (sum of `cost_price_snapshot × quantity`), gross profit (revenue − COGS), and gross margin % (gross profit ÷ revenue × 100). Products with null `cost_price_snapshot` on any line items are flagged. Summary row shows blended totals and margin. Filterable by date range and product category. (US-8.12)
 - **Member Engagement Report:** for each active MEMBER client — total all-time visits, visits this month, visits last month, days since last visit. Default sort: days since last visit descending (least engaged first). Filterable by date range. (US-8.13)
 - **At-risk Members Report:** active MEMBER clients (`end_date >= today`) whose last attendance date exceeds `Gym.member_inactivity_warning_days`. Columns: name, membership expiry date, last visit date, days since last visit, total all-time visits. Sorted by days since last visit descending. (US-8.14)
+- **Void Analysis Report:** aggregated voided transactions by `void_reason_category` and period, spanning both `CLIENT_TRANSACTION` and `POS_SALE`. Summary section: count and total voided amount per category. Detail section: individual voided transactions with date, type, amount, void reason category, void note, and payment method. Filterable by period and transaction type. Grand total row per period. Delivers the void pattern-detection benefit stated in ADR-028. (US-8.15)
+- **New vs. Renewals Report:** new memberships (`renewed_from_membership_id IS NULL`) vs. renewals (`IS NOT NULL`) per period — count, revenue, and renewal rate % per row. Filterable by period and membership plan. Summary row with blended renewal rate % for the full range. (US-8.16)
+- **Membership Plan Performance Report:** per `MembershipPlan` (including retired plans with sales in the period) — memberships sold, total revenue, average price paid, plan status. Note on form: price comparison is against the current default price, which may differ from the default at time of sale if later edited. Filterable by period and plan status. (US-8.17)
+- **Restock Cost Report:** inventory spend aggregated from `InventoryTransaction.total_restock_cost` where `type = PURCHASE`. Detail rows per restock event; subtotal per product; grand total for the period. Null `total_restock_cost` entries listed separately with footnote and excluded from totals. Filterable by period and product category. (US-8.18)
+- **Membership Net Change Report:** per month — new memberships, renewals, expired memberships, net change (new + renewals − expired), cumulative active member count at end of period. Positive net change highlighted green; negative highlighted red. Default range: last 12 months. (US-8.19)
+- **Period-over-Period Revenue Comparison:** current period revenue vs. equivalent prior period side-by-side, broken down by source (Membership / Walk-In / Product / Total). % change column per row. Period presets: This Week vs. Last Week · This Month vs. Last Month · This Year vs. Last Year · Custom Range (prior range auto-matched to same duration). Voided transactions excluded. (US-8.20)
+- **Slow-Moving / Dead Stock Report:** active products with zero sales in a configurable lookback window (30 / 60 / 90 days, default 30). Columns: product, category, current stock, cost value locked in stock (`current_stock × cost_price`; "—" if null), last sale date, days since last sale. Default sort: longest-inactive first. Archived products excluded. (US-8.21)
+- **Converted Walk-Ins Report:** clients who converted from walk-in to member (derived per ADR-020) with conversion date within the selected period. Columns: client name, first walk-in date, walk-in visits before conversion, conversion date, days from first visit to conversion, membership plan purchased, price paid. Summary row: total conversions, average visits before conversion, average days to convert. (US-8.22)
 - **CSV Export:** every report listed above can be exported to CSV.
 
 **Business Rules Enforced:**
@@ -492,11 +502,25 @@ This module's primary function is the **history/audit view**, the **void action*
 - Member Engagement and At-risk reports use `Gym.member_inactivity_warning_days` consistently with the Dashboard panel and Client List filter.
 - Gross Profit Report: line items where `cost_price_snapshot = null` are excluded from COGS and gross profit totals; the report flags the count of sales without cost data so the owner knows the margin may be understated.
 - Shrinkage in Inventory Usage Report is calculated from ADJUSTMENT entries only — it does not include discrepancies between the ledger total and `Product.current_stock` (those are system integrity issues, not business-level shrinkage).
+- **Void Analysis Report** uses `Transaction.void_reason_category` to enable pattern detection across periods — the primary analytical benefit stated in ADR-028. Both `CLIENT_TRANSACTION` and `POS_SALE` voids use the same category enum and are queryable together or separately.
+- **New vs. Renewals derivation** is exact: `renewed_from_membership_id IS NULL` = new membership; `IS NOT NULL` = renewal. This is a structural property of the schema (ADR self-referencing FK), not a heuristic.
+- **Converted Walk-Ins derivation** follows ADR-020 exactly — consistent with the definition used in US-8.8 (Frequent Walk-In Report), US-2.10 (profile conversion signal), and the Attendance Analytics Walk-In Insights panel. All surfaces must use the same derivation query.
+- **Period-over-Period Revenue Comparison** excludes voided transactions from both the current and prior period figures — consistency with all other revenue reports.
+- **Restock Cost Report** excludes restock events where `total_restock_cost = null` from period totals and subtotals. The count of excluded events is always displayed so the owner knows the spend figure may be understated.
+- **Membership Plan Performance Report** compares `price_paid` to the plan's current `default_price` — not the default at time of sale (which is not stored). The report surfaces this limitation to the owner.
 
 **Edge Cases:**
 - Date range spanning a price or cost change — reports show historically accurate figures (guaranteed by snapshot design for both selling and cost prices).
 - Empty date ranges — render a clear "no data for this period" state, not a blank crash.
 - Gross Profit Report with all null cost_price_snapshot values — shows "No cost data available for this period" and does not render a margin %.
+- Void Analysis Report with zero voids in the period — summary section shows all categories at zero count and ₱0; does not collapse to empty.
+- New vs. Renewals Report with zero memberships in the period — shows all-zero row(s); does not hide the period.
+- Membership Plan Performance Report: a plan with zero memberships sold in the period is still shown with zero counts (not hidden), so the owner can see all plans at a glance.
+- Restock Cost Report with all null `total_restock_cost` entries for the period — shows "No cost data recorded for this period" and grand total of ₱0 with excluded-count notice.
+- Membership Net Change Report when the gym has fewer than 12 months of data — shows only available months, no error.
+- Period-over-Period Revenue Comparison when the prior period has no data (new gym or period before first transaction) — prior period column shows "—" and % change shows "N/A."
+- Slow-Moving / Dead Stock Report with no products matching the lookback window — shows an empty state: "All active products have sales in the last N days."
+- Converted Walk-Ins Report with zero conversions in the period — shows "No conversions recorded in this period" with the summary row all zeros.
 
 **Deferred:**
 - PDF report export (US-8.11).

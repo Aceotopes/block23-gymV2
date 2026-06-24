@@ -77,18 +77,26 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 
 ### Milestone 8 — Dashboard & Reports
 - [ ] Dashboard: 6-card KPI strip (Active Members, Today's Check-Ins, MTD Revenue, Today's Revenue, Expiring Soon, Inventory Value); trend charts (revenue/attendance/top products); live feeds (POS sales, expiring members, inventory alerts with stockout estimates, Today's Collections breakdown, frequent walk-ins, at-risk members) (US-8.1, US-2.10, US-2.11, US-5.4, US-7.6, US-7.7)
-- [ ] Revenue reports by period and source (membership / walk-in / product) (US-8.2)
+- [ ] Revenue reports by period (Daily / Weekly / Monthly / This Year / Custom Range) and source (membership / walk-in / product) (US-8.2)
 - [ ] Revenue by payment method (Cash, GCash, Card, Other) (US-8.3)
 - [ ] Revenue by product category (US-8.4)
-- [ ] Attendance reports by period (US-8.5)
+- [ ] Attendance reports: period selector, member vs. walk-in breakdown, unique vs. total check-ins, period-over-period comparison toggle, CSV export (US-8.5)
 - [ ] Membership reports: active, expired, expiring-soon lists (US-8.6)
-- [ ] Best-selling products report by units/servings and by revenue (US-8.7)
+- [ ] Best-selling products report by units/servings and by revenue; slow-moving sort option (ascending) (US-8.7)
 - [ ] Frequent walk-in clients report (high visits, low membership conversion) (US-8.8)
 - [ ] Inventory usage report with shrinkage derivation: movements per product over date range, adjustment breakdown by reason category (US-8.9)
 - [ ] Gross profit report: revenue, COGS (cost_price_snapshot × quantity), gross profit, and margin % per product; blended totals; flags null-cost-snapshot sales (US-8.12)
 - [ ] CSV export for all reports (US-8.10)
 - [ ] Member engagement report: active members ranked by visit frequency, least engaged first (US-8.13)
 - [ ] At-risk members report: active members not attending within threshold, ranked by days since last visit (US-8.14)
+- [ ] Void analysis report: voided transactions by void_reason_category and period, spanning both transaction types; summary + detail sections (US-8.15)
+- [ ] New vs. renewals report: new memberships (renewed_from_membership_id IS NULL) vs. renewals per period, with renewal rate %; filterable by plan (US-8.16)
+- [ ] Membership plan performance report: per plan — count, revenue, average price paid, plan status (US-8.17)
+- [ ] Restock cost report: period-total inventory spend from InventoryTransaction.total_restock_cost, per product and grand total; null entries excluded with count noted (US-8.18)
+- [ ] Membership net change report: new + renewals − expired per month, running cumulative active count; last 12 months default (US-8.19)
+- [ ] Period-over-period revenue comparison: current vs. prior period side-by-side by source, with % change; This Week/Month/Year presets + custom (US-8.20)
+- [ ] Slow-moving / dead stock report: active products with zero sales in 30/60/90-day window; cost value locked in stock; longest-inactive first (US-8.21)
+- [ ] Converted walk-ins report: clients who converted from walk-in to member in the period (ADR-020 derivation), with conversion timeline and pre-conversion visit count (US-8.22)
 
 ---
 

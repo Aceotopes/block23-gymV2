@@ -5,9 +5,59 @@ Newest entries at the top.
 
 ---
 
+## [#008] Reports Module Expansion — Design Review #6 — 2026-06-24
+
+**Commit:** _(Done)_
+
+**Changes from previous commit:**
+
+- **DECISIONS.md:**
+  - ADR-029 added: Reports Module Scope Expansion — Second Pass. Eight new P0 reports, annual revenue period, US-8.5 full ACs. Closes compliance gaps in ADR-020 and ADR-028 (void pattern detection was cited as a primary benefit but no report implemented it). Zero schema cost — all reports derive from existing fields.
+
+- **DOMAIN-MODEL.md:**
+  - `Membership.renewed_from_membership_id`: note updated — NULL = new membership, NOT NULL = renewal; cross-referenced to US-8.16 and US-8.19.
+  - `InventoryTransaction.total_restock_cost`: note updated — aggregated by period in Restock Cost Report (US-8.18); null entries excluded from totals.
+  - `Transaction.void_reason_category`: note updated — primary data source for Void Analysis Report (US-8.15), which delivers the pattern-detection benefit stated in ADR-028.
+
+- **USER-STORIES.md:**
+  - Design Review #6 banner added.
+  - US-8.2 updated: period selector expanded to include This Year and Custom Date Range; acceptance criteria added.
+  - US-8.5 updated: single-sentence story replaced with full acceptance criteria — period selector, member vs. walk-in breakdown columns, period-over-period comparison toggle, CSV export.
+  - US-8.7 updated: acceptance criteria added — slow-moving ascending sort option; cross-reference to US-8.21.
+  - US-8.15 (NEW P0): Void Analysis Report — voided transactions by void_reason_category and period; summary + detail sections; filterable by transaction type.
+  - US-8.16 (NEW P0): New vs. Renewals Report — new memberships vs. renewals per period; renewal rate %; filterable by membership plan.
+  - US-8.17 (NEW P0): Membership Plan Performance Report — per plan: memberships sold, total revenue, average price paid, plan status; limitation note on default-price comparison.
+  - US-8.18 (NEW P0): Restock Cost Report — period-total inventory spend from InventoryTransaction.total_restock_cost; null entries excluded with count noted.
+  - US-8.19 (NEW P0): Membership Net Change Report — new + renewals − expired per month; running cumulative active count; green/red net-change indicator.
+  - US-8.20 (NEW P0): Period-over-Period Revenue Comparison — current vs. prior period side-by-side by source; % change column; four period presets + custom.
+  - US-8.21 (NEW P0): Slow-Moving / Dead Stock Report — active products with zero sales in a 30/60/90-day lookback window; cost value locked in stock; longest-inactive first.
+  - US-8.22 (NEW P0): Converted Walk-Ins Report — clients converted from walk-in to member (ADR-020 derivation) in period; conversion timeline; pre-conversion visit count; summary row.
+  - Summary table updated: Dashboard & Reports 13 → 21 P0; Total 69 → 77 P0.
+
+- **MODULE-SPECS.md:**
+  - Design Review #6 banner added.
+  - Module 8 (Reports) MVP Scope: Revenue Reports period options updated (This Year / Custom Range added). Attendance Reports spec fully rewritten with member/walk-in columns, period-over-period toggle, and CSV export. Best Sellers updated with slow-moving sort reference. Eight new report bullets added (US-8.15 through US-8.22).
+  - Business Rules: eight new rules added covering void analysis derivation, new vs. renewals derivation, converted walk-ins derivation, period-over-period voided exclusion, restock cost null handling, and plan performance limitation.
+  - Edge Cases: eleven new edge cases added covering zero-data states for all new reports.
+
+- **ROADMAP.md:**
+  - Milestone 8: Revenue reports item updated (This Year / Custom Range). Attendance reports item updated (full spec). Best sellers item updated (slow-moving sort). Eight new Milestone 8 items added (US-8.15 through US-8.22).
+
+**Decisions made:**
+
+- Reports Module expanded with eight new P0 reports; annual revenue period and full attendance report ACs added — ADR-029
+
+**Issues / Notes:**
+
+- US-8.17 (Membership Plan Performance): `price_paid` is snapshotted (ADR-003) but the plan's `default_price` at time of sale is not stored. The "average price paid" comparison uses the plan's current `default_price`, which may differ if the owner later edited the plan. The report surfaces this limitation explicitly in the UI. If precise override tracking is needed, a `default_price_at_purchase` field on `Membership` would resolve it — deferred to Phase 2.
+- All eight new reports derive from existing schema fields with zero new entities, migrations, or field additions required.
+- US-8.22 (Converted Walk-Ins) uses the ADR-020 derivation query — the same definition used in US-8.8 (Frequent Walk-In candidates), US-2.10 (profile conversion signal), and the Attendance Analytics Walk-In Insights panel. All four surfaces must stay consistent in their derivation logic.
+
+---
+
 ## [#007] Payments, POS & Inventory Module Review — Design Review #5 — 2026-06-24
 
-**Commit:** _(pending)_
+**Commit:** _(done)_
 
 **Changes from previous commit:**
 
@@ -86,7 +136,7 @@ Newest entries at the top.
 
 ## [#006] Architecture Blockers Resolved — ADR-024 & ADR-025 — 2026-06-24
 
-**Commit:** _(pending)_
+**Commit:** _(done)_
 
 **Changes from previous commit:**
 

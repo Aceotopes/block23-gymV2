@@ -16,6 +16,8 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 > **Design Review #5 (2026-06-24):** Payments, POS, and Inventory modules comprehensively reviewed for operational and business value. New P0 stories: US-5.4 (end-of-day collections summary); US-6.13–6.16 (POS cash change calculator, whole-container sale, gross margin display, category tabs); US-7.5 rescoped from P2 to P0 (restock cost capture); US-7.6 (days-until-stockout); US-7.7 (inventory valuation); US-7.8 (shrinkage indicator); US-8.12 promoted from P2 to P0 (gross profit report, enabled by cost_price_snapshot). US-8.9 AC updated with shrinkage. US-8.1 AC updated with new Dashboard KPIs. Former P2 US-5.4 → US-5.6; US-5.5 → US-5.7; US-7.6 → US-7.9. Total MVP story count: 59 → 69. See DECISIONS.md ADR-026, ADR-027, ADR-028.
 
+> **Design Review #6 (2026-06-24):** Reports Module comprehensive review and expansion. Eight new P0 reports: US-8.15 (void analysis), US-8.16 (new vs. renewals), US-8.17 (membership plan performance), US-8.18 (restock cost), US-8.19 (membership net change), US-8.20 (period-over-period revenue comparison), US-8.21 (slow-moving / dead stock), US-8.22 (converted walk-ins). US-8.2 updated — annual and custom-range period options added. US-8.5 updated — full acceptance criteria specified. US-8.7 updated — slow-moving sort option added. Total MVP story count: 69 → 77. See DECISIONS.md ADR-029.
+
 ---
 
 ## 1. Authentication & Settings
@@ -418,17 +420,36 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - A "Today's Collections" compact summary is visible on the Dashboard or accessible from the Dashboard: today's totals by payment method (Cash / GCash / Card / Other) spanning both transaction types (from US-5.4).
   - All revenue figures and KPI counts exclude voided transactions.
 
-**US-8.2 (P0)** — As the Gym Owner, I want revenue reports (daily/weekly/monthly) broken down by source (membership, walk-in, product), so I understand where my income comes from.
+**US-8.2 (P0)** — As the Gym Owner, I want revenue reports (daily/weekly/monthly/yearly) broken down by source (membership, walk-in, product), so I understand where my income comes from.
+- Acceptance Criteria:
+  - Period selector includes: Daily · Weekly · Monthly · **This Year** · **Custom Date Range**.
+  - "This Year" shows January 1 through the current date of the current calendar year.
+  - "Custom Date Range" allows the owner to specify any start and end date — no minimum or maximum range restriction.
+  - Revenue breakdown by source (Membership / Walk-In / Product) applies to all period options including This Year and Custom Range.
+  - Voided transactions excluded from all figures.
+  - Exportable to CSV.
 
 **US-8.3 (P0)** — As the Gym Owner, I want revenue broken down by payment method (Cash, GCash, Card, Other) over any reporting period, so I can reconcile cash vs. digital collections.
 
 **US-8.4 (P0)** — As the Gym Owner, I want revenue broken down by product category (Beverages, Supplements, etc.) over any reporting period, so I know which category drives product revenue.
 
-**US-8.5 (P0)** — As the Gym Owner, I want attendance reports (daily/weekly/monthly).
+**US-8.5 (P0)** — As the Gym Owner, I want attendance reports with period filtering and member vs. walk-in breakdowns, so I can track engagement trends and compare periods.
+- Acceptance Criteria:
+  - Period selector: Daily · Weekly · Monthly · This Year · Custom Date Range (matching the period options on US-8.2).
+  - Report table shows one row per period unit in the selected range (one row per day for Daily, one per week for Weekly, etc.).
+  - Columns per row: period label, total check-ins, unique visitors, member check-ins, walk-in check-ins, member unique visitors, walk-in unique visitors.
+  - Period-over-period comparison toggle: when enabled, adds a parallel column set showing the equivalent prior period (same duration, immediately preceding) with a % change column per metric. Example: "This Month" shows current month and last month side-by-side.
+  - Voided transactions do not affect attendance records — voiding a walk-in payment does not remove the Attendance record from this report.
+  - Exportable to CSV.
 
 **US-8.6 (P0)** — As the Gym Owner, I want membership reports listing active, expired, and expiring-soon members, so I can manage renewals proactively.
 
-**US-8.7 (P0)** — As the Gym Owner, I want a best-selling products report (by units/servings sold and by revenue), so I know what to stock more of.
+**US-8.7 (P0)** — As the Gym Owner, I want a best-selling products report (by units/servings sold and by revenue), so I know what to stock more of and what to stop ordering.
+- Acceptance Criteria:
+  - Default sort: units/servings sold descending (highest seller at top).
+  - Secondary sort option: units/servings sold ascending — surfaces lowest-performing products and dead stock candidates. For a dedicated dead-stock analysis with cost-value locking and configurable lookback, see US-8.21.
+  - Filterable by period (matching US-8.2 period options) and by product category.
+  - Exportable to CSV.
 
 **US-8.8 (P0)** — As the Gym Owner, I want a frequent walk-in clients report (high visit count, low membership conversion), so I can identify upsell opportunities.
 *(Conversion detection is derived: a client is classified as a converted walk-in when they have ≥ 1 Attendance record with `visit_type = WALK_IN` dated before their first Membership record's `created_at`. No conversion event entity is stored. ADR-020)*
@@ -462,6 +483,80 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - Filterable by date range and by product category.
   - Exportable to CSV.
 
+**US-8.15 (P0)** — As the Gym Owner, I want a void analysis report showing all voided transactions by reason category and period, so I can identify data-entry patterns and operational issues.
+- Acceptance Criteria:
+  - Report spans both `CLIENT_TRANSACTION` and `POS_SALE` voided records.
+  - Summary section: count and total voided amount per `void_reason_category` (`DUPLICATE_ENTRY` / `WRONG_AMOUNT` / `WRONG_PRODUCT` / `CLIENT_CANCELLED` / `SYSTEM_ERROR` / `OTHER`) for the selected period.
+  - Detail section below summary: individual voided transactions with date, transaction type, original amount, void reason category, void note (if present), and payment method.
+  - Filterable by period (Daily / Weekly / Monthly / This Year / Custom Range) and by transaction type (CLIENT_TRANSACTION / POS_SALE / Both).
+  - Grand total row: total void count and total voided amount across all categories for the period.
+  - Voided amounts are presented as the amount removed from revenue — they are not shown as negative figures or re-added to revenue totals.
+  - Exportable to CSV.
+
+**US-8.16 (P0)** — As the Gym Owner, I want a report showing new memberships versus renewals per period, so I can distinguish between member acquisition and member retention.
+- Acceptance Criteria:
+  - New memberships: `Membership` records where `renewed_from_membership_id IS NULL`, with `created_at` in the selected period.
+  - Renewals: `Membership` records where `renewed_from_membership_id IS NOT NULL`, with `created_at` in the selected period.
+  - Report shows one row per period unit (e.g., per month): new count, renewal count, total count, new revenue, renewal revenue, total revenue.
+  - Renewal rate %: renewals ÷ (renewals + new) × 100 — shows the share of memberships sold that were existing members returning.
+  - Filterable by period (Monthly / This Year / Custom Range) and by membership plan.
+  - Summary row: totals and blended renewal rate % for the full selected range.
+  - Exportable to CSV.
+
+**US-8.17 (P0)** — As the Gym Owner, I want a membership plan performance report showing how each plan is selling and what revenue it generates, so I can make informed pricing decisions.
+- Acceptance Criteria:
+  - One row per `MembershipPlan`, including retired plans that had memberships sold in the selected period.
+  - Columns: plan name, plan duration, current default price, memberships sold (count), total revenue (`SUM(price_paid)`), average price paid.
+  - A note is displayed on the report: "Average price paid reflects actual amounts collected per the price-snapshot rule (ADR-003). Comparison to the current default price may not reflect the default at time of sale if it was later edited."
+  - Filterable by period and by plan status (Active / Inactive / Both).
+  - Plans with zero memberships sold in the selected period are shown with zero counts — not hidden.
+  - Exportable to CSV.
+
+**US-8.18 (P0)** — As the Gym Owner, I want a restock cost report showing how much I spent on inventory per product per period, so I can track my purchasing spend without maintaining a separate spreadsheet.
+- Acceptance Criteria:
+  - Draws from `InventoryTransaction` records where `type = PURCHASE`.
+  - Detail rows: product name, restock date, quantity received, total cost paid (`total_restock_cost`). Rows where `total_restock_cost = null` are listed with a "—" in the cost column and a footnote: "N restock events without cost recorded — excluded from totals."
+  - Subtotal row per product: total quantity restocked and total spend for the selected period.
+  - Grand total row: all-products total spend for the selected period (null entries excluded with a count noted).
+  - Filterable by period and by product category.
+  - Exportable to CSV.
+
+**US-8.19 (P0)** — As the Gym Owner, I want a membership net change report showing whether my membership base is growing or shrinking each month, so I can identify trends before they become problems.
+- Acceptance Criteria:
+  - Default view: monthly rows. Default range: last 12 months (or all available data if fewer than 12 months exist).
+  - Columns per month: new memberships (count), renewals (count), expired memberships (count of `Membership` records where `end_date` fell within the period), net change (new + renewals − expired), cumulative active member count at end of period.
+  - A positive net change row is highlighted green; a negative net change is highlighted red; zero net change is neutral.
+  - Filterable by custom date range (monthly resolution minimum).
+  - Exportable to CSV.
+
+**US-8.20 (P0)** — As the Gym Owner, I want a period-over-period revenue comparison report, so I can see at a glance whether my revenue is growing or declining relative to the prior equivalent period.
+- Acceptance Criteria:
+  - Side-by-side columns: selected period revenue vs. prior period revenue (same duration, immediately preceding the selected period).
+  - Revenue is broken down by source row: Membership / Walk-In / Product / **Total**.
+  - A % change column per row: (current − prior) ÷ prior × 100. Positive values displayed in green; negative values in red.
+  - Period presets: This Week vs. Last Week · This Month vs. Last Month · This Year vs. Last Year · Custom Range (system auto-calculates the prior range to match the selected range's exact duration).
+  - When a prior period has no data (e.g., the gym just opened), the prior period column shows "—" and % change shows "N/A."
+  - Voided transactions excluded from all figures.
+  - Exportable to CSV.
+
+**US-8.21 (P0)** — As the Gym Owner, I want a slow-moving and dead stock report showing products with no sales activity in a configurable window, so I can identify dead inventory and avoid re-ordering products that aren't selling.
+- Acceptance Criteria:
+  - Lookback window selector: **30 days** (default) · 60 days · 90 days. Report shows all active (`is_active = true`) products with zero sales in the selected window.
+  - Columns: product name, category, current stock, cost value locked in stock (`current_stock × cost_price` where `cost_price` is set; "—" if null), last sale date (or "Never sold" if no sales history exists), days since last sale.
+  - Products with null `cost_price` show "—" in the cost value column; excluded from any cost-value subtotal.
+  - Default sort: days since last sale descending (longest-inactive products first).
+  - Archived products (`is_active = false`) are excluded — this report is for active catalog items only.
+  - Exportable to CSV.
+
+**US-8.22 (P0)** — As the Gym Owner, I want a converted walk-ins report showing which walk-in clients became members during a period and how long it took them, so I can understand my conversion outcomes and what drives them.
+- Acceptance Criteria:
+  - A client is "converted" when `client_type = MEMBER` AND they have ≥1 `Attendance` record with `visit_type = WALK_IN` where `visit_date` predates their earliest `Membership.created_at` (derived per ADR-020). The "conversion date" is the `created_at` of the client's earliest Membership record.
+  - Report filters to clients whose conversion date falls within the selected period.
+  - Columns: client name, first walk-in date, walk-in visits before conversion (count of WALK_IN Attendance records predating earliest Membership.created_at), conversion date, days from first visit to conversion, membership plan purchased (MembershipPlan.name; "Custom" if membership_plan_id is null), price paid.
+  - Summary row: total conversions in period, average walk-in visits before conversion, average days from first visit to conversion.
+  - Filterable by period (Monthly / This Year / Custom Range).
+  - Exportable to CSV.
+
 ### Future
 
 **US-8.11 (P2)** — As the Gym Owner, I want to export reports as formatted PDF documents.
@@ -479,8 +574,8 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 | Client Payments | 4 | 2 |
 | POS & Product Sales | 14 | 2 |
 | Inventory | 8 | 1 |
-| Dashboard & Reports | 13 | 1 |
-| **Total** | **69** | **14** |
+| Dashboard & Reports | 21 | 1 |
+| **Total** | **77** | **14** |
 
 ---
 

@@ -128,7 +128,7 @@ erDiagram
 | start_date | date | |
 | end_date | date | |
 | price_paid | decimal | **snapshot**, independent of plan's current default_price |
-| renewed_from_membership_id | FK → Membership, nullable, self-referencing | links renewal chains without overwriting history |
+| renewed_from_membership_id | FK → Membership, nullable, self-referencing | links renewal chains without overwriting history; NULL = new membership, NOT NULL = renewal — the basis for the New vs. Renewals Report (US-8.16) and Membership Net Change Report (US-8.19) |
 | created_at | timestamp | |
 
 **Status is derived, not stored:** `ACTIVE` if `end_date >= today`, else `EXPIRED`. Same reasoning as Client.status above — avoids drift.
@@ -204,7 +204,7 @@ erDiagram
 | resulting_stock | decimal | snapshot of stock level immediately after this movement — enables point-in-time auditing without recomputation |
 | reference_transaction_line_item_id | FK → TransactionLineItem, nullable | links a SALE movement back to the sale that caused it |
 | adjustment_reason_category | enum, nullable | required when type = `ADJUSTMENT` — `DAMAGE`, `EXPIRY`, `THEFT`, `COUNT_CORRECTION`, `NATURAL_WASTAGE`, `PROMOTION`, `OTHER`; enables shrinkage analysis by category |
-| total_restock_cost | decimal, nullable | populated when type = `PURCHASE` — total amount paid for this restock event; enables basic spending tracking without per-unit supplier management (ADR-027 scope) |
+| total_restock_cost | decimal, nullable | populated when type = `PURCHASE` — total amount paid for this restock event; enables basic spending tracking without per-unit supplier management (ADR-027 scope); aggregated by period in the Restock Cost Report (US-8.18) — null entries are excluded from period totals |
 | note | string, nullable | optional supporting detail; required for `ADJUSTMENT` type only when adjustment_reason_category = `OTHER` |
 | created_at | timestamp | |
 
@@ -224,7 +224,7 @@ erDiagram
 | total_amount | decimal | sum of line items, computed/stored for fast reporting |
 | payment_method | enum | `CASH`, `GCASH`, `CARD`, `OTHER` |
 | status | enum | `COMPLETED`, `VOID` |
-| void_reason_category | enum, nullable | required when status = `VOID` — `DUPLICATE_ENTRY`, `WRONG_AMOUNT`, `WRONG_PRODUCT`, `CLIENT_CANCELLED`, `SYSTEM_ERROR`, `OTHER` (ADR-028) |
+| void_reason_category | enum, nullable | required when status = `VOID` — `DUPLICATE_ENTRY`, `WRONG_AMOUNT`, `WRONG_PRODUCT`, `CLIENT_CANCELLED`, `SYSTEM_ERROR`, `OTHER` (ADR-028); primary data source for Void Analysis Report (US-8.15), which delivers the void pattern-detection benefit stated in ADR-028 |
 | void_reason_note | string, nullable | optional detail note accompanying void_reason_category; required when void_reason_category = `OTHER` |
 | created_by | FK → User | |
 | created_at | timestamp | |

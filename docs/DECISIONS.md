@@ -424,3 +424,40 @@ Check-In is not a separate top-level module. All attendance-related workflows, r
 **Consequence:** The application enforces `void_reason_category` selection before a void can be confirmed. The `OTHER` category must always be accompanied by a `void_reason_note` (enforced at the application layer). Both POS sales and client transaction voids use the same category enum. This applies to Flow 11 (Transaction Void) and all void surfaces in the Payments and POS modules.
 
 **Rejected:** Free-text-only void reason (the prior design). This was retained from the original design as a minimal MVP approach. Rejected now because structured categories cost essentially nothing to implement at build time and produce meaningless audit data if left as free text across hundreds of transactions.
+
+---
+
+## ADR-029: Reports Module Scope Expansion — Second Pass
+
+**Date:** 2026-06-24
+**Status:** Accepted
+
+**Decision:** Eight new P0 reports added to MVP scope; US-8.2 updated with annual and custom-range period options; US-8.5 updated with full acceptance criteria; US-8.7 updated with a slow-moving sort option. New reports:
+
+- **US-8.15** — Void Analysis Report: aggregate voided transactions by `void_reason_category`, transaction type, and period; delivers the pattern-detection benefit stated in ADR-028.
+- **US-8.16** — New vs. Renewals Report: new memberships (`renewed_from_membership_id IS NULL`) vs. renewals (`IS NOT NULL`), with revenue breakdown and renewal rate %.
+- **US-8.17** — Membership Plan Performance Report: per plan — memberships sold, total revenue, average price paid, plan status.
+- **US-8.18** — Restock Cost Report: period-total inventory spend aggregated from `InventoryTransaction.total_restock_cost`.
+- **US-8.19** — Membership Net Change Report: new memberships minus expired memberships per month, with running cumulative active-member count.
+- **US-8.20** — Period-over-Period Revenue Comparison: current period revenue vs. equivalent prior period, by source, with % change column.
+- **US-8.21** — Slow-Moving / Dead Stock Report: active products with zero sales in a configurable lookback window (30/60/90 days), with cost value locked in stock.
+- **US-8.22** — Converted Walk-Ins Report: clients who converted from walk-in to member in a selected period, with conversion timeline data (derived per ADR-020).
+
+**Why:** A systematic review of the Reports Module against business questions revealed six structural gaps:
+
+1. **ADR-028 compliance gap:** `void_reason_category` was justified by its "void pattern detection" analytical benefit — but no report implemented this. US-8.15 closes that gap.
+2. **`renewed_from_membership_id` unused in reporting:** This self-FK cleanly distinguishes new acquisition from renewal retention but powered no report. US-8.16 and US-8.19 resolve this.
+3. **`total_restock_cost` unused in reporting:** Added in Design Review #5 for spending visibility; had no aggregate report surface. US-8.18 resolves this.
+4. **Annual revenue period missing:** US-8.2 offered Daily/Weekly/Monthly only — no annual or YTD option for financial review or tax preparation.
+5. **US-8.5 had no acceptance criteria:** The attendance report was a single sentence — an unspecified blank check for implementation.
+6. **No period-over-period analysis anywhere:** The growth question ("Am I making more than last month?") was unanswerable from Reports. US-8.20 resolves this.
+
+All eight new reports are derivable from existing schema fields with zero new entities or fields required.
+
+**Rejected:** Deferring to Phase 2. The schema fields these reports use were added in Design Reviews #1–5 with specific analytical justifications. Shipping without the corresponding reports means those justifications are partially unfulfilled at launch. The implementation cost delta between MVP and Phase 2 is low; the owner experience gap is high.
+
+**Relationship to prior ADRs:**
+- **ADR-020 (conversion derivation):** US-8.22 uses the ADR-020 derivation for conversion outcomes, extending it from candidate identification (US-8.8) to outcome reporting.
+- **ADR-028 (void categories):** US-8.15 delivers the void pattern detection benefit ADR-028 cited as its primary justification.
+- **ADR-003 / ADR-026 (snapshots):** All new financial reports respect snapshot rules — no report reads live catalog prices or cost prices for historical periods.
+- **ADR-015 (membership plans):** US-8.17 uses `Membership.membership_plan_id` + `price_paid` — both designed for this query pattern.
