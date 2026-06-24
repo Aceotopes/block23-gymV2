@@ -65,13 +65,13 @@ Changes in one document almost always require updates in others. Use this map.
 
 ## Locked Design Decisions
 
-These 13 ADRs (in `DECISIONS.md`) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
+These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-028) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
 
-**gym_id on every entity (ADR-001):** Multi-tenancy foundation. Every entity carries a `gym_id` FK even though MVP has one gym. The cost of omitting it now and adding it later is disproportionate.
+**gym_id on every entity (ADR-001, ADR-025):** Multi-tenancy foundation. Every entity — including child/detail entities (`Membership`, `TransactionLineItem`, `InventoryTransaction`) — carries a `gym_id` FK. Enables database-level Row-Level Security without join-chain subqueries.
 
 **Derived status fields (ADR-002):** `Client.status` and `Membership.status` are computed from dates, never stored. No sync job, no drift.
 
-**Price snapshots (ADR-003):** `price_paid` and `unit_price` always record the price at the moment of the transaction. Past financial records must never be rewritten by future catalog changes.
+**Price and cost snapshots (ADR-003, ADR-026):** `price_paid`, `unit_price`, and `cost_price_snapshot` always record the value at the moment of the transaction. Past financial records must never be rewritten by future catalog changes. This applies to both selling prices AND cost prices — historical gross profit figures must be permanently correct.
 
 **Inventory ledger (ADR-004):** Every stock movement is an `InventoryTransaction` row. `Product.current_stock` is a cached value recomputable from the ledger.
 
@@ -81,9 +81,15 @@ These 13 ADRs (in `DECISIONS.md`) represent resolved questions. Reopening one re
 
 **No mixed checkout (ADR-012):** Client transactions (membership/walk-in fees) and POS sales are always separate flows. A single transaction cannot span both types.
 
+**Walk-in and membership always separate transactions (ADR-024):** Walk-in fees and membership purchases are always separate `CLIENT_TRANSACTION` records. A single `CLIENT_TRANSACTION` never contains both `WALK_IN_FEE` and `MEMBERSHIP` line items simultaneously.
+
 **POS sales are client-anonymous (ADR-011):** `client_id` is null on all `POS_SALE` records. No client selection in the POS flow.
 
 **Stock blocks, override confirms (ADR-009):** Selling below zero is blocked by default. An explicit owner override is required and logs a flagged `ADJUSTMENT` entry — never silent.
+
+**Structured audit categories (ADR-028):** `Transaction.void_reason_category` and `InventoryTransaction.adjustment_reason_category` are required enum fields (not free text). Free text cannot be aggregated; enums enable void pattern and shrinkage-by-cause analysis. A companion detail note field is available for context.
+
+**Whole-container sale mode (ADR-027):** `SERVING_BASED_PRODUCT` with a `container_selling_price` set supports Per Container mode in POS checkout. Stock deduction = quantity × `servings_per_container`. Do not model this as a separate `STANDARD_PRODUCT` — that breaks stock synchronization.
 
 ## Domain Model Quick Reference
 
@@ -91,9 +97,10 @@ Non-obvious field constraints that affect business rules across multiple documen
 
 - **Membership** — `price_paid` (snapshot at purchase time), `status` (derived: `end_date >= today`), `renewed_from_membership_id` (self-FK — renewal chains, old record never mutated)
 - **Attendance** — `membership_id` (snapshot of which membership was active at check-in; never retroactively updated), `time_out` (nullable; reserved for future analytics — no MVP business logic touches it)
-- **Product** — `product_type` (`STANDARD_PRODUCT` | `SERVING_BASED_PRODUCT`), `selling_price` (per unit or per serving), `current_stock` (units or remaining servings), `servings_per_container` (SERVING_BASED only)
-- **Transaction** — `transaction_type` (`CLIENT_TRANSACTION` | `POS_SALE`), `status` (`COMPLETED` | `VOID`), `void_reason` (required if voided)
-- **TransactionLineItem** — `item_type` must match parent `transaction_type`; `unit_price` is always a price snapshot
+- **Product** — `product_type` (`STANDARD_PRODUCT` | `SERVING_BASED_PRODUCT`), `selling_price` (per unit or per serving), `current_stock` (units or remaining servings), `servings_per_container` (SERVING_BASED only), `container_selling_price` (nullable; SERVING_BASED only — enables Per Container POS mode), `low_stock_threshold` (dashboard alert trigger, distinct from `reorder_point`), `reorder_point` (nullable; inventory planning signal, accounts for lead time)
+- **Transaction** — `transaction_type` (`CLIENT_TRANSACTION` | `POS_SALE`), `status` (`COMPLETED` | `VOID`), `void_reason_category` (enum, required when status=VOID: `DUPLICATE_ENTRY` | `WRONG_AMOUNT` | `WRONG_PRODUCT` | `CLIENT_CANCELLED` | `SYSTEM_ERROR` | `OTHER`), `void_reason_note` (optional detail; required when category=OTHER)
+- **TransactionLineItem** — `item_type` must match parent `transaction_type`; `unit_price` is always a price snapshot; `cost_price_snapshot` is always a cost snapshot (nullable — null if `Product.cost_price` was not set at time of sale); `fee_override_note` (nullable; populated on `WALK_IN_FEE` items when amount differs from `Gym.default_walkin_fee`)
+- **InventoryTransaction** — `type` (`PURCHASE` | `SALE` | `ADJUSTMENT`); `adjustment_reason_category` (enum, required when type=ADJUSTMENT: `DAMAGE` | `EXPIRY` | `THEFT` | `COUNT_CORRECTION` | `NATURAL_WASTAGE` | `PROMOTION` | `OTHER`); `total_restock_cost` (nullable decimal, populated on PURCHASE events)
 
 ## Key Business Rules
 
@@ -101,7 +108,7 @@ Rules that span multiple documents and are easy to get wrong in isolation:
 
 **Membership renewal date math (US-3.2, Flow 6):** Renewing while active → new period extends from *existing end_date*. Renewing after expiry → new period starts from *today*. Both paths create a new `Membership` record linked via `renewed_from_membership_id`; the previous record is never modified.
 
-**Walk-in → Member conversion (Flow 7):** A `CLIENT_TRANSACTION` with two line items (`WALK_IN_FEE` + `MEMBERSHIP`) is valid. No automatic walk-in fee credit — owner overrides the membership price manually if desired. The attendance record's `visit_type` is updated to `MEMBER` after conversion.
+**Walk-in → Member conversion (Flow 7, ADR-024):** Walk-in fees and membership purchases are ALWAYS separate `CLIENT_TRANSACTION` records. Pre-fee conversion: owner is redirected to Flow 5 with no walk-in fee collected. Post-fee conversion: the original walk-in fee transaction remains intact; a new membership-only `CLIENT_TRANSACTION` is created separately. No automatic walk-in fee credit — owner overrides the membership price manually if desired. The attendance record's `visit_type` is updated to `MEMBER` after conversion.
 
 **Serving-based restock (Flow 9, US-7.1):** Restocking N containers adds `N × servings_per_container` servings to `current_stock` — not N units.
 

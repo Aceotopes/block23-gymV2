@@ -14,6 +14,8 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 > **Design Review #4 (2026-06-24):** Attendance module restructured as a single top-level navbar module with three internal views: Check-In (default), Attendance History, and Attendance Analytics (ADR-023). ADR-022 amended to remove "top-level navigation" navigation claim. US-4.8 navigation placement AC updated. US-4.3 updated with explicit date filter presets. US-4.10 (NEW P0): Attendance Analytics view — KPI cards, trend charts, member/walk-in insights, operational signals, and alerts. Total MVP story count: 58 → 59. See DECISIONS.md ADR-023.
 
+> **Design Review #5 (2026-06-24):** Payments, POS, and Inventory modules comprehensively reviewed for operational and business value. New P0 stories: US-5.4 (end-of-day collections summary); US-6.13–6.16 (POS cash change calculator, whole-container sale, gross margin display, category tabs); US-7.5 rescoped from P2 to P0 (restock cost capture); US-7.6 (days-until-stockout); US-7.7 (inventory valuation); US-7.8 (shrinkage indicator); US-8.12 promoted from P2 to P0 (gross profit report, enabled by cost_price_snapshot). US-8.9 AC updated with shrinkage. US-8.1 AC updated with new Dashboard KPIs. Former P2 US-5.4 → US-5.6; US-5.5 → US-5.7; US-7.6 → US-7.9. Total MVP story count: 59 → 69. See DECISIONS.md ADR-026, ADR-027, ADR-028.
+
 ---
 
 ## 1. Authentication & Settings
@@ -254,17 +256,30 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 **US-5.2 (P0)** — As the Gym Owner, I want to view a chronological history of all client payments (membership fees and walk-in fees), so I have an auditable record of what each client paid and when.
 
-**US-5.3 (P0)** — As the Gym Owner, I want to void a client payment with a required reason note, so I can correct data-entry mistakes without deleting the financial record.
+**US-5.3 (P0)** — As the Gym Owner, I want to void a client payment with a required reason category and optional detail note, so I can correct data-entry mistakes without deleting the financial record.
 - Acceptance Criteria:
-  - Voided transactions remain visible with a VOID status badge and reason note — they are never deleted.
+  - Voiding a transaction requires selecting a void reason category: `Duplicate Entry / Wrong Amount / Wrong Product / Client Cancelled / System Error / Other`.
+  - When `Other` is selected, a detail note is required before the void can be confirmed.
+  - For all other categories, the detail note is optional.
+  - Voided transactions remain visible with a VOID status badge, the reason category, and the detail note — they are never deleted.
   - Voided transactions are excluded from all revenue totals and reports.
   - Voiding a payment record does not automatically cancel the associated membership — financial correction and membership management are separate actions.
 
+**US-5.4 (P0)** — As the Gym Owner, I want an end-of-day collections summary showing today's total revenue by payment method across all transaction types, so I can reconcile my cash drawer and digital payments without navigating to the Reports module.
+- Acceptance Criteria:
+  - A Collections Summary view is accessible within the Client Payments module.
+  - The summary displays today's totals by payment method: Cash / GCash / Card / Other.
+  - Totals span both `CLIENT_TRANSACTION` and `POS_SALE` records — all money collected across the whole day in one view.
+  - Each row shows: payment method, transaction count, and total amount collected.
+  - A grand total row (all payment methods combined) is displayed prominently.
+  - Voided transactions are excluded from all totals.
+  - The summary defaults to today; a date selector allows viewing any prior day.
+
 ### Future
 
-**US-5.4 (P2)** — As the Gym Owner, I want to issue a partial refund on a client payment, so I can handle disputes formally.
+**US-5.6 (P2)** — As the Gym Owner, I want to issue a partial refund on a client payment, so I can handle disputes formally.
 
-**US-5.5 (P2)** — As the Gym Owner, I want to print or email a receipt for a client payment, so clients have proof of payment.
+**US-5.7 (P2)** — As the Gym Owner, I want to print or email a receipt for a client payment, so clients have proof of payment.
 
 ---
 
@@ -302,7 +317,36 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 **US-6.9 (P0)** — As the Gym Owner, I want to complete a POS sale by selecting a payment method (Cash, GCash, Card, Other), so every product transaction has a payment record.
 - Acceptance Criteria: A client is not required to complete a POS sale.
 
-**US-6.10 (P0)** — As the Gym Owner, I want to void a POS sale with a required reason note, so I can correct data-entry mistakes without deleting the audit trail.
+**US-6.10 (P0)** — As the Gym Owner, I want to void a POS sale with a required reason category and optional detail note, so I can correct data-entry mistakes without deleting the audit trail.
+
+**US-6.13 (P0)** — As the Gym Owner, I want a cash change calculator in the POS checkout so I can tell clients how much change they are owed without mental arithmetic.
+- Acceptance Criteria:
+  - When `Cash` is selected as payment method at checkout, a "Cash received" numeric input field is displayed.
+  - The system immediately displays "Change: ₱X" where X = cash received − cart total.
+  - The "Cash received" field must be ≥ the cart total before the sale can be confirmed; entering a lower value shows a validation error.
+  - If the payment method is not Cash, the cash received field is hidden.
+
+**US-6.14 (P0)** — As the Gym Owner, I want to sell a whole container of a serving-based product as a single cart line item, so I do not have to enter the serving count as the quantity.
+- Acceptance Criteria:
+  - `SERVING_BASED_PRODUCT` items on the POS screen show a mode toggle: "Per Serving / Per Container." Default is Per Serving (existing behavior unchanged).
+  - Per Container mode is only available when `container_selling_price` is set on the product.
+  - In Per Container mode: quantity represents whole containers; the unit price is `container_selling_price`; stock deduction on sale completion is `quantity × servings_per_container`.
+  - `TransactionLineItem.description` in Per Container mode reads: "[Product name] — N container(s) ([N × servings_per_container] servings)."
+  - The same Force Sale override applies when container stock deduction would take `current_stock` below zero.
+
+**US-6.15 (P0)** — As the Gym Owner, I want to see the gross margin in ₱ and % for each product on its create/edit screen, so I understand which products are most profitable without running a separate report.
+- Acceptance Criteria:
+  - The product create/edit form displays a read-only computed field: "Gross Margin: ₱[selling_price − cost_price] ([margin]%)" when both `selling_price` and `cost_price` are set.
+  - The margin field updates in real time as `selling_price` or `cost_price` is edited in the form.
+  - If `cost_price` is null or not yet entered, the field shows "Margin: — (no cost price set)."
+  - Margin is informational only — it does not create a new stored field on Product.
+
+**US-6.16 (P0)** — As the Gym Owner, I want category filter tabs on the POS product grid so I can navigate to a product quickly without scrolling the entire catalog.
+- Acceptance Criteria:
+  - Category tabs are displayed above the product grid: one tab per `ProductCategory` that has at least one active product, plus an "All" tab (default on load).
+  - Selecting a category tab filters the grid to show only `is_active = true` products in that category.
+  - The category tab filter and the product name search work simultaneously — both constraints are applied together.
+  - A category with no active products is hidden from the tab bar.
 
 ### Future
 
@@ -327,11 +371,38 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 **US-7.4 (P0)** — As the Gym Owner, I want to see remaining servings for serving-based products (e.g., "Whey Protein: 42 of 70 servings remaining"), so I know when to open a new container.
 
+**US-7.5 (P0)** — As the Gym Owner, I want to record the total amount I paid when restocking a product, so I have a basic record of inventory spending without needing full supplier management.
+- Acceptance Criteria:
+  - The Restock form includes an optional "Total cost paid" field (decimal).
+  - When entered, this value is stored as `total_restock_cost` on the `InventoryTransaction` record for that PURCHASE event.
+  - The field is not required — restocks without cost data are fully valid.
+  - The Inventory Movement History displays the total cost paid alongside each PURCHASE entry when it is present.
+
+**US-7.6 (P0)** — As the Gym Owner, I want to see an estimated days-until-stockout per product based on recent sales velocity, so I know when to reorder before running out.
+- Acceptance Criteria:
+  - The Current Stock view displays "~N days remaining" per product, calculated as: `current_stock ÷ average daily units sold over the last 30 days`.
+  - Products with no sales in the last 30 days show "No recent sales data."
+  - The estimate uses the same `InventoryTransaction` ledger as the Inventory Usage Report.
+  - The estimate is derived at query time — it is not stored.
+
+**US-7.7 (P0)** — As the Gym Owner, I want to see the total cost value of my current inventory on the stock view and dashboard, so I know how much cash I have invested in products on the shelf.
+- Acceptance Criteria:
+  - The Current Stock view displays a total inventory value footer: `SUM(current_stock × cost_price)` across all active products where `cost_price` is not null.
+  - Products without a `cost_price` set are excluded from the total, with a note: "N product(s) excluded — no cost price set."
+  - Inventory value is also displayed as a KPI card on the Dashboard.
+  - The value is calculated at query time — it is not stored.
+
+**US-7.8 (P0)** — As the Gym Owner, I want to see a shrinkage summary per product showing total stock lost to non-sale adjustments, so inventory losses are visible without running a full report.
+- Acceptance Criteria:
+  - The Current Stock view displays a "Shrinkage (this month)" column per product showing the total absolute quantity lost via ADJUSTMENT entries (negative `quantity_delta`) in the current calendar month.
+  - When `adjustment_reason_category` is set, the shrinkage breakdown by category is visible on hover or in an expanded detail row.
+  - Products with zero shrinkage in the period display a dash.
+  - A shrinkage value greater than zero is highlighted in amber; a value exceeding 10% of that product's total sales quantity for the period is highlighted in red.
+  - The shrinkage calculation draws from the `InventoryTransaction` ledger — the same source as the Inventory Usage Report (US-8.9).
+
 ### Future
 
-**US-7.5 (P2)** — As the Gym Owner, I want to record the supplier and purchase cost for each restock event, so I can track product-level spending over time. *(Cost price is stored on the Product record at MVP for margin-reporting foundation; per-restock cost tracking is a separate, deferred feature.)*
-
-**US-7.6 (P2)** — As the Gym Owner, I want automated reorder notifications to a supplier, so restocking is semi-automated.
+**US-7.9 (P2)** — As the Gym Owner, I want automated reorder notifications to a supplier, so restocking is semi-automated.
 
 ---
 
@@ -339,8 +410,13 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 ### MVP
 
-**US-8.1 (P0)** — As the Gym Owner, I want a dashboard showing today's attendance, active/expired/expiring-soon membership counts, today's and month-to-date revenue breakdown, low-stock alerts, and remaining servings for protein products — so I get a complete daily operational snapshot in one screen.
-- Acceptance Criteria: Loads within 3 seconds (per NFR).
+**US-8.1 (P0)** — As the Gym Owner, I want a dashboard showing today's attendance, active/expired/expiring-soon membership counts, today's and month-to-date revenue breakdown, low-stock alerts, remaining servings for protein products, and inventory value — so I get a complete daily operational snapshot in one screen.
+- Acceptance Criteria:
+  - Loads within 3 seconds (per NFR).
+  - KPI strip shows 6 cards: Active Members (with delta vs. last month), Today's Check-Ins (with delta vs. yesterday), MTD Revenue (with % change vs. same period last month), Today's Revenue (all transaction types, voided excluded), Expiring Soon count (using `Gym.expiration_warning_days`), Inventory Value (`SUM(current_stock × cost_price)` where cost_price is set — from US-7.7).
+  - Inventory alerts live feed shows each low-stock product with remaining count, remaining servings for `SERVING_BASED_PRODUCT`, and a "~N days remaining" stockout estimate (from US-7.6).
+  - A "Today's Collections" compact summary is visible on the Dashboard or accessible from the Dashboard: today's totals by payment method (Cash / GCash / Card / Other) spanning both transaction types (from US-5.4).
+  - All revenue figures and KPI counts exclude voided transactions.
 
 **US-8.2 (P0)** — As the Gym Owner, I want revenue reports (daily/weekly/monthly) broken down by source (membership, walk-in, product), so I understand where my income comes from.
 
@@ -357,7 +433,11 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 **US-8.8 (P0)** — As the Gym Owner, I want a frequent walk-in clients report (high visit count, low membership conversion), so I can identify upsell opportunities.
 *(Conversion detection is derived: a client is classified as a converted walk-in when they have ≥ 1 Attendance record with `visit_type = WALK_IN` dated before their first Membership record's `created_at`. No conversion event entity is stored. ADR-020)*
 
-**US-8.9 (P0)** — As the Gym Owner, I want an inventory usage report showing stock movements per product over a date range (sold, restocked, adjusted), so I can spot unusual discrepancies.
+**US-8.9 (P0)** — As the Gym Owner, I want an inventory usage report showing stock movements per product over a date range (sold, restocked, adjusted) including a shrinkage derivation, so I can spot unusual discrepancies and understand what caused stock losses.
+- Acceptance Criteria:
+  - Report shows per product, for the selected date range: total units/servings sold, total units/servings restocked, total units/servings adjusted (net), and resulting stock change.
+  - Shrinkage section: total negative adjustment quantity per product, broken down by `adjustment_reason_category` where set.
+  - Exportable to CSV.
 
 **US-8.10 (P0)** — As the Gym Owner, I want to export any report to CSV, so I can keep offline copies or open them in Excel for further analysis.
 
@@ -374,11 +454,17 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - For each client: name, membership expiry date, last visit date, days since last visit, total all-time visits.
   - Exportable to CSV.
 
+**US-8.12 (P0)** — As the Gym Owner, I want a gross profit report showing revenue minus cost of goods sold per product over a selected period, so I understand true profitability and not just revenue.
+- Acceptance Criteria:
+  - Report shows per product, for the selected period: total units/servings sold, total revenue (sum of `unit_price × quantity`), total COGS (sum of `cost_price_snapshot × quantity`), gross profit (revenue − COGS), and gross margin % ((gross profit ÷ revenue) × 100).
+  - Products with null `cost_price_snapshot` on any line items are flagged: "X sales without cost data — margin may be understated."
+  - Summary row at the bottom: total revenue, total COGS, total gross profit, blended margin %.
+  - Filterable by date range and by product category.
+  - Exportable to CSV.
+
 ### Future
 
 **US-8.11 (P2)** — As the Gym Owner, I want to export reports as formatted PDF documents.
-
-**US-8.12 (P2)** — As the Gym Owner, I want profit-margin reporting (revenue minus cost price per product), so I understand true profitability, not just revenue. *(Foundation laid at MVP by storing `cost_price` on the Product record.)*
 
 ---
 
@@ -390,11 +476,11 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 | Clients | 9 | 2 |
 | Membership | 7 | 2 |
 | Attendance | 8 | 2 |
-| Client Payments | 3 | 2 |
-| POS & Product Sales | 10 | 2 |
-| Inventory | 4 | 2 |
-| Dashboard & Reports | 12 | 2 |
-| **Total** | **59** | **16** |
+| Client Payments | 4 | 2 |
+| POS & Product Sales | 14 | 2 |
+| Inventory | 8 | 1 |
+| Dashboard & Reports | 13 | 1 |
+| **Total** | **69** | **14** |
 
 ---
 

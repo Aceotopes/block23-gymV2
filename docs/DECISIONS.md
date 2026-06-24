@@ -155,7 +155,7 @@ Each entry: what was decided, why, and what alternative was rejected.
 
 **Why:** Real gym operations naturally separate these. Membership payments and walk-in fees happen at check-in as part of a client-centric workflow. Product sales happen at a counter as quick, often client-anonymous transactions. Combining them into one cart was a theoretical optimization that doesn't match actual behavior and added UI complexity to the dominant use case (quick product sale).
 
-**Consequence:** The Walk-in → Member Conversion flow (Flow 7) is unaffected — it creates a `CLIENT_TRANSACTION` with `WALK_IN_FEE + MEMBERSHIP` line items, both of which are client-linked. If the client also wants to buy a product during that visit, a separate POS sale is opened.
+**Consequence:** Walk-in fees and membership purchases are always recorded as separate `CLIENT_TRANSACTION` records. A `CLIENT_TRANSACTION` never contains both `WALK_IN_FEE` and `MEMBERSHIP` line items simultaneously — these are distinct financial events recorded independently. See ADR-024. If the client also wants to buy a product during that visit, a separate POS sale is opened.
 
 **Rejected:** Unified mixed checkout (the original design). The example "member renews and buys protein shake in one transaction" was the primary driver of ADR-006's original reasoning. That example is now the rejected alternative: it doesn't reflect how this gym operates.
 
@@ -170,7 +170,7 @@ Each entry: what was decided, why, and what alternative was rejected.
 
 **Why:** The POS module is being built from the ground up in this design review. Adding `cost_price` to the product creation form at this point costs almost nothing — it's one additional field. The marginal build cost is near zero, while the cost of adding it later (after products are created and populated) is a schema migration plus a data-backfill exercise. Profit-margin reporting (which uses this field) remains Post-MVP.
 
-**Consequence:** `cost_price` on `Product` is MVP; `Product.cost_price` may be null for products where the owner doesn't track cost. Profit-margin reports (US-8.12) remain P2.
+**Consequence:** `cost_price` on `Product` is MVP; `Product.cost_price` may be null for products where the owner doesn't track cost. The Gross Profit Report (US-8.12) was originally P2 but was promoted to P0 once `cost_price_snapshot` was added to `TransactionLineItem` (ADR-026), making historical gross profit computable from existing data.
 
 ---
 
@@ -336,3 +336,91 @@ Check-In is not a separate top-level module. All attendance-related workflows, r
 **Consequence:** ADR-022's "top-level navigation entry" clause is superseded. The UX of the Check-In screen itself — auto-focused search, result cards, branching logic, today's list — is entirely unchanged; only its placement in the navigation hierarchy changes.
 
 **Rejected:** Check-In as a separate top-level navbar item (ADR-022's original navigation claim). Rejected because it fragments a single operational domain across two navbar entries, creates two navigation targets for attendance-related work, and implies Check-In and Attendance History are unrelated workflows — which they are not.
+
+---
+
+## ADR-024: Walk-In to Membership Conversion Always Creates Separate Transactions
+
+**Date:** 2026-06-24
+**Status:** Accepted
+
+**Decision:** Walk-in fees and membership purchases are always separate `CLIENT_TRANSACTION` records, regardless of whether they occur in the same visit or on different days. Three conversion scenarios are defined:
+
+- **Pre-fee conversion (Scenario 1):** The check-in conversion prompt (Flow 3/14) fires before any walk-in fee is collected. Owner is redirected to Flow 5 (Add Membership). One `CLIENT_TRANSACTION` is created with one `MEMBERSHIP` line item. No walk-in fee is charged. Attendance is recorded as `visit_type = MEMBER`.
+
+- **Post-fee, same-visit conversion (Scenario 2):** The walk-in fee `CLIENT_TRANSACTION` already exists from Flow 3. Owner opens the Client Profile and clicks "Add membership." A separate `CLIENT_TRANSACTION` is created with one `MEMBERSHIP` line item. The original walk-in fee record is not voided or modified. If the owner wishes to offset the walk-in fee already collected, the price override field on the membership form handles this manually.
+
+- **Different-day conversion (Scenario 3):** Walk-in fee transaction exists from a prior visit. The current-day membership purchase is a standalone `CLIENT_TRANSACTION` with one `MEMBERSHIP` line item.
+
+**Why:** The previously documented combined `WALK_IN_FEE + MEMBERSHIP` single-transaction model cannot be produced cleanly in the post-fee scenario without either double-counting walk-in revenue or voiding a legitimately correct transaction. Voiding a completed, accurate walk-in fee transaction to replace it with a combined record misuses the void mechanism (reserved for data-entry errors) and adds false audit noise to a normal business flow. Two transactions representing two distinct financial events is the accurate model and requires no additional implementation complexity.
+
+**Rejected:** Combined `CLIENT_TRANSACTION` with both `WALK_IN_FEE` and `MEMBERSHIP` line items (previously stated in Flow 7 and ADR-012's consequence section). In Scenario 2 the walk-in fee transaction is already committed; creating a second transaction containing a `WALK_IN_FEE` line item double-counts walk-in revenue. No clean creation path exists after Flow 3 has completed.
+
+**Consequence:** The `TransactionLineItem` schema continues to permit both `WALK_IN_FEE` and `MEMBERSHIP` item types within a `CLIENT_TRANSACTION` — the rule against combining them is at the application flow level, not the schema level. ADR-012's consequence paragraph is superseded for the conversion scenario.
+
+---
+
+## ADR-025: `gym_id` on All Tables Including Child and Detail Entities
+
+**Date:** 2026-06-24
+**Status:** Accepted
+
+**Decision:** `gym_id` (FK → Gym) is added to `Membership`, `TransactionLineItem`, and `InventoryTransaction`, completing the full implementation of ADR-001's stated rule across every table in the domain model.
+
+**Why:** Database-level Row-Level Security (RLS) — the recommended mechanism for tenant isolation in a shared-schema multi-tenant system — requires a direct `gym_id` column on every table. An RLS policy on a table without `gym_id` must use a subquery join to resolve tenant ownership, producing policies that are slower, harder to audit, and more likely to be misconfigured than single-column equality checks. Additional reasons:
+
+- **Tenant data operations** (export, archival, deletion) on `Membership`, `TransactionLineItem`, or `InventoryTransaction` become a simple `WHERE gym_id = :id` rather than a join-chain operation against high-volume tables.
+- **Reporting queries** on these three high-volume tables benefit from a direct `gym_id` index for tenant-filtered aggregation.
+- **Migration cost asymmetry:** adding three UUID FK columns now costs nothing; adding them after production data exists requires a backfill migration against the system's highest-volume tables.
+- **MVP impact:** zero behavioral change. A single-gym system writes the same `gym_id` value on every row.
+
+**Rejected:** Deriving tenant from parent FK join only. This approach is insufficient for database-level RLS, produces join-chain operations for tenant-filtered reporting, and significantly increases the migration cost and risk when multi-tenancy is activated.
+
+**Relationship to ADR-001:** This ADR resolves the inconsistency between ADR-001's stated rule and the original domain model. ADR-001's rule stands unchanged. This ADR documents the correction of the three omitted tables.
+
+---
+
+## ADR-026: `cost_price_snapshot` on `TransactionLineItem` — extends the snapshot principle to cost price
+
+**Date:** 2026-06-24
+**Status:** Accepted
+
+**Decision:** `TransactionLineItem` carries a `cost_price_snapshot` field (nullable decimal) that is copied from `Product.cost_price` at the moment the sale is recorded. It follows the exact same snapshot principle as `unit_price` (ADR-003).
+
+**Why:** ADR-003 established that `unit_price` is snapshotted at sale time so that future price changes never rewrite the financial meaning of past transactions. The same correctness principle applies to cost price. If `Product.cost_price` changes — because the supplier raised prices, because the owner corrected an error, or any other reason — any historical gross profit calculation that reads the live `cost_price` from the Product record would silently produce wrong figures. A snapshot at sale time guarantees that "profit on sales from 3 months ago" is always correct regardless of what cost_price is today.
+
+**Consequence:** `TransactionLineItem.cost_price_snapshot` is nullable. It is null when `Product.cost_price` was null at the time of sale (i.e., the owner did not track cost for that product). Reports that compute gross profit must handle the null case by either excluding those line items from margin calculations or treating them as "unknown margin." The field is never backfilled — historical transactions with null cost_price_snapshot remain null.
+
+**Rejected:** Reading `Product.cost_price` live when computing gross profit for historical transactions. This violates the same principle ADR-003 established for selling prices and produces incorrect historical profit figures whenever cost_price changes.
+
+**Relationship to ADR-003:** Extends ADR-003's snapshot principle from selling price to cost price. The motivating reasoning is identical; only the field differs.
+
+---
+
+## ADR-027: Whole-Container Sale Mode for `SERVING_BASED_PRODUCT`
+
+**Date:** 2026-06-24
+**Status:** Accepted
+
+**Decision:** `Product` gains a `container_selling_price` field (nullable decimal, `SERVING_BASED_PRODUCT` only). When set, the POS grid shows a mode toggle for that product: "Per Serving / Per Container." In Per Container mode, the cart records `container_selling_price × quantity` as the line total, and stock deduction is `quantity × servings_per_container` servings.
+
+**Why:** Without this, a gym owner who wants to sell a whole protein tub must enter 70 (or whatever `servings_per_container` is) as the quantity in Per Serving mode. This produces a misleading cart description ("Whey Protein × 70"), requires the owner to mentally calculate the container price from the per-serving price, and creates a transaction that looks like 70 individual scoop sales. A dedicated container mode eliminates all three problems. The schema requires one additional nullable field; the flow adds one branch; the inventory deduction logic is unchanged in result.
+
+**Consequence:** `container_selling_price` is nullable. Products without it do not show the container mode toggle. `unit_price` on `TransactionLineItem` is snapshotted from `container_selling_price` when container mode is used. The description field is populated with the human-readable container description. Stock deduction is identical in effect to a per-serving sale of `quantity × servings_per_container` — the ledger doesn't distinguish between modes.
+
+**Rejected:** Creating a separate `STANDARD_PRODUCT` entry for each "container size" of a serving-based product. This breaks the stock synchronization — selling 1 unit of a "container product" would need to somehow decrement servings on the original `SERVING_BASED_PRODUCT`, requiring a join and custom logic. The container_selling_price field on the same product entity keeps the data coherent.
+
+---
+
+## ADR-028: Void Reason Category Enum on `Transaction`
+
+**Date:** 2026-06-24
+**Status:** Accepted
+
+**Decision:** `Transaction` gains a `void_reason_category` enum field (required when `status = VOID`). The existing `void_reason` free-text field is renamed to `void_reason_note` and becomes optional. The valid categories are: `DUPLICATE_ENTRY`, `WRONG_AMOUNT`, `WRONG_PRODUCT`, `CLIENT_CANCELLED`, `SYSTEM_ERROR`, `OTHER`.
+
+**Why:** The prior design used only a free-text reason note. Free text produces uncategorized audit noise — void reasons like "duplicate", "dup", "entered twice", and "made twice" are all the same category but cannot be aggregated or analyzed. Structured void reason categories enable: (1) void pattern detection ("DUPLICATE_ENTRY is rising — the owner is making more data entry errors"), (2) audit quality improvement, and (3) future automated alerts if void rate exceeds a threshold. The free-text note field is preserved as an optional detail field for context that doesn't fit the category list.
+
+**Consequence:** The application enforces `void_reason_category` selection before a void can be confirmed. The `OTHER` category must always be accompanied by a `void_reason_note` (enforced at the application layer). Both POS sales and client transaction voids use the same category enum. This applies to Flow 11 (Transaction Void) and all void surfaces in the Payments and POS modules.
+
+**Rejected:** Free-text-only void reason (the prior design). This was retained from the original design as a minimal MVP approach. Rejected now because structured categories cost essentially nothing to implement at build time and produce meaningless audit data if left as free text across hundreds of transactions.

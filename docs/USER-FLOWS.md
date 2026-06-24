@@ -8,6 +8,8 @@ All flows assume the Gym Owner is logged in. Decision points are marked with `?`
 
 > **Design Review #4 (2026-06-24):** Flow 14 entry point updated — Check-In is now the default view within the Attendance module, not a top-level navigation entry. See DECISIONS.md ADR-023.
 
+> **Design Review #5 (2026-06-24):** Flow 8 updated — cash change calculator added to checkout; SERVING_BASED_PRODUCT container mode branch added (references Flow 16). Flow 9 updated — optional total restock cost capture added. Flow 11 updated — void_reason_category selection replaces free-text-only approach. New flows: Flow 16 (Whole-Container Sale), Flow 17 (End-of-Day Collections Review). See DECISIONS.md ADR-026, ADR-027, ADR-028.
+
 ---
 
 ## Flow 1: Owner Login
@@ -227,8 +229,8 @@ Old membership record remains in history, untouched (never overwritten)
 ## Flow 7: Walk-In → Member Conversion (same visit)
 
 Conversion can be initiated at two points:
-- **(A) Before the walk-in fee is collected** — if the client's visit count reaches `Gym.walkin_conversion_prompt_visits`, a conversion prompt appears during check-in (Flow 3). Owner follows the prompt directly to the Add Membership step below.
-- **(B) After the walk-in visit is recorded** — owner opens the Client Profile (existing path). Both routes reach the same Add Membership flow.
+- **(A) Before the walk-in fee is collected** — if the client's visit count reaches `Gym.walkin_conversion_prompt_visits`, a conversion prompt appears during check-in (Flow 3). Owner is redirected to Flow 5 (Add Membership) directly. No walk-in fee is collected. One `CLIENT_TRANSACTION` with a `MEMBERSHIP` line item is created. (ADR-024)
+- **(B) After the walk-in visit is recorded** — owner opens the Client Profile. The walk-in fee `CLIENT_TRANSACTION` already exists from Flow 3. The flow below applies: a separate `MEMBERSHIP`-only transaction is created. (ADR-024)
 
 ```
 Walk-in client arrives, pays walk-in fee (Flow 3 completes)
@@ -250,8 +252,9 @@ Owner selects a Membership Plan; price defaults from plan
     account for the walk-in fee already paid today — manual judgment call,
     not an automated calculation (confirmed: no auto credit)
     ↓
-A CLIENT_TRANSACTION is created with 2 line items:
-    WALK_IN_FEE (already paid) + MEMBERSHIP at the entered prices
+A separate CLIENT_TRANSACTION is created with 1 line item:
+    MEMBERSHIP at the entered price
+    (the walk-in fee transaction from Flow 3 remains intact — ADR-024)
     ↓
 Attendance record's visit_type updated to MEMBER
     (client now has an active membership for today)
@@ -266,7 +269,7 @@ Walk-in→Member conversion is recorded implicitly (ADR-020):
 
 **Note:** If the client also wants to purchase a product during this visit, that is handled as a separate, standalone POS sale — see Flow 8. Client transactions (membership fees, walk-in fees) and POS sales are always separate flows.
 
-**Reasoning:** This flow captures the literal moment the BRD's conversion goal happens. The combined WALK_IN_FEE + MEMBERSHIP CLIENT_TRANSACTION is valid because both items are client-linked. The "apply walk-in fee as credit" automatic calculation was dropped — the existing manual price-override field covers any owner who wants to offer a discount in this moment.
+**Reasoning:** Pre-fee conversion (Path A) produces one `MEMBERSHIP` transaction via Flow 5 — the walk-in fee is not collected. Post-fee conversion (Path B) produces a separate `MEMBERSHIP` transaction after the walk-in fee was already collected — two distinct financial events, two distinct records. The combined `WALK_IN_FEE + MEMBERSHIP` single-transaction model is not used: creating it after Flow 3 has committed the walk-in fee record would double-count walk-in revenue, and voiding the original walk-in fee to replace it misuses the void mechanism (reserved for data-entry errors, not business flow transitions). The manual price-override field covers any owner who wants to discount the membership price to account for the walk-in fee already paid. See ADR-024.
 
 ---
 
@@ -276,8 +279,19 @@ Walk-in→Member conversion is recorded implicitly (ADR-020):
 Owner opens POS screen
     ↓
 Product grid loads — all active products with image, name, and price
+    Category tabs displayed above grid: "All" (default) + one tab per ProductCategory
+    ↓
+Owner selects a category tab (or searches by name)
     ↓
 Owner taps a product to add it to cart
+    │
+    ├── SERVING_BASED_PRODUCT with container_selling_price set:
+    │       Mode toggle shown: "Per Serving (₱X) / Per Container (₱Y)"
+    │       Default: Per Serving (existing behavior)
+    │       If Per Container selected → redirect to Flow 16
+    │
+    └── All other products (and Per Serving mode):
+            proceed below
     ↓
 For each product added:
     Available stock/servings >= requested quantity?
@@ -286,20 +300,29 @@ For each product added:
         │          Owner proceeds via explicit "Force Sale" confirmation
         │          (logs a flagged ADJUSTMENT entry in inventory ledger)
         │
-        └── Yes ──→ Item added to cart; price snapshot taken at this moment
+        └── Yes ──→ Item added to cart
+                    unit_price snapshot taken from Product.selling_price
+                    cost_price_snapshot taken from Product.cost_price (nullable)
     ↓
 Owner adjusts quantities in cart if needed
     ↓
 Owner taps "Checkout"
     ↓
 Owner selects payment method (Cash / GCash / Card / Other)
+    │
+    └── Cash selected:
+          "Cash received" input displayed (numeric, must be ≥ cart total)
+          System displays: "Change: ₱[cash received − cart total]" in real time
+          Confirmation blocked until cash received ≥ cart total
     ↓
 Owner confirms total
     ↓
 POS Sale created:
     transaction_type = POS_SALE
     client_id = null (no client required)
-    TransactionLineItems created for each product (unit_price = snapshot)
+    TransactionLineItems created for each product:
+        unit_price = snapshot at time of checkout
+        cost_price_snapshot = Product.cost_price at time of checkout (nullable)
     ↓
 For each line item:
     InventoryTransaction (type=SALE) created
@@ -318,14 +341,23 @@ If the client is also paying a membership fee or walk-in fee during the same vis
 ```
 Owner opens Inventory → selects product → "Record Purchase/Restock"
     ↓
-Owner enters quantity received (units or servings/containers, depending on unit_type)
+Owner enters quantity received:
+    - STANDARD_PRODUCT: quantity in units (e.g., 24 bottles)
+    - SERVING_BASED_PRODUCT: quantity in containers (e.g., 2 tubs)
+      → system multiplies by servings_per_container (e.g., 2 × 70 = +140 servings)
     ↓
-InventoryTransaction (type=PURCHASE) created
+Owner optionally enters total cost paid for this restock (e.g., ₱4,800 for 2 tubs)
+    This is the total invoice amount — not a per-unit cost
+    Field is optional; restock is valid without it
     ↓
-Product's current stock/servings increased
+InventoryTransaction (type=PURCHASE) created:
+    quantity_delta = +units or +(containers × servings_per_container)
+    total_restock_cost = entered amount (null if not entered)
+    resulting_stock = previous stock + quantity_delta
     ↓
-(Future) Owner optionally enters supplier cost — deferred for MVP, 
-          but field reserved in schema for future profit-margin reporting
+Product.current_stock increased
+    ↓
+Inventory Movement History shows the PURCHASE entry with total cost paid (if entered)
 ```
 
 ---
@@ -356,22 +388,28 @@ Owner finds an incorrectly entered transaction in Transaction History
     ↓
 Owner clicks "Void Transaction"
     ↓
-Owner enters a required reason note (e.g., "duplicate entry," "wrong product")
+Owner selects void reason category (required):
+    DUPLICATE_ENTRY / WRONG_AMOUNT / WRONG_PRODUCT / CLIENT_CANCELLED / SYSTEM_ERROR / OTHER
     ↓
-System confirms: "This will reverse inventory and revenue impact. Continue?"
+Owner enters optional detail note
+    (Required when void_reason_category = OTHER)
+    (Optional for all other categories)
+    ↓
+System confirms: "This will reverse the inventory and revenue impact. Continue?"
     ↓
 Confirmed
     ↓
 Transaction marked status=VOID (not deleted)
+    void_reason_category and void_reason_note stored on the Transaction record
     ↓
 Linked InventoryTransactions reversed (stock restored) via new ADJUSTMENT entries —
     original SALE entries remain in the ledger for audit, reversal is additive, not a deletion
     ↓
 Revenue reports automatically exclude VOID transactions from totals,
-    but the void event itself remains visible in the audit trail
+    but the void event itself remains visible in the audit trail with the reason category
 ```
 
-**Reasoning:** "Business records must be preserved" (NFR) and "correct mistakes" are in tension unless corrections are modeled as additive reversals rather than destructive edits. This flow resolves that tension.
+**Reasoning:** "Business records must be preserved" (NFR) and "correct mistakes" are in tension unless corrections are modeled as additive reversals rather than destructive edits. This flow resolves that tension. Structured void categories (ADR-028) enable pattern analysis over free-text notes.
 
 ---
 
@@ -543,6 +581,94 @@ Attendance record updated:
     ↓
 Attendance history shows the corrected time with a small "edited" indicator
 ```
+
+---
+
+## Flow 16: Whole-Container Sale (SERVING_BASED_PRODUCT — Container Mode)
+
+Pre-condition: `container_selling_price` must be set on the product. (ADR-027)
+
+```
+Owner opens POS screen
+    ↓
+Owner selects a SERVING_BASED_PRODUCT from the grid or via search
+    ↓
+Mode toggle is visible: "Per Serving (₱X) / Per Container (₱Y)"
+    ↓
+Owner selects "Per Container"
+    ↓
+Owner enters quantity (number of whole containers, e.g., 1 or 2)
+    ↓
+Cart line item displays:
+    Description: "[Product name] — N container(s) ([N × servings_per_container] servings)"
+    Unit price: container_selling_price (snapshot)
+    Line total: container_selling_price × quantity
+    ↓
+Stock check: current_stock >= quantity × servings_per_container?
+    │
+    ├── No ──→ Show: "Only X servings remaining (~Z containers)"
+    │          Owner proceeds via explicit "Force Sale" confirmation
+    │          (same override as Per Serving mode; logs flagged ADJUSTMENT entry)
+    │
+    └── Yes ──→ Item added to cart
+                unit_price snapshot = container_selling_price
+                cost_price_snapshot = Product.cost_price (nullable)
+    ↓
+Owner proceeds to Checkout (standard checkout — payment method, cash change if Cash)
+    ↓
+POS Sale created:
+    TransactionLineItem:
+        description = "[Product name] — N container(s) ([N × servings_per_container] servings)"
+        quantity = N (containers)
+        unit_price = container_selling_price (snapshot)
+        cost_price_snapshot = Product.cost_price at time of sale (nullable)
+        subtotal = N × container_selling_price
+    ↓
+InventoryTransaction (type=SALE) created:
+    quantity_delta = −(N × servings_per_container)
+    resulting_stock = previous stock − (N × servings_per_container)
+    ↓
+Product.current_stock decremented by N × servings_per_container
+```
+
+**Note:** The inventory ledger records the deduction in servings — it does not distinguish between a container-mode sale and a per-serving sale of equivalent quantity. The description field on `TransactionLineItem` is the human-readable record of the sale mode.
+
+---
+
+## Flow 17: End-of-Day Collections Review
+
+```
+Owner opens Client Payments module
+    ↓
+Owner selects "Collections Summary" view
+    ↓
+Summary defaults to today's date
+    ↓
+System aggregates all non-voided transactions for the selected date,
+    spanning both CLIENT_TRANSACTION and POS_SALE records:
+
+    ┌─────────────────────┬────────────┬──────────────┐
+    │ Payment Method      │ Count      │ Total        │
+    ├─────────────────────┼────────────┼──────────────┤
+    │ Cash                │ N          │ ₱X           │
+    │ GCash               │ N          │ ₱X           │
+    │ Card                │ N          │ ₱X           │
+    │ Other               │ N          │ ₱X           │
+    ├─────────────────────┼────────────┼──────────────┤
+    │ Grand Total         │ N          │ ₱X           │
+    └─────────────────────┴────────────┴──────────────┘
+
+    Voided transactions are excluded from all totals.
+    ↓
+Owner may select a prior date using the date picker to review past days
+    ↓
+Owner reconciles Cash total against the physical cash drawer
+    and GCash total against the GCash merchant app
+    (Manual reconciliation — the system surfaces the numbers;
+     no automatic integration with payment processors at MVP)
+```
+
+**Edge case — zero transactions on selected date:** Display the table with all rows showing ₱0 and a "No transactions recorded for this date" notice.
 
 ---
 

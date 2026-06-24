@@ -122,6 +122,7 @@ erDiagram
 | Field | Type | Notes |
 |---|---|---|
 | id | UUID/PK | |
+| gym_id | FK → Gym | |
 | client_id | FK → Client | |
 | membership_plan_id | FK → MembershipPlan, nullable | nullable to allow a fully custom one-off membership not tied to a catalog plan |
 | start_date | date | |
@@ -179,11 +180,13 @@ erDiagram
 | name | string | |
 | product_type | enum | `STANDARD_PRODUCT` (sold per unit, e.g. bottled water) or `SERVING_BASED_PRODUCT` (sold per scoop/serving, e.g. protein powder) |
 | selling_price | decimal | price per unit or per serving — **never read directly into a past transaction** |
-| cost_price | decimal, nullable | purchase cost per unit or serving — stored at MVP to enable future margin reporting without a schema migration |
+| cost_price | decimal, nullable | purchase cost per unit or serving — snapshotted onto TransactionLineItem at sale time (ADR-026) |
 | image_url | string, nullable | product photo displayed in the POS grid |
 | current_stock | decimal | unit count for STANDARD_PRODUCT; remaining serving count for SERVING_BASED_PRODUCT |
 | servings_per_container | int, nullable | SERVING_BASED_PRODUCT only — e.g., 70 for a standard protein tub |
-| low_stock_threshold | decimal | drives dashboard low-stock alert |
+| container_selling_price | decimal, nullable | SERVING_BASED_PRODUCT only — price for a whole container; enables Per Container mode in POS checkout without manual quantity calculation (ADR-027) |
+| low_stock_threshold | decimal | drives dashboard low-stock alert; distinct from reorder_point |
+| reorder_point | int, nullable | stock level at which the owner should place a reorder order — distinct from low_stock_threshold (which drives the alert); accounts for supplier lead time (e.g., alert at 5, reorder at 20) |
 | is_active | bool | soft "discontinue" flag — archived products are hidden from POS but history is preserved |
 | created_at / updated_at | timestamp | |
 
@@ -194,12 +197,15 @@ erDiagram
 | Field | Type | Notes |
 |---|---|---|
 | id | UUID/PK | |
+| gym_id | FK → Gym | |
 | product_id | FK → Product | |
 | type | enum | `PURCHASE`, `SALE`, `ADJUSTMENT` |
 | quantity_delta | decimal | positive for purchase/adjustment-up, negative for sale/adjustment-down |
 | resulting_stock | decimal | snapshot of stock level immediately after this movement — enables point-in-time auditing without recomputation |
 | reference_transaction_line_item_id | FK → TransactionLineItem, nullable | links a SALE movement back to the sale that caused it |
-| note | string, nullable | required for ADJUSTMENT type (why was stock manually changed?) |
+| adjustment_reason_category | enum, nullable | required when type = `ADJUSTMENT` — `DAMAGE`, `EXPIRY`, `THEFT`, `COUNT_CORRECTION`, `NATURAL_WASTAGE`, `PROMOTION`, `OTHER`; enables shrinkage analysis by category |
+| total_restock_cost | decimal, nullable | populated when type = `PURCHASE` — total amount paid for this restock event; enables basic spending tracking without per-unit supplier management (ADR-027 scope) |
+| note | string, nullable | optional supporting detail; required for `ADJUSTMENT` type only when adjustment_reason_category = `OTHER` |
 | created_at | timestamp | |
 
 **Reasoning:** A single `current_stock` counter on `Product` cannot be audited. If the count is ever wrong, there's no way to find out why. This ledger is the system of record; `Product.current_stock` becomes a cached/derived value recomputable from the ledger if it ever drifts.
@@ -218,7 +224,8 @@ erDiagram
 | total_amount | decimal | sum of line items, computed/stored for fast reporting |
 | payment_method | enum | `CASH`, `GCASH`, `CARD`, `OTHER` |
 | status | enum | `COMPLETED`, `VOID` |
-| void_reason | string, nullable | required if status = VOID |
+| void_reason_category | enum, nullable | required when status = `VOID` — `DUPLICATE_ENTRY`, `WRONG_AMOUNT`, `WRONG_PRODUCT`, `CLIENT_CANCELLED`, `SYSTEM_ERROR`, `OTHER` (ADR-028) |
+| void_reason_note | string, nullable | optional detail note accompanying void_reason_category; required when void_reason_category = `OTHER` |
 | created_by | FK → User | |
 | created_at | timestamp | |
 
@@ -231,28 +238,32 @@ erDiagram
 | Field | Type | Notes |
 |---|---|---|
 | id | UUID/PK | |
+| gym_id | FK → Gym | |
 | transaction_id | FK → Transaction | |
 | item_type | enum | `MEMBERSHIP`, `WALK_IN_FEE`, `PRODUCT` |
 | reference_membership_id | FK → Membership, nullable | populated when item_type = MEMBERSHIP |
 | reference_product_id | FK → Product, nullable | populated when item_type = PRODUCT |
-| description | string | human-readable snapshot (e.g. "1 Month Membership", "Whey Protein - 1 scoop") |
+| description | string | human-readable snapshot (e.g. "1 Month Membership", "Whey Protein - 1 scoop", "Gold Standard Whey — 1 container (70 servings)") |
 | quantity | decimal | |
-| unit_price | decimal | **price snapshot at time of sale** |
+| unit_price | decimal | **price snapshot at time of sale** — copied from Product.selling_price or container_selling_price; never references live catalog |
+| cost_price_snapshot | decimal, nullable | **cost price snapshot at time of sale** — copied from Product.cost_price; null if cost_price was not set on the product; never references live Product.cost_price for historical records (ADR-026) |
 | subtotal | decimal | quantity × unit_price |
+| fee_override_note | string, nullable | populated when item_type = `WALK_IN_FEE` and the charged amount differs from `Gym.default_walkin_fee`; records the owner's reason for the variation |
 
 **Constraint:** A `TransactionLineItem`'s `item_type` must match its parent `Transaction`'s `transaction_type`: `CLIENT_TRANSACTION` records may only contain `MEMBERSHIP` and `WALK_IN_FEE` items; `POS_SALE` records may only contain `PRODUCT` items. Mixing types across `transaction_type` boundaries is not permitted.
 
-**Reasoning:** `unit_price` is always copied at the moment of sale, never joined live from `Product.selling_price` or `MembershipPlan.default_price`. This is the single most important correctness rule in the whole schema — without it, a price change next month silently rewrites the financial meaning of every past sale.
+**Reasoning:** Both `unit_price` and `cost_price_snapshot` are copied at the moment of sale — neither ever references live catalog data for historical records. This guarantees that both revenue and gross profit figures from past transactions remain permanently correct regardless of future catalog changes. See ADR-003 (unit_price) and ADR-026 (cost_price_snapshot).
 
 ---
 
 ## Cross-Cutting Design Decisions
 
 1. **Soft deletes everywhere financial/historical data is involved** (`Client`, `Product`). Hard deletes are reserved for things with zero downstream references (e.g., an unused draft).
-2. **`gym_id` on every table** — see Gym entity reasoning above. This is the cheapest tenant-readiness investment available.
+2. **`gym_id` on every table, including child and detail entities** — see Gym entity reasoning above and ADR-025. `Membership`, `TransactionLineItem`, and `InventoryTransaction` each carry `gym_id` directly, enabling database-level Row-Level Security without join-based subqueries. This is the cheapest tenant-readiness investment available.
 3. **Derived status fields, not stored flags**, for anything computable from dates (Client status, Membership status). Avoids sync jobs and drift bugs.
-4. **Snapshots over live references** for anything involving money (price_paid, unit_price) — past transactions must never change meaning when current catalog data changes.
+4. **Snapshots over live references** for anything involving money (`price_paid`, `unit_price`, `cost_price_snapshot`) — past transactions must never change meaning when current catalog data changes. The snapshot principle covers both the selling price and cost price at the moment of each transaction. See ADR-003 and ADR-026.
 5. **Ledgers over counters** for anything involving quantity (inventory) — a single mutable number can't be audited; an append-only movement log can.
+6. **Structured categories over free text** for audit-relevant fields (`void_reason_category`, `adjustment_reason_category`) — free text cannot be aggregated or analyzed for patterns. Category enums enable void rate monitoring and shrinkage-by-cause analysis. A companion detail note field preserves freeform context. See ADR-028.
 
 ---
 
@@ -261,4 +272,4 @@ erDiagram
 - `Branch` entity (multi-location) — would sit between `Gym` and everything else; not needed until multi-branch is in scope.
 - `Role`/`Permission` join tables for granular RBAC — MVP only needs a single `role` enum value.
 - `Discount`/`Promotion` entity — manual price override on line items already covers MVP needs.
-- `SupplierCost` field on `Product` — needed for margin reporting, deferred until profit (not just revenue) reporting is prioritized.
+- Supplier entity and per-unit restock cost tracking — full purchase order management with per-unit cost history and supplier relationships is deferred. `InventoryTransaction.total_restock_cost` (nullable) captures the total amount paid per restock event at MVP, which is sufficient for basic spending awareness without requiring a full procurement model.

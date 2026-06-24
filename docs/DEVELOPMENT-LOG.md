@@ -5,9 +5,127 @@ Newest entries at the top.
 
 ---
 
-## [#005] Attendance Module Structure Revision — Design Review #4 — 2026-06-24
+## [#007] Payments, POS & Inventory Module Review — Design Review #5 — 2026-06-24
 
 **Commit:** _(pending)_
+
+**Changes from previous commit:**
+
+- **DECISIONS.md:**
+  - ADR-026 added: `cost_price_snapshot` on `TransactionLineItem` — extends ADR-003's price-snapshot principle to cost price; historical gross profit figures must not be rewritten by future cost changes.
+  - ADR-027 added: Whole-Container Sale Mode for `SERVING_BASED_PRODUCT` — `container_selling_price` field enables Per Container POS mode; rejected separate STANDARD_PRODUCT workaround.
+  - ADR-028 added: Void Reason Category Enum on `Transaction` — `void_reason_category` enum replaces free-text-only void note; `void_reason` renamed to `void_reason_note` (now optional detail field).
+
+- **DOMAIN-MODEL.md:**
+  - `Product` entity: added `container_selling_price` (nullable decimal, SERVING_BASED_PRODUCT only; ADR-027) and `reorder_point` (nullable int; distinct from `low_stock_threshold`). Updated `cost_price` note to reference ADR-026 snapshot. Updated `low_stock_threshold` note to clarify distinction from `reorder_point`.
+  - `Transaction` entity: `void_reason` renamed to `void_reason_note` (nullable, optional); added `void_reason_category` (nullable enum, required when status=VOID; ADR-028).
+  - `InventoryTransaction` entity: added `adjustment_reason_category` (nullable enum, required when type=ADJUSTMENT); added `total_restock_cost` (nullable decimal, populated when type=PURCHASE); updated `note` field description (now optional supporting detail).
+  - `TransactionLineItem` entity: added `cost_price_snapshot` (nullable decimal, copied from Product.cost_price at sale time; ADR-026); added `fee_override_note` (nullable text, for walk-in fee overrides). Updated `description` field example to include container-mode format. Updated reasoning to cover both unit_price and cost_price_snapshot snapshots.
+  - Cross-Cutting Design Decisions: item 4 updated (snapshots now explicitly cover unit_price + cost_price_snapshot + price_paid); item 6 added (structured categories for void_reason_category and adjustment_reason_category).
+  - "What's Not In This Model": SupplierCost note updated — per-unit supplier tracking is still deferred; `total_restock_cost` on InventoryTransaction covers MVP need.
+
+- **USER-STORIES.md:**
+  - Design Review #5 banner added.
+  - US-5.3: updated — void now requires `void_reason_category` (structured enum); detail note optional except when category = OTHER; ACs expanded.
+  - US-5.4 (NEW P0): end-of-day collections summary by payment method spanning all transaction types; date selector; voided excluded. Former P2 US-5.4 → US-5.6; former US-5.5 → US-5.7.
+  - US-6.10: updated — void reason category required (from free-text only).
+  - US-6.13 (NEW P0): cash change calculator in POS checkout.
+  - US-6.14 (NEW P0): whole-container sale for SERVING_BASED_PRODUCT — Per Container mode toggle.
+  - US-6.15 (NEW P0): gross margin display (₱ and %) on product create/edit form.
+  - US-6.16 (NEW P0): category filter tabs on POS product grid.
+  - US-7.5: promoted from P2 to P0, scope narrowed — total restock cost capture per PURCHASE event (not per-unit, not supplier entity).
+  - US-7.6 (NEW P0): days-until-stockout estimate per product (current_stock ÷ avg daily sales, last 30 days).
+  - US-7.7 (NEW P0): inventory valuation on Current Stock view and Dashboard KPI.
+  - US-7.8 (NEW P0): shrinkage column on Current Stock view — negative ADJUSTMENT quantity this month, by category.
+  - Former P2 US-7.6 → US-7.9.
+  - US-8.1: ACs expanded — 6-card KPI strip specified, stockout estimates in inventory alerts, Today's Collections on Dashboard, voided exclusion rule stated.
+  - US-8.9: ACs added — shrinkage section in Inventory Usage Report, breakdown by adjustment_reason_category, CSV export.
+  - US-8.12: promoted from P2 to P0 — gross profit report (revenue, COGS via cost_price_snapshot, gross profit, margin %); full ACs added.
+  - Summary table updated: Client Payments 3→4 P0; POS 10→14 P0; Inventory 4→8 P0; Dashboard & Reports 12→13 P0; total 59→69 P0, 16→14 P2.
+
+- **USER-FLOWS.md:**
+  - Design Review #5 header added.
+  - Flow 8: category tabs and SERVING_BASED_PRODUCT container mode toggle added to product grid section; cash change calculator step added to checkout (Cash selected: "Cash received" input → "Change: ₱X" display); cost_price_snapshot captured alongside unit_price on each TransactionLineItem.
+  - Flow 9: full restock flow rewritten — SERVING_BASED_PRODUCT container quantity clarified; optional total cost paid field added; InventoryTransaction fields (total_restock_cost, resulting_stock) made explicit.
+  - Flow 11: void reason category selection step added before free-text note; `OTHER` requires detail note; void_reason_category stored on Transaction record.
+  - Flow 16 (NEW): Whole-Container Sale — full flow from container mode toggle through POS sale creation and inventory deduction (quantity × servings_per_container).
+  - Flow 17 (NEW): End-of-Day Collections Review — Collections Summary view, payment method table, voided exclusion, date selector, manual reconciliation note.
+
+- **MODULE-SPECS.md:**
+  - Design Review #5 banner added.
+  - Module 1 (Dashboard): KPI strip expanded from 4 to 6 cards (added Today's Revenue, Inventory Value). Inventory alerts enhanced with days-until-stockout estimate per product. Today's Collections live feed panel added (6th panel). Business rules and edge cases expanded.
+  - Module 5 (Client Payments): Collections Summary view fully specified (US-5.4, Flow 17). Void workflow updated with void_reason_category requirement (ADR-028). Business rules: void_reason_category required added; walk-in fee override note added. Edge cases: Collections Summary zero-state, void OTHER without note. Deferred references updated to US-5.6, US-5.7.
+  - Module 6 (POS): Product create/edit — container_selling_price, reorder_point, gross margin display added. SERVING_BASED_PRODUCT section updated with container mode. POS screen — category tabs, container mode toggle, cash change calculator at checkout. POS History — summary strip (today's count + revenue) added. Void — void_reason_category required. Business rules — cost_price_snapshot, container mode deduction, void category, cash received validation. Edge cases expanded (6 new). Deferred references updated.
+  - Module 7 (Inventory): Complete rewrite of MVP Scope — Restock, Current Stock View (with valuation, stockout estimate, reorder indicator, shrinkage column), Movement History, Manual Adjustment all updated. Business rules — adjustment_reason_category required, shrinkage derivation defined, reorder_point vs. low_stock_threshold distinction. Edge cases expanded (7 new). Deferred section updated.
+  - Module 8 (Reports): Inventory Usage Report updated with shrinkage section. Gross Profit Report added (US-8.12, P0). Business rules updated — cost-snapshot rule added, shrinkage scope defined. Edge cases expanded. Deferred section simplified (US-8.12 promoted to P0, removed from deferred).
+  - Resolved Scope Decisions table: 7 new rows added covering cost_price_snapshot, void categories, adjustment categories, container sale mode, collections summary, gross profit promotion, and daily revenue KPI.
+
+- **ROADMAP.md:**
+  - Milestone 5: added US-5.4 (collections summary); updated US-5.3 description (void_reason_category).
+  - Milestone 6: added US-6.13 (change calculator), US-6.14 (container sale), US-6.15 (margin display), US-6.16 (category tabs); updated US-6.1–6.3 description; added container mode to Milestone 6 items; added whole-container sale flow reference.
+  - Milestone 7: updated all items — restock cost capture (US-7.5), adjustment_reason_category, reorder_point indicator, days-until-stockout (US-7.6), inventory valuation (US-7.7), shrinkage column (US-7.8).
+  - Milestone 8: Dashboard KPI strip updated to 6 cards with references; Inventory Usage Report updated with shrinkage; Gross Profit Report (US-8.12) added.
+  - Phase 2 table: US-5.4 → US-5.6, US-5.5 → US-5.7, US-7.5 removed (promoted to P0), US-7.6 → US-7.9, US-8.12 removed (promoted to P0).
+
+**Decisions made:**
+
+- `cost_price_snapshot` added to `TransactionLineItem` — extends snapshot principle to cost price (ADR-026)
+- Whole-container sale mode via `container_selling_price` on `SERVING_BASED_PRODUCT` (ADR-027)
+- Void reason category enum on `Transaction`; `void_reason` renamed to `void_reason_note` (ADR-028)
+
+**Issues / Notes:**
+
+- `cost_price_snapshot` is nullable — products where the owner has not set `cost_price` will produce null snapshots. The Gross Profit Report flags these so the owner knows the margin figure may be understated. Historical transactions prior to this change will have null `cost_price_snapshot` — no backfill is performed.
+- `void_reason_category = OTHER` requires a detail note (enforced at the application layer). All other categories make the note optional. This follows the same pattern as adjustment_reason_category.
+- Days-until-stockout is advisory and derived at query time. It uses the last 30-day sales window; products with zero sales in that window show "No recent sales data" rather than an infinite estimate.
+- US-7.9 (automated reorder notifications) was formerly US-7.6 in the Phase 2 table — this renumber accommodates the new P0 US-7.6 (days-until-stockout) without numbering collision.
+- US-5.6 and US-5.7 were formerly US-5.4 and US-5.5 in the Phase 2 table — renumbered to accommodate the new P0 US-5.4 (collections summary).
+- US-8.12 (Gross Profit Report) is promoted to P0 because the required foundation (`cost_price_snapshot` on TransactionLineItem, added in this session) is now in the schema. The report itself is computable from existing data with no further schema changes.
+
+---
+
+## [#006] Architecture Blockers Resolved — ADR-024 & ADR-025 — 2026-06-24
+
+**Commit:** _(pending)_
+
+**Changes from previous commit:**
+
+- **USER-FLOWS.md:**
+  - Flow 7 header: Path A clarified — owner is redirected to Flow 5 (Add Membership) with no walk-in fee collected; one `MEMBERSHIP`-only transaction is created. Path B clarified — walk-in fee transaction already exists from Flow 3; a separate `MEMBERSHIP`-only transaction is created below.
+  - Flow 7 main body: combined `WALK_IN_FEE + MEMBERSHIP` transaction step replaced with a separate `MEMBERSHIP`-only `CLIENT_TRANSACTION`. Walk-in fee transaction from Flow 3 remains intact. ADR-024 referenced.
+  - Flow 7 Reasoning: updated to reflect the two-separate-transactions model and the rejection of the combined transaction.
+
+- **DOMAIN-MODEL.md:**
+  - `Membership` entity: `gym_id` (FK → Gym) added.
+  - `TransactionLineItem` entity: `gym_id` (FK → Gym) added.
+  - `InventoryTransaction` entity: `gym_id` (FK → Gym) added.
+  - Cross-Cutting Design Decisions item 2: updated to explicitly include child/detail entities and reference ADR-025.
+
+- **MODULE-SPECS.md:**
+  - Module 5 (Client Payments) Business Rules: new rule added — a `CLIENT_TRANSACTION` never contains both `WALK_IN_FEE` and `MEMBERSHIP` line items simultaneously; these are always separate records (ADR-024).
+  - Module 5 (Client Payments) Edge Cases: same-visit conversion edge case updated — original walk-in fee transaction remains intact; a separate `MEMBERSHIP` transaction is created; price override field covers any discount.
+
+- **DECISIONS.md:**
+  - ADR-012 Consequence: updated to remove combined transaction reference; now states that walk-in fees and membership purchases are always separate records, with ADR-024 cross-referenced.
+  - ADR-024 added: Walk-In to Membership Conversion Always Creates Separate Transactions — defines three scenarios (pre-fee, post-fee same-visit, different-day) and formally rejects the combined transaction model.
+  - ADR-025 added: `gym_id` on All Tables Including Child and Detail Entities — corrects the ADR-001 compliance gap on `Membership`, `TransactionLineItem`, and `InventoryTransaction`; documents RLS, reporting, and migration-cost rationale.
+
+**Decisions made:**
+
+- Walk-in fees and membership purchases are always separate `CLIENT_TRANSACTION` records — ADR-024
+- `gym_id` added to `Membership`, `TransactionLineItem`, and `InventoryTransaction` to complete ADR-001 — ADR-025
+
+**Issues / Notes:**
+
+- The `TransactionLineItem` schema continues to permit both `WALK_IN_FEE` and `MEMBERSHIP` item types within a single `CLIENT_TRANSACTION` at the schema level — the rule against combining them is enforced at the application flow level, not via a schema constraint. This is intentional: a future admin tool may have a legitimate use case not yet in scope.
+- ADR-025 corrects the domain model, not ADR-001. ADR-001's stated rule was always correct; the domain model implementation was incomplete. This entry resolves the inconsistency.
+- These two resolutions clear the remaining architecture blockers. The project is ready to proceed to ERD and database design. Tech Stack Selection (ADR-026) is the recommended next planning activity before implementation begins.
+
+---
+
+## [#005] Attendance Module Structure Revision — Design Review #4 — 2026-06-24
+
+**Commit:** _(done)_
 
 **Changes from previous commit:**
 
@@ -52,7 +170,7 @@ Newest entries at the top.
 
 ## [#004] Attendance Module Deep Review — Planning Doc Sync — 2026-06-24
 
-**Commit:** _(pending — design review session #3)_
+**Commit:** _(done — design review session #3)_
 
 **Changes from previous commit:**
 

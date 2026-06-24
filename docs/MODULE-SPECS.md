@@ -10,6 +10,8 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 
 > **Design Review #4 (2026-06-24):** Attendance module restructured as a single top-level navbar module with three internal views: Check-In (default), Attendance History, and Attendance Analytics (ADR-023). ADR-022 amended. Check-In is no longer a standalone top-level navigation entry. Attendance History updated with date filter presets. Attendance Analytics view added as committed MVP scope (US-4.10). Total MVP story count: 58 → 59. See DECISIONS.md ADR-023.
 
+> **Design Review #5 (2026-06-24):** Payments, POS, and Inventory modules comprehensively updated for operational and business value. Dashboard KPI strip expanded to 6 cards; Today's Collections live feed panel added; Inventory alerts enhanced with stockout estimates. Client Payments gains Collections Summary view and structured void reason categories. POS gains cash change calculator, whole-container sale mode, gross margin display, and category tabs. Inventory gains valuation, days-until-stockout, shrinkage indicator, adjustment reason categories, restock cost capture, and reorder_point. Reports gains Gross Profit Report (US-8.12, promoted to P0) and shrinkage breakdown in Inventory Usage Report. See DECISIONS.md ADR-026, ADR-027, ADR-028.
+
 ---
 
 ## 1. Dashboard Module
@@ -18,11 +20,13 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 
 **MVP Scope:**
 
-**KPI Strip (4 cards, always visible at top):**
+**KPI Strip (6 cards, always visible at top):**
 - Active members — with delta vs. last month (e.g., "+3 from last month")
 - Today's check-ins — with delta vs. yesterday
 - MTD (month-to-date) revenue — with % change vs. same period last month
+- Today's Revenue — all completed transactions (CLIENT_TRANSACTION + POS_SALE) collected today, voided excluded (US-5.4, US-8.1)
 - Expiring soon count — highlighted in warning color, using `Gym.expiration_warning_days`
+- Inventory Value — `SUM(current_stock × cost_price)` across all active products where cost_price is not null; products without cost_price excluded with a count noted (US-7.7)
 
 **Period selector:** Today / Week / Month toggle filters all chart data accordingly. KPI cards always show the most contextually relevant period (today for check-ins, MTD for revenue).
 
@@ -35,7 +39,8 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 **Live feed panels (below charts):**
 - **Recent POS sales:** last 5 product transactions with item summary, payment method, amount, and time-ago.
 - **Expiring soon members:** list of members whose memberships expire within the warning window, sorted by soonest first, with days-remaining indicator and color-coded urgency (red < 7 days, amber 7–14 days).
-- **Inventory alerts:** products below low-stock threshold with remaining count. For `SERVING_BASED_PRODUCT` items, shows remaining servings (e.g., "Whey Protein: 8 servings remaining").
+- **Inventory alerts:** products below `low_stock_threshold` with remaining count. For `SERVING_BASED_PRODUCT` items, shows remaining servings (e.g., "Whey Protein: 8 servings remaining"). Each alert row also shows the days-until-stockout estimate: "~N days remaining" (from US-7.6; blank if no recent sales data).
+- **Today's Collections:** today's revenue totals by payment method (Cash / GCash / Card / Other) spanning both `CLIENT_TRANSACTION` and `POS_SALE` records. Voided transactions excluded. Links to the full Collections Summary view (US-5.4). Enables daily cash drawer reconciliation from the Dashboard.
 - **Frequent walk-ins:** top 5 walk-in clients (no active membership) sorted by visit count descending, with last visit date and visit count. "View all →" links to the Client List filtered to "Walk-in only." Supports same-visit conversion outreach. (ADR-016)
 - **At-risk members:** active MEMBER clients (`end_date >= today`) whose last visit exceeds `Gym.member_inactivity_warning_days`. Sorted by days since last visit descending. Shows up to 5 clients with: name, days since last visit, and membership expiry date. "View all →" links to the Client List filtered by "At risk." (ADR-019, US-2.11)
 
@@ -43,17 +48,21 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - All chart and metric data excludes voided transactions (both `CLIENT_TRANSACTION` and `POS_SALE`).
 - "Expiring Soon" threshold uses `Gym.expiration_warning_days` setting throughout.
 - "At-risk members" panel uses `Gym.member_inactivity_warning_days` consistently with the Client List "At risk" filter and the At-risk Members Report.
-- Revenue figures are always MTD when "Month" period is selected.
+- Revenue figures are always MTD when "Month" period is selected; Today's Revenue KPI card always shows the current calendar day regardless of period selector.
 - Attendance charts distinguish total check-ins from unique visitors.
+- Inventory Value KPI excludes products with null `cost_price` — the excluded count is displayed so the owner knows the figure may be understated.
+- Today's Collections live feed panel aggregates from the same Transaction ledger as the Revenue by Payment Method report — figures are consistent.
 
 **Performance requirement:** Must load within 3 seconds (NFR).
 
 **Edge Cases:**
-- Empty state (brand-new gym, zero data) — all charts render with empty axes and a "no data yet" label; KPI cards show zeros.
+- Empty state (brand-new gym, zero data) — all charts render with empty axes and a "no data yet" label; KPI cards show zeros; Inventory Value shows ₱0 or "No products with cost price set."
 - Partial period (e.g., "Month" selected on the 3rd) — chart shows available days only.
 - Voided transactions excluded from all revenue metrics and charts consistently.
 - At-risk members panel empty state: if no active MEMBER clients have exceeded the inactivity threshold, panel shows "All active members have visited recently."
 - At-risk panel shows only clients with active memberships — expired members are excluded (they belong to the "Expiring soon" and renewal outreach workflows).
+- Today's Collections panel shows ₱0 with all payment method rows visible if no transactions have been recorded today — never a blank/missing panel.
+- Days-until-stockout estimate in Inventory alerts shows "No recent sales" instead of a number if the product has zero sales in the last 30 days.
 
 **Deferred:**
 - Customizable widget layout.
@@ -283,30 +292,43 @@ Attendance (single top-level nav entry)
 
 **MVP Scope / Forms:**
 - **Payment Method Selection:** Cash / GCash / Card / Other — captured on every client transaction (walk-in fee or membership payment).
-- **Client Payment History:** chronological list of all `CLIENT_TRANSACTION` records, filterable by date, client, and payment method.
-- **Void Transaction:** owner-initiated reversal with a required reason note.
+- **Client Payment History:** chronological list of all `CLIENT_TRANSACTION` records, filterable by date, client, and payment method. Voided transactions shown with VOID badge, void reason category, and void note.
+- **Void Transaction:** owner-initiated reversal with a required `void_reason_category` (structured enum) and an optional detail note. Detail note is required when category = `OTHER`. (ADR-028)
+- **Collections Summary:** daily revenue totals by payment method spanning both `CLIENT_TRANSACTION` and `POS_SALE` records. Enables daily cash drawer and digital payment reconciliation. (US-5.4, Flow 17)
+
+**Collections Summary view:**
+- Accessible from a tab or action within the Client Payments module.
+- Defaults to today; date selector allows viewing any prior day.
+- Displays: Payment Method | Transaction Count | Total Amount, for each of Cash / GCash / Card / Other, with a Grand Total row.
+- Spans both `CLIENT_TRANSACTION` and `POS_SALE` records — all money collected on the selected day.
+- Voided transactions excluded from all totals.
+- This is the primary daily reconciliation surface for the owner — it answers "how much cash should be in my drawer?" without navigating to Reports.
 
 **How client payments are created:**
 Client payment records are always created as a byproduct of other flows — never standalone from this module:
 - A **walk-in fee** transaction is created within the Walk-In Attendance flow (Flow 3).
 - A **membership fee** transaction is created within the Membership Creation or Renewal flow (Flows 5 and 6).
-This module's primary function is the **history/audit view** and the **void action**.
+This module's primary function is the **history/audit view**, the **void action**, and the **collections summary**.
 
 **Business Rules Enforced:**
 - Every `CLIENT_TRANSACTION` requires a `client_id` — anonymous client transactions do not exist.
 - A `CLIENT_TRANSACTION` may only contain `MEMBERSHIP` and `WALK_IN_FEE` line items — `PRODUCT` items are not permitted in client transactions.
 - Price snapshot rule: the price at time of transaction is stored; live catalog prices are never queried to reconstruct past amounts.
-- Voided transactions are excluded from all revenue totals and reports but remain visible in the raw list with a `VOID` status badge and reason.
+- **Void reason category is required** — the void action cannot be confirmed without selecting a `void_reason_category`. When category = `OTHER`, a detail note is also required. (ADR-028)
+- Voided transactions are excluded from all revenue totals and reports but remain visible in the raw list with a `VOID` status badge, void reason category, and void note.
 - **Voiding a payment does not cancel the associated membership.** Financial correction and membership management are separate actions — the owner handles the membership record independently.
+- **Walk-in fees and membership purchases are always separate `CLIENT_TRANSACTION` records.** A single `CLIENT_TRANSACTION` never contains both `WALK_IN_FEE` and `MEMBERSHIP` line items simultaneously — these represent distinct financial events and are recorded independently regardless of whether they occur in the same visit (ADR-024).
+- **Walk-in fee override note:** when the walk-in fee charged differs from `Gym.default_walkin_fee`, the override reason note is optional but surfaced as a prompt to the owner. Stored in `TransactionLineItem.fee_override_note` on the WALK_IN_FEE line item.
 
 **Edge Cases:**
 - Owner voids a membership payment: the membership record itself is unaffected and remains active. If the owner also needs to cancel or adjust the membership, that is a separate action in the Membership module.
-- Walk-in fee already charged, same visit client decides to buy a membership: see Flow 7 (Walk-in → Member Conversion). The walk-in fee and membership are recorded as a single `CLIENT_TRANSACTION` with two line items (WALK_IN_FEE + MEMBERSHIP). No automatic credit calculation — owner adjusts membership price manually if desired.
+- Walk-in fee already charged, same visit client decides to buy a membership: see Flow 7 (Walk-in → Member Conversion). The original walk-in fee `CLIENT_TRANSACTION` remains intact — it is not voided. A separate `CLIENT_TRANSACTION` with a single `MEMBERSHIP` line item is created. If the owner wishes to offset the walk-in fee already collected, the price override field on the membership form handles this — no automatic credit calculation (ADR-024).
+- Collections Summary on a day with zero transactions: shows all four payment method rows with ₱0 and transaction count 0. Displays "No transactions recorded for this date" notice. Never blank.
+- Void reason category = `OTHER` with no detail note: blocked — system requires the detail note before confirming.
 
 **Deferred:**
-- Partial refund workflow (void covers MVP's correction need).
-- Discount/promo code engine (manual price override covers MVP need).
-- Receipt printing/emailing.
+- Partial refund workflow (US-5.6, void covers MVP's correction need).
+- Receipt printing/emailing (US-5.7).
 
 ---
 
@@ -322,35 +344,45 @@ This module's primary function is the **history/audit view** and the **void acti
   - `category` (required — select from ProductCategory)
   - `image` (optional — upload product photo for POS grid display)
   - `selling_price` (required — price per unit or per serving)
-  - `cost_price` (required — purchase cost per unit or serving; used for future margin reporting)
+  - `cost_price` (optional — purchase cost per unit or serving; snapshotted onto TransactionLineItem at sale time via ADR-026)
+  - **Gross Margin display** (read-only computed field on the form): shows `selling_price − cost_price` in ₱ and % when both are set; shows "— (no cost price set)" if cost_price is null. Updates in real time as either field is edited. (US-6.15)
   - `product_type` (required — `STANDARD_PRODUCT` or `SERVING_BASED_PRODUCT`)
   - `servings_per_container` (required if `SERVING_BASED_PRODUCT` — e.g., 70 for a tub of protein)
-  - `low_stock_threshold` (required — triggers dashboard alert)
+  - `container_selling_price` (optional — `SERVING_BASED_PRODUCT` only; enables Per Container mode on the POS screen; ADR-027)
+  - `low_stock_threshold` (required — triggers dashboard alert when `current_stock` falls below this value)
+  - `reorder_point` (optional — the stock level at which the owner should place a reorder; distinct from `low_stock_threshold`; see Module 7 for how it is surfaced in the Inventory view)
   - `is_active` (toggle — controls POS grid visibility)
 - **Archive Product:** sets `is_active = false`; product disappears from POS grid but all sales and inventory history remain fully intact.
 - **Product Categories:** create/edit product categories (e.g., Beverages, Supplements).
 
 **Product Types:**
 - `STANDARD_PRODUCT`: sold per unit (e.g., Water ₱25/bottle, Gatorade ₱45/bottle, Sting ₱25/can). `current_stock` = unit count.
-- `SERVING_BASED_PRODUCT`: sold per scoop/serving (e.g., Gold Standard Whey ₱50/scoop, 70 servings per tub). `current_stock` = remaining serving count.
+- `SERVING_BASED_PRODUCT`: sold per scoop/serving (e.g., Gold Standard Whey ₱50/scoop, 70 servings per tub). `current_stock` = remaining serving count. When `container_selling_price` is set, the POS grid also offers Per Container mode (see Flow 16 and US-6.14).
 
 **POS Screen:**
+- **Category Tabs:** displayed above the product grid — one tab per `ProductCategory` that has at least one active product, plus an "All" tab (default on load). Selecting a tab filters the grid to that category. Category filter and name search work simultaneously. (US-6.16)
 - **Product Grid:** displays all `is_active = true` products with image, name, and price. Tap to add to cart.
-- **Product Search:** real-time name filter within the POS screen.
-- **Shopping Cart:** running list of added items with quantity, unit price, and line total.
+- **Product Search:** real-time name filter; works alongside the active category tab.
+- **SERVING_BASED_PRODUCT mode toggle:** when `container_selling_price` is set, the product shows a "Per Serving / Per Container" toggle. Default: Per Serving. Selecting Per Container initiates Flow 16.
+- **Shopping Cart:** running list of added items with quantity, unit price, and line total. Cart total visible throughout.
 - **Quantity Adjustment:** increase/decrease quantity or remove items from cart before checkout.
-- **Checkout:** shows cart total → owner selects payment method → confirms → sale is recorded.
+- **Checkout:** shows cart total → owner selects payment method → (if Cash: "Cash received" input, system shows "Change: ₱X") → owner confirms → sale is recorded. (US-6.13)
 - **Quick Sale Buttons:** optionally configurable shortcuts for top-selling items (UX implementation detail).
 
 **POS History:**
+- **Summary strip at top of POS History:** Today's transaction count and today's POS revenue total — always visible without scrolling. Updates after each completed sale.
 - Chronological log of all `POS_SALE` records, filterable by date and payment method.
-- **Void POS Sale:** requires a reason note; reversal is additive (adjustment entries in inventory ledger), original sale record preserved.
+- **Void POS Sale:** requires selecting a `void_reason_category` (structured enum, required) and an optional detail note (required when category = `OTHER`). Reversal is additive (adjustment entries in inventory ledger); original sale record preserved with VOID badge, reason category, and note. (ADR-028)
 
 **Business Rules Enforced:**
 - A client is not required for a POS sale. `client_id` is null on all `POS_SALE` transactions.
-- **Price snapshot:** `unit_price` is copied from `Product.selling_price` at the moment the item is added to the cart. Changing a product's price later never alters a past sale.
+- **Price snapshot:** `unit_price` is copied from `Product.selling_price` (or `container_selling_price` in container mode) at the moment the sale is confirmed. Changing a product's price later never alters a past sale. (ADR-003)
+- **Cost price snapshot:** `cost_price_snapshot` is copied from `Product.cost_price` at the moment the sale is confirmed. Changing cost_price later never alters historical gross profit calculations. Null if cost_price was not set. (ADR-026)
 - Each `PRODUCT` line item in a completed POS sale triggers an `InventoryTransaction` (type=`SALE`) that decrements `current_stock`.
-- **Stock validation:** selling a quantity that would take stock below zero is blocked by default. Owner can proceed via an explicit "Force Sale" confirmation, which logs a flagged `ADJUSTMENT` entry — the override is never silent.
+- **Per Container mode stock deduction:** when a `SERVING_BASED_PRODUCT` is sold in Per Container mode, `current_stock` is decremented by `quantity × servings_per_container` — same effect as the equivalent per-serving sale. (ADR-027)
+- **Stock validation:** selling a quantity that would take stock below zero is blocked by default. Owner can proceed via an explicit "Force Sale" confirmation, which logs a flagged `ADJUSTMENT` entry — the override is never silent. (ADR-009)
+- **Cash change calculator:** when payment method = Cash, the "Cash received" field is displayed and the "Change" amount is computed in real time. Sale cannot be confirmed until cash received ≥ cart total. (US-6.13)
+- **Void reason category required:** the void action cannot be confirmed without selecting a `void_reason_category`. When category = `OTHER`, a detail note is required. (ADR-028)
 - Archived products (`is_active = false`) do not appear in the POS grid. They remain available in inventory management and historical reports.
 - Cart state is not persisted between sessions — navigating away without completing checkout discards the cart without creating any transaction record.
 
@@ -358,10 +390,15 @@ This module's primary function is the **history/audit view** and the **void acti
 - **Selling the last serving exactly to zero:** valid, must not be treated as an error.
 - **SERVING_BASED_PRODUCT stock management:** `current_stock` tracks whole servings only. If a partial serving remains in a container after the last "full" serving is recorded as sold, the owner handles any write-off via a manual inventory adjustment.
 - **Product archived mid-transaction:** if a product is archived while it exists in an open cart on another session, the cart completes normally — archiving is a catalog-forward action, not a retroactive block.
+- **Container mode: product without container_selling_price:** Per Container toggle is hidden; only Per Serving mode is available.
+- **Container mode: stock check in servings:** Force Sale applies when `quantity × servings_per_container > current_stock`; the warning shows "Only X servings remaining (~Z containers)."
+- **Cash received < cart total:** the sale cannot be confirmed. The "Change" display shows a negative or error state.
+- **Product with cost_price = null at sale time:** `cost_price_snapshot = null`. This sale will not contribute to gross profit totals in the Gross Profit Report (US-8.12). The report flags the gap.
+- **Zero-price product (selling_price = ₱0):** sale completes normally; total = ₱0. Valid for promotional giveaways.
 
 **Deferred:**
-- Discount code / promotional pricing engine.
-- Receipt printing/emailing.
+- Discount code / promotional pricing engine (US-6.11).
+- Receipt printing/emailing (US-6.12).
 - Barcode scanning for product entry.
 - Client-linked POS sale (optional client association for loyalty tracking).
 
@@ -372,29 +409,58 @@ This module's primary function is the **history/audit view** and the **void acti
 **Purpose:** Track and audit all stock movements — POS sales deductions, restocks, and manual corrections — with full auditability of how stock levels changed over time.
 
 **MVP Scope / Forms:**
-- **Restock (Record Purchase):** select product → enter quantity received.
+
+**Restock (Record Purchase):**
+- Select product → enter quantity received:
   - For `STANDARD_PRODUCT`: quantity in units (e.g., 24 bottles of water).
   - For `SERVING_BASED_PRODUCT`: quantity in containers → system multiplies by `servings_per_container` (e.g., 2 tubs × 70 servings = +140 servings to `current_stock`).
-  - Creates an `InventoryTransaction` (type=`PURCHASE`).
-- **Current Stock View:** all products with current stock level, low-stock visual flagging. `SERVING_BASED_PRODUCT` items show "X of Y servings remaining."
-- **Inventory Movement History:** chronological log of all `InventoryTransaction` records per product (`PURCHASE` / `SALE` / `ADJUSTMENT`).
-- **Manual Adjustment:** enter delta quantity + required reason note → creates `InventoryTransaction` (type=`ADJUSTMENT`).
+- Enter optional "Total cost paid" (decimal) — the total invoice amount for this restock event, not per-unit. Stored as `InventoryTransaction.total_restock_cost`. (US-7.5)
+- Creates an `InventoryTransaction` (type=`PURCHASE`); Inventory Movement History shows the total cost paid alongside the entry when present.
+
+**Current Stock View:**
+- All products with current stock level, low-stock visual flagging, and `reorder_point` indicator.
+- `SERVING_BASED_PRODUCT` items show "X of Y servings remaining per container" format.
+- **Days-Until-Stockout estimate:** per product — `current_stock ÷ average daily units/servings sold over the last 30 days` displayed as "~N days remaining." Shows "No recent sales data" when the product has had zero sales in the last 30 days. Calculated at query time, not stored. (US-7.6)
+- **Reorder indicator:** highlights products where `current_stock ≤ reorder_point` (when set), distinct from the `low_stock_threshold` alert — allows the owner to separate "alert me" from "time to order." (ADR-027)
+- **Inventory Valuation total:** a footer row at the bottom of the Current Stock view shows `SUM(current_stock × cost_price)` across all active products where `cost_price` is not null. Products without `cost_price` are counted and excluded from the total with a note: "N product(s) excluded — no cost price set." Also surfaced as a Dashboard KPI. (US-7.7)
+- **Shrinkage column (this month):** per product — total absolute quantity lost via ADJUSTMENT entries with a negative `quantity_delta` in the current calendar month. On hover or expand: breakdown by `adjustment_reason_category`. Zero shrinkage = dash. Non-zero = amber; > 10% of month's total sales quantity = red. (US-7.8)
+
+**Inventory Movement History:**
+- Chronological log of all `InventoryTransaction` records per product (`PURCHASE` / `SALE` / `ADJUSTMENT`).
+- PURCHASE entries show `total_restock_cost` when present.
+- ADJUSTMENT entries show `adjustment_reason_category` (structured label) and `note` (detail text when provided).
+
+**Manual Adjustment:**
+- Enter delta quantity + select `adjustment_reason_category` (required) + optional detail note.
+- `adjustment_reason_category` options: `DAMAGE` / `EXPIRY` / `THEFT` / `COUNT_CORRECTION` / `NATURAL_WASTAGE` / `PROMOTION` / `OTHER`.
+- When category = `OTHER`, a detail note is required.
+- Creates `InventoryTransaction` (type=`ADJUSTMENT`) with `adjustment_reason_category` and `note` stored.
 
 **Business Rules Enforced:**
 - Every stock change — POS sale, restock, or manual correction — is recorded as a discrete `InventoryTransaction` row. `Product.current_stock` is a cached value that must always be reconstructable by summing the movement ledger.
-- Manual adjustments require a reason note — non-negotiable for auditability.
+- **Adjustment reason category is required** for all manual adjustments. When category = `OTHER`, a detail note is also required. This is non-negotiable for auditability and shrinkage analysis.
 - `SERVING_BASED_PRODUCT`: restocking adds `quantity_received × servings_per_container` servings to `current_stock`.
+- **Shrinkage derivation:** shrinkage = total negative `quantity_delta` from ADJUSTMENT entries for a product over a period. This is derived at query time from the ledger — not a stored field. The Inventory Usage Report (US-8.9) includes a shrinkage breakdown by `adjustment_reason_category`.
+- `low_stock_threshold` and `reorder_point` are distinct concepts: `low_stock_threshold` controls the dashboard alert; `reorder_point` is the inventory-planning signal for when to place a supplier order (accounts for lead time). A product may have both, neither, or only one.
 - Discontinued products (`is_active = false`) remain visible in Inventory Management and movement history even after archiving.
+- Days-until-stockout estimate is advisory only — the calculation uses the last 30 days of ledger sales and is recalculated on each view load.
 
 **Edge Cases:**
 - **Selling the last serving exactly to zero:** valid, no error.
-- **Force Sale override:** if stock would go below zero, owner must explicitly confirm. The override logs a flagged `ADJUSTMENT` entry so the discrepancy is visible.
+- **Force Sale override:** if stock would go below zero, owner must explicitly confirm. The override logs a flagged `ADJUSTMENT` entry so the discrepancy is visible. For `SERVING_BASED_PRODUCT` in container mode, the Force Sale prompt shows "Only X servings remaining (~Z containers)."
 - **Discontinued product with remaining stock:** product is archived but stock is not zeroed. Owner manually adjusts if needed.
+- **Total cost paid on restock left blank:** fully valid — `total_restock_cost = null`. The Inventory Movement History entry shows no cost data for that row.
+- **Days-until-stockout with zero average sales:** displays "No recent sales data" — no division by zero error.
+- **Shrinkage with no adjustments this month:** shrinkage column shows a dash for the product.
+- **Reorder point not set:** the reorder indicator is not shown for that product. `low_stock_threshold` alert remains active independently.
+- **Adjustment category = OTHER with no detail note:** blocked — system requires the detail note before the adjustment can be confirmed.
+- **Product with null cost_price:** excluded from the Inventory Valuation total. The excluded count is shown so the owner knows the figure may be understated.
 
 **Deferred:**
-- Per-restock cost tracking and supplier information (cost_price is on Product for margin foundation; per-restock cost detail is deferred).
-- Automated reorder threshold notifications.
+- Per-unit supplier cost tracking and supplier entity management (US-7.9 rescoped from per-restock to per-unit is deferred). `total_restock_cost` on `InventoryTransaction` covers the MVP need.
+- Automated reorder notifications (US-7.9).
 - Barcode scanning for restock entry.
+- Expiry date tracking per product or per restock lot.
 
 ---
 
@@ -411,25 +477,29 @@ This module's primary function is the **history/audit view** and the **void acti
 - **Membership Reports:** Active / Expired / Expiring Soon lists, filterable and exportable.
 - **Best Sellers:** top products by units/servings sold and by revenue over a selected period.
 - **Frequent Walk-In Report:** clients with high visit count and no active membership — ranked by visit count, directly supports the conversion-tracking goal. Conversion detection uses the derived definition: MEMBER clients with WALK_IN attendance records predating their earliest Membership.created_at (ADR-020).
-- **Inventory Usage Report:** stock movement summary per product over a date range — units sold, restocked, and manually adjusted. Surfaces discrepancies between expected and actual stock.
+- **Inventory Usage Report:** stock movement summary per product over a date range — units sold, restocked, and manually adjusted. Includes a **Shrinkage section**: total negative adjustment quantity per product, broken down by `adjustment_reason_category` where set. Surfaces discrepancies between expected and actual stock. (US-8.9)
+- **Gross Profit Report:** per product, for the selected period — units/servings sold, revenue (sum of `unit_price × quantity`), COGS (sum of `cost_price_snapshot × quantity`), gross profit (revenue − COGS), and gross margin % (gross profit ÷ revenue × 100). Products with null `cost_price_snapshot` on any line items are flagged. Summary row shows blended totals and margin. Filterable by date range and product category. (US-8.12)
 - **Member Engagement Report:** for each active MEMBER client — total all-time visits, visits this month, visits last month, days since last visit. Default sort: days since last visit descending (least engaged first). Filterable by date range. (US-8.13)
 - **At-risk Members Report:** active MEMBER clients (`end_date >= today`) whose last attendance date exceeds `Gym.member_inactivity_warning_days`. Columns: name, membership expiry date, last visit date, days since last visit, total all-time visits. Sorted by days since last visit descending. (US-8.14)
 - **CSV Export:** every report listed above can be exported to CSV.
 
 **Business Rules Enforced:**
 - All reports read from the `Transaction` / `TransactionLineItem` ledger and the `Attendance` table directly.
-- Reports respect the price-snapshot rule: a report for last month reflects what was actually charged last month, even if prices have since changed.
-- Voided transactions (`status = VOID`) are excluded from all revenue totals consistently.
+- Reports respect the price-snapshot rule: a report for last month reflects what was actually charged last month, even if prices have since changed. (ADR-003)
+- Reports respect the cost-snapshot rule: the Gross Profit Report uses `TransactionLineItem.cost_price_snapshot`, not the live `Product.cost_price` — historical gross profit figures are permanently correct. (ADR-026)
+- Voided transactions (`status = VOID`) are excluded from all revenue and profit totals consistently.
 - Revenue by Payment Method and Revenue by Category span both transaction types (`CLIENT_TRANSACTION` and `POS_SALE`).
 - Member Engagement and At-risk reports use `Gym.member_inactivity_warning_days` consistently with the Dashboard panel and Client List filter.
+- Gross Profit Report: line items where `cost_price_snapshot = null` are excluded from COGS and gross profit totals; the report flags the count of sales without cost data so the owner knows the margin may be understated.
+- Shrinkage in Inventory Usage Report is calculated from ADJUSTMENT entries only — it does not include discrepancies between the ledger total and `Product.current_stock` (those are system integrity issues, not business-level shrinkage).
 
 **Edge Cases:**
-- Date range spanning a price change — report shows historically accurate figures (guaranteed by snapshot design).
+- Date range spanning a price or cost change — reports show historically accurate figures (guaranteed by snapshot design for both selling and cost prices).
 - Empty date ranges — render a clear "no data for this period" state, not a blank crash.
+- Gross Profit Report with all null cost_price_snapshot values — shows "No cost data available for this period" and does not render a margin %.
 
 **Deferred:**
-- PDF report export.
-- Profit-margin reporting — requires `cost_price × quantity_sold` aggregation. Foundation is laid at MVP by storing `cost_price` on `Product`; the report itself is deferred until the owner prioritizes it (US-8.12).
+- PDF report export (US-8.11).
 - Scheduled / automated report emails.
 
 ---
@@ -480,3 +550,10 @@ This module's primary function is the **history/audit view** and the **void acti
 | POS sales and client linking | POS sales do not require a client | Product purchases are quick cash transactions; the business value is inventory and revenue tracking, not per-customer purchase history |
 | Mixed checkout (client + products in one transaction) | Removed — client transactions and POS sales are separate flows | Does not reflect how the gym actually operates; adds UI complexity for the dominant use case |
 | cost_price on Product | Promoted to MVP scope | Zero marginal cost when building the POS module; enables future margin reporting without a schema migration |
+| cost_price_snapshot on TransactionLineItem | Added — same snapshot principle as unit_price | Historical gross profit must not be rewritten by future cost changes (ADR-026) |
+| Void reason tracking | Structured category enum required; free-text note becomes optional detail | Free text cannot be analyzed; category enums enable void pattern analysis (ADR-028) |
+| Adjustment reason tracking | Structured category enum required on all ADJUSTMENT entries | Enables shrinkage analysis by cause; same principle as void reason categories |
+| Whole-container sale for SERVING_BASED_PRODUCT | container_selling_price field + Per Container mode in POS | Entering serving count as quantity is error-prone and produces misleading transactions (ADR-027) |
+| End-of-day collections reconciliation | Collections Summary view in Client Payments module, spanning both transaction types | Owner's most frequent daily question cannot require navigating to Reports |
+| Gross profit reporting | Promoted to P0 (US-8.12) once cost_price_snapshot is in schema | With cost_price_snapshot added, gross profit is computable from existing data; no further schema work needed |
+| Daily revenue visibility | Today's Revenue KPI card added to Dashboard (distinct from MTD) | MTD is not useful for daily operational awareness; today's total is the owner's most actionable number |
