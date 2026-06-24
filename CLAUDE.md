@@ -65,7 +65,7 @@ Changes in one document almost always require updates in others. Use this map.
 
 ## Locked Design Decisions
 
-These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-033) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
+These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-039) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
 
 **gym_id on every entity (ADR-001, ADR-025):** Multi-tenancy foundation. Every entity — including child/detail entities (`Membership`, `TransactionLineItem`, `InventoryTransaction`) — carries a `gym_id` FK. Enables database-level Row-Level Security without join-chain subqueries.
 
@@ -93,16 +93,29 @@ These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-033) represent reso
 
 **Device target strategy (ADR-033):** Desktop-first design with mobile-responsive support. Tablet is NOT a primary design target. All data tables, reports, and admin views are designed for desktop viewports first. Mobile layouts adapt responsively. No native mobile app in scope for MVP.
 
+**Force Sale audit category (ADR-034):** `FORCED_SALE` is a system-assigned `adjustment_reason_category` value, auto-populated when a stock-negative override is confirmed. It does NOT appear in the owner-facing manual adjustment category selector. This keeps shrinkage analysis (owner-initiated) separate from forced-sale events (system-generated).
+
+**UTC timestamp storage (ADR-035):** All `timestamp` fields (created_at, updated_at, deleted_at, transaction_date) are stored in UTC. `Gym.timezone` (IANA identifier, e.g., "Asia/Manila") governs all display conversion and "today" boundary calculations. `date` fields (start_date, end_date, visit_date) and `time` fields (time_in, time_out) are stored as local calendar/clock values — no conversion needed.
+
+**Dashboard frequent walk-ins (ADR-036):** The Dashboard "Frequent walk-ins" panel always shows the top 5 walk-in clients sorted by visit count descending, regardless of `Gym.walkin_conversion_prompt_visits`. The threshold setting governs only: (1) the check-in conversion prompt, (2) the Attendance Analytics Walk-In Insights count, and (3) the Frequent Walk-Ins Report.
+
+**Upcoming membership status (ADR-037):** `UPCOMING` is a fourth MEMBER client status: no active membership, but at least one membership where `start_date > today`. Status precedence: EXPIRING_SOON → ACTIVE → UPCOMING → EXPIRED. An eighth filter chip (`Upcoming`) is added to the Client List. Creating a new membership is blocked when the client already has an upcoming membership (separate informational message, no "Go to Renew" redirect).
+
+**visit_type mutability exception (ADR-038):** Updating `Attendance.visit_type` from `WALK_IN` to `MEMBER` during Flow 7 (walk-in → member conversion) is a business workflow mutation, not a data correction. `correction_note` and `updated_at` are NOT set by this mutation — those fields are exclusively set by Flow 15 (time correction). This is the only permitted mutation path for `visit_type`.
+
+**Remove Gym.default_membership_fee (ADR-039):** `Gym.default_membership_fee` is removed. `MembershipPlan.default_price` is the authoritative source for membership pricing. `Gym.default_walkin_fee` is retained — walk-in fees are not plan-based.
+
 ## Domain Model Quick Reference
 
 Non-obvious field constraints that affect business rules across multiple documents:
 
 - **Membership** — `price_paid` (snapshot at purchase time), `status` (derived: `end_date >= today`), `renewed_from_membership_id` (self-FK — renewal chains, old record never mutated)
 - **Attendance** — `membership_id` (snapshot of which membership was active at check-in; never retroactively updated), `time_out` (nullable; reserved for future analytics — no MVP business logic touches it), `correction_note` (nullable; populated when `time_in` is corrected via Flow 15 / US-4.11), `updated_at` (nullable; set when a correction is applied — null on unedited records; non-null value is the sole marker of a corrected record)
-- **Product** — `product_type` (`STANDARD_PRODUCT` | `SERVING_BASED_PRODUCT`), `selling_price` (per unit or per serving), `current_stock` (units or remaining servings), `servings_per_container` (SERVING_BASED only), `container_selling_price` (nullable; SERVING_BASED only — enables Per Container POS mode), `low_stock_threshold` (dashboard alert trigger, distinct from `reorder_point`), `reorder_point` (nullable; inventory planning signal, accounts for lead time)
+- **Gym** — `default_walkin_fee` (active; walk-in fees are not plan-based), `timezone` (IANA identifier; governs all date/time display and "today" boundary, ADR-035). `default_membership_fee` does NOT exist — membership pricing is per-plan only (ADR-039).
+- **Product** — `product_type` (`STANDARD_PRODUCT` | `SERVING_BASED_PRODUCT`), `selling_price` (per unit or per serving), `current_stock` (units or remaining servings), `servings_per_container` (SERVING_BASED only), `container_selling_price` (nullable; SERVING_BASED only — enables Per Container POS mode), `low_stock_threshold` (dashboard alert trigger, distinct from `reorder_point`), `reorder_point` (nullable; inventory planning signal, accounts for lead time), `deleted_at` (nullable timestamp; null = active, non-null = archived — soft delete per ADR-005, not `is_active`)
 - **Transaction** — `transaction_type` (`CLIENT_TRANSACTION` | `POS_SALE`), `status` (`COMPLETED` | `VOID`), `void_reason_category` (enum, required when status=VOID: `DUPLICATE_ENTRY` | `WRONG_AMOUNT` | `WRONG_PRODUCT` | `CLIENT_CANCELLED` | `SYSTEM_ERROR` | `OTHER`), `void_reason_note` (optional detail; required when category=OTHER)
 - **TransactionLineItem** — `item_type` must match parent `transaction_type`; `unit_price` is always a price snapshot; `cost_price_snapshot` is always a cost snapshot (nullable — null if `Product.cost_price` was not set at time of sale); `fee_override_note` (nullable; populated on `WALK_IN_FEE` items when amount differs from `Gym.default_walkin_fee`)
-- **InventoryTransaction** — `type` (`PURCHASE` | `SALE` | `ADJUSTMENT`); `adjustment_reason_category` (enum, required when type=ADJUSTMENT: `DAMAGE` | `EXPIRY` | `THEFT` | `COUNT_CORRECTION` | `NATURAL_WASTAGE` | `PROMOTION` | `OTHER`); `total_restock_cost` (nullable decimal, populated on PURCHASE events)
+- **InventoryTransaction** — `type` (`PURCHASE` | `SALE` | `ADJUSTMENT`); `adjustment_reason_category` (enum, required when type=ADJUSTMENT: `DAMAGE` | `EXPIRY` | `THEFT` | `COUNT_CORRECTION` | `NATURAL_WASTAGE` | `PROMOTION` | `OTHER` | `FORCED_SALE`); `FORCED_SALE` is system-assigned on stock-negative overrides (ADR-034) and does NOT appear in the owner-facing selector; `total_restock_cost` (nullable decimal, populated on PURCHASE events)
 
 ## Key Business Rules
 
@@ -110,15 +123,15 @@ Rules that span multiple documents and are easy to get wrong in isolation:
 
 **Membership renewal date math (US-3.2, Flow 6):** Renewing while active → new period extends from *existing end_date*. Renewing after expiry → new period starts from *today*. Both paths create a new `Membership` record linked via `renewed_from_membership_id`; the previous record is never modified.
 
-**Walk-in → Member conversion (Flow 7, ADR-024):** Walk-in fees and membership purchases are ALWAYS separate `CLIENT_TRANSACTION` records. Pre-fee conversion: owner is redirected to Flow 5 with no walk-in fee collected. Post-fee conversion: the original walk-in fee transaction remains intact; a new membership-only `CLIENT_TRANSACTION` is created separately. No automatic walk-in fee credit — owner overrides the membership price manually if desired. The attendance record's `visit_type` is updated to `MEMBER` after conversion.
+**Walk-in → Member conversion (Flow 7, ADR-024, ADR-038):** Walk-in fees and membership purchases are ALWAYS separate `CLIENT_TRANSACTION` records. Pre-fee conversion: owner is redirected to Flow 5 with no walk-in fee collected. Post-fee conversion: the original walk-in fee transaction remains intact; a new membership-only `CLIENT_TRANSACTION` is created separately. No automatic walk-in fee credit — owner overrides the membership price manually if desired. The attendance record's `visit_type` is updated to `MEMBER` after conversion. This mutation is a business workflow exception — `correction_note` and `updated_at` are NOT set (those are Flow 15 only).
 
 **Serving-based restock (Flow 9, US-7.1):** Restocking N containers adds `N × servings_per_container` servings to `current_stock` — not N units.
 
 **Void is additive (Flow 11):** Voiding creates new reversal entries in the inventory ledger. Original records are never modified or deleted. Voided transactions are excluded from revenue totals but remain in the audit trail. Voiding a payment does not cancel the associated membership.
 
-**One active membership per client (US-3.1):** Creating a membership while one is active is blocked; the system redirects to Renew.
+**Membership creation blocking (US-3.1, ADR-037):** Creating a membership is blocked if the client has an active membership (redirects to Renew) OR an upcoming membership (informational block only, no Renew redirect). These are two distinct messages.
 
-**Future-dated memberships (Module Spec 3):** A pre-purchased membership with a future `start_date` is not counted as active until that date arrives.
+**Future-dated memberships (Module Spec 3, ADR-037):** A pre-purchased membership with a future `start_date` carries `UPCOMING` status until that date arrives — it is not counted as active. An existing UPCOMING membership blocks creating a new one.
 
 ## MVP Milestone Sequence
 

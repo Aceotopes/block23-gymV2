@@ -5,9 +5,53 @@ Newest entries at the top.
 
 ---
 
+## [#010] Blocker Resolution Patch — Pre-Tech-Stack Planning Complete — 2026-06-25
+
+**Commit:** _(Done)_
+
+**Purpose:** Resolve 7 planning blockers identified in the Planning Phase Exit Review (Log #009). All blockers were contradictions or undefined behaviors within the planning documents. No tech stack is selected yet — these are documentation-only changes.
+
+**New ADRs:**
+
+- **ADR-034 — Force Sale Inventory Category:** `FORCED_SALE` added as a system-assigned `adjustment_reason_category` value. Auto-populated by the Force Sale override flow; does not appear in the owner-facing manual adjustment selector. Keeps shrinkage analysis data clean.
+- **ADR-035 — UTC Timestamp Storage with Gym-Local Display:** All `timestamp` fields stored in UTC. `Gym.timezone` (IANA identifier) governs display conversion and "today" boundary calculations. `date` and `time` fields (start_date, end_date, visit_date, time_in, time_out) stored as local values — no conversion needed.
+- **ADR-036 — Dashboard Frequent Walk-Ins Panel Logic:** Panel always shows top 5 by visit count, no threshold filter. `Gym.walkin_conversion_prompt_visits` governs only: check-in conversion prompt, Attendance Analytics Walk-In Insights, and Frequent Walk-Ins Report.
+- **ADR-037 — Upcoming Membership Status:** Fourth MEMBER client status added. Precedence: EXPIRING_SOON → ACTIVE → UPCOMING → EXPIRED. Eighth filter chip added to Client List. Creating a new membership is blocked for both active (redirect to Renew) and upcoming (informational block only) cases.
+- **ADR-038 — visit_type Mutability Exception:** Updating `Attendance.visit_type` WALK_IN→MEMBER in Flow 7 is a business workflow mutation, not a data correction. `correction_note` and `updated_at` NOT set. Explicitly distinguished from Flow 15.
+- **ADR-039 — Remove Gym.default_membership_fee:** Field was a holdover from pre-plan-catalog design. `MembershipPlan.default_price` is authoritative. `Gym.default_walkin_fee` retained.
+
+**Changes by file:**
+
+- **DECISIONS.md:** ADR-034 through ADR-039 appended. ADR-005 amended with note clarifying Product uses `deleted_at` (not `is_active`).
+- **DOMAIN-MODEL.md:**
+  - Gym entity: `default_membership_fee` removed; `timezone` field added.
+  - Client entity: Derived status derivation updated — UPCOMING added as fourth status with full precedence order.
+  - Attendance entity: `visit_type` marked mutable via Flow 7 only; mutation rule block added; `correction_note`/`updated_at` clarified as Flow 15 only.
+  - Product entity: `is_active` replaced with `deleted_at` (nullable timestamp, soft delete per ADR-005).
+  - InventoryTransaction entity: `FORCED_SALE` added to `adjustment_reason_category` enum with system-only note.
+  - Cross-cutting design decisions: item 1 updated to reference `deleted_at` for both Client and Product; item 7 added for UTC timestamp storage.
+- **USER-STORIES.md:** Blocker Resolution Patch banner added. US-1.2 updated (timezone field ACs). US-1.3 scoped to walk-in fee only. US-2.4 updated (Upcoming badge reference). US-2.9 updated (8 filter chips with all definitions). US-3.1 updated (dual blocking rule — active + upcoming). US-6.3 updated (`deleted_at` reference). US-8.21 updated (`deleted_at IS NULL` / `IS NOT NULL`). US-1.9 updated (Dashboard panel removed from threshold scope).
+- **MODULE-SPECS.md:** Blocker Resolution Patch banner added. Module 1 (Dashboard): Frequent walk-ins panel note updated (top 5, no threshold). Module 2 (Clients): Filter chips updated to 8. Module 3 (Membership): Blocking rule updated for active + upcoming cases. Module 4 (Attendance): `visit_type` mutation business rule added. Module 6 (POS): Archive/soft-delete references updated to `deleted_at`. Module 7 (Inventory): `FORCED_SALE` documented as system-only. Module 8 (Reports): Slow-Moving/Dead Stock filter updated to `deleted_at IS NULL`. Module 9 (Settings): `timezone` added to Gym Information; `default_membership_fee` removed from Pricing; walk-in conversion threshold scope corrected.
+- **USER-FLOWS.md:** Flow 7: ADR-038 mutation note added. Flow 8: Product grid updated to `deleted_at IS NULL`.
+- **ROADMAP.md:** Milestone 1: timezone and walk-in-fee-only references updated. Milestone 2: Upcoming filter chip added. Milestone 3: Upcoming blocking case added. Milestone 6: Archive reference updated to `deleted_at`.
+- **CLAUDE.md:** ADR count updated to ADR-039. Locked Decisions: ADR-034 through ADR-039 entries added. Domain Model Quick Reference: Gym entry added (timezone, no default_membership_fee); Product entry updated (deleted_at, not is_active); InventoryTransaction updated (FORCED_SALE). Key Business Rules: Walk-in conversion note updated with ADR-038; membership blocking rule updated with UPCOMING case; future-dated membership rule updated with UPCOMING status name.
+
+**Decisions made:**
+
+- ADR-034: Force Sale audit category (system-assigned, not owner-selectable)
+- ADR-035: UTC storage with gym-local display via Gym.timezone
+- ADR-036: Dashboard frequent walk-ins = top 5, no threshold filter
+- ADR-037: Upcoming as fourth MEMBER status, dual blocking rule
+- ADR-038: visit_type mutation in Flow 7 is a business workflow exception, not a data correction
+- ADR-039: Gym.default_membership_fee removed in favor of MembershipPlan.default_price
+
+**Planning Phase Status:** Complete. All 7 pre-tech-stack blockers resolved. Next step: Tech Stack Identification.
+
+---
+
 ## [#009] Planning Phase Exit Review Patch + Device Strategy ADR — 2026-06-24
 
-**Commit:** _(pending)_
+**Commit:** _(Done)_
 
 **Changes from previous commit:**
 

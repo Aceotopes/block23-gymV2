@@ -44,13 +44,13 @@ erDiagram
 | name | string | |
 | address | string | |
 | contact_info | string | phone/email |
-| default_membership_fee | decimal | |
 | default_walkin_fee | decimal | |
 | expiration_warning_days | int | drives "expiring soon" dashboard flag |
 | walkin_inactivity_threshold_days | int | default: 7; drives walk-in "Inactive" status |
 | member_inactivity_warning_days | int | default: 14; drives the "At risk" MEMBER client signal — active MEMBER clients who haven't visited within this window are surfaced in the "At risk" filter chip, Dashboard panel, and At-risk Members Report (ADR-019) |
-| walkin_conversion_prompt_visits | int | default: 5; walk-in clients who reach this cumulative visit count with no Membership record trigger the pre-fee conversion prompt during check-in |
-| created_at / updated_at | timestamp | |
+| walkin_conversion_prompt_visits | int | default: 5; walk-in clients who reach this cumulative visit count with no Membership record trigger the pre-fee conversion prompt during check-in (Flow 3/14) and the Attendance Analytics frequent walk-in count — does NOT govern the Dashboard "Frequent walk-ins" top-5 panel (ADR-036) |
+| timezone | string | IANA timezone identifier (e.g., "Asia/Manila"); all UTC-stored timestamps are converted to this timezone for display; all "today" date comparisons use the current date in this timezone (ADR-035) |
+| created_at / updated_at | timestamp | stored in UTC (ADR-035) |
 
 **Reasoning:** In MVP there is exactly one row in this table. It exists anyway because adding `gym_id` as a foreign key to every other table *now* costs nothing, while adding it after the fact (post-launch, with real data) means rewriting every query and risking cross-tenant data leakage during migration. This is the cheapest insurance in the entire schema.
 
@@ -84,11 +84,12 @@ erDiagram
 | status | derived, not stored | branches by client_type — see derivation logic below |
 | created_at / updated_at / deleted_at | timestamp | soft delete only |
 
-**Status derivation logic (ADR-017):**
-- **`MEMBER` type clients** — derived from membership dates:
-  - `ACTIVE`: has a membership where `start_date ≤ today ≤ end_date`
-  - `EXPIRING_SOON`: active membership with `end_date` within `Gym.expiration_warning_days`
-  - `EXPIRED`: most recent membership has `end_date < today` and no current active membership
+**Status derivation logic (ADR-017, ADR-037):**
+- **`MEMBER` type clients** — derived from membership dates (precedence order: EXPIRING_SOON → ACTIVE → UPCOMING → EXPIRED):
+  - `EXPIRING_SOON`: has an active membership (`start_date ≤ today ≤ end_date`) with `end_date` within `Gym.expiration_warning_days` of today
+  - `ACTIVE`: has an active membership (`start_date ≤ today ≤ end_date`) where `end_date` is not within the warning window
+  - `UPCOMING`: no active membership, but at least one membership where `start_date > today` (ADR-037)
+  - `EXPIRED`: no active or upcoming membership; most recent membership has `end_date < today`
 - **`WALK_IN` type clients** — derived from attendance recency:
   - `ACTIVE`: `max(Attendance.date)` is within `Gym.walkin_inactivity_threshold_days` of today
   - `INACTIVE`: `max(Attendance.date)` exceeds the threshold, or client has no attendance records at all
@@ -147,15 +148,17 @@ erDiagram
 | visit_date | date | |
 | time_in | time | |
 | time_out | time, nullable | **not used in MVP fee logic**, but captured as a free nullable field now so future occupancy/duration analytics don't require a schema migration |
-| visit_type | enum | `MEMBER` / `WALK_IN` |
+| visit_type | enum | `MEMBER` / `WALK_IN` — **mutable via Flow 7 conversion only** (see mutation note below); immutable in all other contexts (ADR-038) |
 | membership_id | FK → Membership, nullable | **snapshot link** — records which membership (if any) was active at time of visit, so later expiry/renewal never rewrites historical attendance meaning |
-| fee_charged | decimal, nullable | populated for WALK_IN visits |
+| fee_charged | decimal, nullable | populated for WALK_IN visits; null or zero for MEMBER visits |
 | created_by | FK → User, required | records which user logged the check-in; forward-compatible with staff accounts (US-1.5, P2) without migration; follows `Transaction.created_by` pattern (ADR-021) |
-| correction_note | text, nullable | populated when `time_in` is edited post-creation (Flow 15); stores the owner's reason for the correction; null on all unedited records |
-| created_at | timestamp | |
-| updated_at | timestamp, nullable | set to current timestamp when a correction is applied (Flow 15, US-4.11); null on all records that have never been corrected — the presence of a non-null value is the sole marker of a corrected record |
+| correction_note | text, nullable | populated when `time_in` is edited post-creation via **Flow 15 data correction only**; stores the owner's reason for the correction; null on all unedited records; NOT populated by Flow 7 conversion mutation |
+| created_at | timestamp | stored in UTC (ADR-035) |
+| updated_at | timestamp, nullable | set to current timestamp when a **Flow 15 data correction** is applied (US-4.11); null on all records that have never been corrected — a non-null value is the sole marker of a Flow 15 correction; NOT set by the Flow 7 visit_type business mutation (ADR-038) |
 
 **Reasoning for `membership_id` snapshot link:** Without it, a report asking "was this person a paying member on March 3rd" would require reconstructing membership date ranges retroactively — fragile and slow. Storing the link at the moment of check-in makes this a simple, permanently-correct lookup.
+
+**`visit_type` mutation rule (ADR-038):** `visit_type` is mutable in exactly one context — the same-visit walk-in → member conversion workflow (Flow 7). When the owner purchases a membership for a client mid-visit, the existing Attendance record's `visit_type` is updated from `WALK_IN` to `MEMBER`. This is a business workflow mutation reflecting real-time status change, not a data correction. `correction_note` and `updated_at` are NOT set by this mutation. In all other contexts, `visit_type` is immutable after creation.
 
 **Conversion derivation (ADR-020):** Walk-in-to-member conversion is detected at query time: MEMBER-type clients who have ≥ 1 Attendance record with `visit_type = WALK_IN` where `visit_date` predates their earliest `Membership.created_at`. No conversion event entity or stored conversion date exists — the derivation uses existing Attendance and Membership records and must be applied consistently across all surfaces that display conversion data (US-8.8, US-2.10, Dashboard "Frequent walk-ins" panel).
 
@@ -189,8 +192,8 @@ erDiagram
 | container_selling_price | decimal, nullable | SERVING_BASED_PRODUCT only — price for a whole container; enables Per Container mode in POS checkout without manual quantity calculation (ADR-027) |
 | low_stock_threshold | decimal | drives dashboard low-stock alert; distinct from reorder_point |
 | reorder_point | int, nullable | stock level at which the owner should place a reorder order — distinct from low_stock_threshold (which drives the alert); accounts for supplier lead time (e.g., alert at 5, reorder at 20) |
-| is_active | bool | soft "discontinue" flag — archived products are hidden from POS but history is preserved |
-| created_at / updated_at | timestamp | |
+| deleted_at | timestamp, nullable | soft delete — null means active (visible in POS); non-null means archived (hidden from POS, all history preserved). See ADR-005. |
+| created_at / updated_at | timestamp | stored in UTC (ADR-035) |
 
 ---
 
@@ -205,7 +208,7 @@ erDiagram
 | quantity_delta | decimal | positive for purchase/adjustment-up, negative for sale/adjustment-down |
 | resulting_stock | decimal | snapshot of stock level immediately after this movement — enables point-in-time auditing without recomputation |
 | reference_transaction_line_item_id | FK → TransactionLineItem, nullable | links a SALE movement back to the sale that caused it |
-| adjustment_reason_category | enum, nullable | required when type = `ADJUSTMENT` — `DAMAGE`, `EXPIRY`, `THEFT`, `COUNT_CORRECTION`, `NATURAL_WASTAGE`, `PROMOTION`, `OTHER`; enables shrinkage analysis by category |
+| adjustment_reason_category | enum, nullable | required when type = `ADJUSTMENT` — `DAMAGE`, `EXPIRY`, `THEFT`, `COUNT_CORRECTION`, `NATURAL_WASTAGE`, `PROMOTION`, `OTHER`, `FORCED_SALE`; `FORCED_SALE` is system-assigned on Force Sale overrides (ADR-034) and does not appear in the owner-facing manual adjustment selector; all other values are owner-selected; enables shrinkage analysis by category |
 | total_restock_cost | decimal, nullable | populated when type = `PURCHASE` — total amount paid for this restock event; enables basic spending tracking without per-unit supplier management (ADR-027 scope); aggregated by period in the Restock Cost Report (US-8.18) — null entries are excluded from period totals |
 | note | string, nullable | optional supporting detail; required for `ADJUSTMENT` type only when adjustment_reason_category = `OTHER` |
 | created_at | timestamp | |
@@ -260,12 +263,13 @@ erDiagram
 
 ## Cross-Cutting Design Decisions
 
-1. **Soft deletes everywhere financial/historical data is involved** (`Client`, `Product`). Hard deletes are reserved for things with zero downstream references (e.g., an unused draft).
+1. **Soft deletes everywhere financial/historical data is involved** (`Client`, `Product`) — both use `deleted_at` timestamp (ADR-005). Hard deletes are reserved for entities with zero downstream references. `MembershipPlan.is_active` is a retirement flag, not a soft delete — retired plans are never deleted.
 2. **`gym_id` on every table, including child and detail entities** — see Gym entity reasoning above and ADR-025. `Membership`, `TransactionLineItem`, and `InventoryTransaction` each carry `gym_id` directly, enabling database-level Row-Level Security without join-based subqueries. This is the cheapest tenant-readiness investment available.
 3. **Derived status fields, not stored flags**, for anything computable from dates (Client status, Membership status). Avoids sync jobs and drift bugs.
 4. **Snapshots over live references** for anything involving money (`price_paid`, `unit_price`, `cost_price_snapshot`) — past transactions must never change meaning when current catalog data changes. The snapshot principle covers both the selling price and cost price at the moment of each transaction. See ADR-003 and ADR-026.
 5. **Ledgers over counters** for anything involving quantity (inventory) — a single mutable number can't be audited; an append-only movement log can.
 6. **Structured categories over free text** for audit-relevant fields (`void_reason_category`, `adjustment_reason_category`) — free text cannot be aggregated or analyzed for patterns. Category enums enable void rate monitoring and shrinkage-by-cause analysis. A companion detail note field preserves freeform context. See ADR-028.
+7. **UTC timestamp storage with gym-local display** — all `timestamp` fields are stored in UTC; displayed using `Gym.timezone` (ADR-035). Calendar `date` fields (start_date, end_date, visit_date) and `time` fields (time_in, time_out) are stored in local time and require no conversion. All "today" comparisons use `Gym.timezone` local date.
 
 ---
 

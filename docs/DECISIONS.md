@@ -68,6 +68,8 @@ Each entry: what was decided, why, and what alternative was rejected.
 
 **Rejected:** Hard delete with cascading nullification of foreign keys. This destroys the audit trail and makes past reports incorrect.
 
+**Amendment (2026-06-25):** The original `Product` entity in the domain model incorrectly implemented soft delete using `is_active: bool` rather than the `deleted_at` timestamp specified in this ADR. The domain model has been corrected to align with this ADR's stated rule: `Product.is_active` is removed; `Product.deleted_at` (nullable timestamp) is added. The POS grid and product catalog filter on `deleted_at IS NULL`; archived products (`deleted_at IS NOT NULL`) remain fully queryable for all historical reports and inventory auditing. The behavior is identical to `Client.deleted_at`.
+
 ---
 
 ## ADR-006: Single `Transaction` table with typed line items and `transaction_type` enum
@@ -489,3 +491,100 @@ Mobile support is required for the owner's secondary usage patterns: monitoring 
 **Rejected:** Tablet-first design. Rejected because (1) the owner's primary device is a laptop or desktop, not a tablet; (2) reports and data tables require full-width display that desktop-first serves better; (3) tablet-specific breakpoints add design and implementation cost without proportionate benefit when mobile-responsive design covers tablets adequately.
 
 **Rejected:** Native mobile app. Out of scope for MVP — a web-responsive design covers the owner's secondary mobile monitoring workflows without the overhead of a separate application.
+
+---
+
+## ADR-034: `FORCED_SALE` Category for Negative-Stock Override
+
+**Date:** 2026-06-25
+**Status:** Accepted
+
+**Decision:** Add `FORCED_SALE` to the `InventoryTransaction.adjustment_reason_category` enum. When the owner overrides the stock-block to sell below zero (ADR-009), the resulting `InventoryTransaction` (type=`ADJUSTMENT`) is automatically assigned `adjustment_reason_category = FORCED_SALE` — no manual category selection is required from the owner for this system-generated entry.
+
+**Why:** `adjustment_reason_category` is required for all `ADJUSTMENT`-type entries. The existing categories (`DAMAGE`, `EXPIRY`, `THEFT`, `COUNT_CORRECTION`, `NATURAL_WASTAGE`, `PROMOTION`, `OTHER`) are all manually initiated by the owner. A Force Sale override generates a system-created entry that none of these categories accurately describes. `COUNT_CORRECTION` is semantically wrong — it implies a physical count was done, not that a sale was forced through. A dedicated `FORCED_SALE` category enables: (1) clean audit trail distinguishing owner-caused stock discrepancies from demand-driven overrides; (2) future pattern analysis of how often the stock-block is bypassed; (3) separation from legitimate manual adjustments in shrinkage and void analysis reports.
+
+**Consequence:** The Force Sale ADJUSTMENT entry is created automatically by the system — the owner is not prompted to select a category. The `note` field is populated with a system-generated description: "Forced sale override — stock went negative." The entry is visually distinct in Inventory Movement History with a "FORCED SALE" label. `FORCED_SALE` is a system-only category and does not appear in the owner-facing manual adjustment category selector.
+
+**Rejected:** Using `COUNT_CORRECTION` as a proxy (semantically wrong). Treating Force Sale as a SALE entry that goes directly to negative stock without a separate ADJUSTMENT (loses the explicit audit signal for the override, contradicting ADR-009's requirement to log the discrepancy). Requiring the owner to select `OTHER` and type an explanation (adds friction to an already-interrupted flow; the override is confirmed by explicit UI; the system already knows what happened).
+
+---
+
+## ADR-035: UTC Timestamp Storage with Gym-Local Display
+
+**Date:** 2026-06-25
+**Status:** Accepted
+
+**Decision:** All `timestamp` (datetime) fields in the database are stored in UTC. All datetime values are displayed to the user in the gym's configured local timezone, determined by `Gym.timezone` — a new required field storing an IANA timezone identifier (e.g., `"Asia/Manila"`). Calendar `date` fields and `time` fields are stored as local values and require no UTC conversion.
+
+**Field classification by type:**
+- **UTC timestamps** (stored in UTC, displayed in `Gym.timezone`): `created_at`, `updated_at`, `deleted_at` on all entities; `Transaction.transaction_date`.
+- **Local calendar dates** (stored as `DATE`, no conversion needed): `Membership.start_date`, `Membership.end_date`, `Attendance.visit_date`.
+- **Local clock times** (stored as `TIME`, no conversion needed): `Attendance.time_in`, `Attendance.time_out`.
+- **All "today" comparisons** (membership expiry, at-risk windows, today's check-ins, inactivity thresholds) use the current calendar date in `Gym.timezone`, not UTC date.
+
+**Why:** UTC storage is the industry standard for avoiding ambiguous timestamps and daylight saving time edge cases. For the Philippines (UTC+8, no DST), DST is not a current concern, but UTC storage is a zero-cost investment that ensures correctness if timezone rules change, and is mandatory for the clean multi-tenant SaaS migration path (each future tenant may operate in a different timezone). Storing `Gym.timezone` as a database field means the system always knows the correct local context for display without hardcoding a timezone assumption.
+
+**Rejected:** Storing all timestamps in local time. Non-standard, creates ambiguity, and requires the application to always know the gym's timezone before interpreting any stored timestamp — identical overhead to the UTC approach, but without the correctness guarantee. Storing `time_in`/`time_out` as UTC timestamps. These fields are clock readings of a physical check-in event; converting them to UTC would complicate every "peak hours" query (e.g., "check-ins between 6 AM and 8 AM") with mandatory timezone math, adding complexity for no benefit since these fields have no cross-timezone query requirement.
+
+---
+
+## ADR-036: Dashboard "Frequent Walk-Ins" Panel — Top-5 Ranking, Not Threshold-Filtered
+
+**Date:** 2026-06-25
+**Status:** Accepted
+
+**Decision:** The Dashboard "Frequent walk-ins" live feed panel displays the top 5 walk-in clients (no active membership) sorted by visit count descending, with no minimum visit count threshold. `Gym.walkin_conversion_prompt_visits` does not govern this panel.
+
+**Why:** The panel's purpose is conversion opportunity discovery — showing the most active walk-in clients so the owner can take action in the moment. Applying the threshold filter would cause the panel to show zero results for a gym where all walk-ins are below the threshold (e.g., a new gym, or one with a high threshold setting), eliminating its operational value. The top-5 ranking always surfaces the best conversion candidates relative to the gym's current walk-in population, regardless of where the conversion prompt fires.
+
+**Consequence:** `Gym.walkin_conversion_prompt_visits` governs exactly three surfaces: (1) the pre-check-in conversion prompt during attendance recording (Flow 3/14, US-4.2); (2) the Attendance Analytics "Walk-In Insights" frequent walk-ins count (US-4.10); (3) the Frequent Walk-Ins Report (US-8.8). The Dashboard panel is governed by top-5 ranking only. US-1.9 is updated to reflect this boundary.
+
+**Rejected:** Threshold-filtered Dashboard panel (as originally stated in US-1.9 AC). This could produce an empty panel when walk-ins exist but none have reached the threshold — counterproductive for a panel meant to drive daily conversion outreach.
+
+---
+
+## ADR-037: "Upcoming" Membership Status and Client List Filter Chip
+
+**Date:** 2026-06-25
+**Status:** Accepted
+
+**Decision:** Add `UPCOMING` as a fourth status for `MEMBER`-type clients. Definition: `client_type = MEMBER`, no currently active membership (`start_date ≤ today ≤ end_date` is false for all records), and at least one future-dated membership (`start_date > today`). A new "Upcoming" filter chip is added to the Client List. The full MEMBER status derivation precedence order is: `EXPIRING_SOON` → `ACTIVE` → `UPCOMING` → `EXPIRED`.
+
+**Why:** Without `UPCOMING`, clients who have pre-purchased a future membership are invisible in all filter chips except "All." This creates a usability gap: the owner cannot distinguish between a client whose membership genuinely lapsed and needs renewal outreach versus one who already purchased their next period and requires no action. The "Upcoming" chip lets the owner confirm pre-purchases are on record without these clients cluttering the "Expired" outreach list.
+
+**Consequence:** The Client List filter chip set expands from 7 to 8: `All · Active · Upcoming · At risk · Expiring soon · Expired · Walk-in only · Inactive`. The Create Membership blocking rule is extended: creating a new membership is blocked if the client has any active OR upcoming membership (i.e., any Membership record where `end_date >= today` OR `start_date > today`). The blocking message for the upcoming case reads: "[Client name] has a membership starting [start_date]. No new membership can be created until that period ends." The "Renew" button context: UPCOMING clients show neither "Renew" nor "Renew early" — the context-aware button shows a disabled or informational state until the upcoming membership becomes active.
+
+**Rejected:** Including `UPCOMING` clients in the `ACTIVE` filter (semantically incorrect — the membership is not yet in effect; the client should not be treated as a currently paying member for daily operational purposes). Leaving `UPCOMING` clients visible in "All" only (creates owner confusion between lapsed members and pre-purchased members, inflating apparent "needs action" populations).
+
+---
+
+## ADR-038: Walk-In to Member Conversion as a Business Workflow Mutation
+
+**Date:** 2026-06-25
+**Status:** Accepted
+
+**Decision:** Updating `Attendance.visit_type` from `WALK_IN` to `MEMBER` during the same-visit walk-in → member conversion (Flow 7) is a **business workflow mutation** — not a data correction and not governed by Flow 15's correction rules. Two distinct record mutation types are defined:
+
+1. **Business workflow mutation (Flow 7):** updating `visit_type` to reflect a real change in the client's status that occurred during the visit. Intentional, part of a defined business event, no `correction_note` required, `updated_at` is not set by this mutation.
+2. **Data correction (Flow 15):** fixing a `time_in` clerical error on the same calendar day. Unintentional mistake, requires a reason note in `correction_note`, sets `updated_at` to current timestamp.
+
+**Why:** The visit started as a walk-in but the client purchased a membership before leaving — the `visit_type = MEMBER` update reflects business reality, not a correction of an error. Flow 15's `correction_note` + `updated_at` pattern exists specifically to mark clerical mistakes for audit. Applying that pattern to a normal business workflow would pollute the correction audit trail and add friction (mandatory reason note) to a legitimate, intentional operation. Prohibiting `visit_type` mutation would require deleting and recreating the Attendance record to handle conversion — destroying the original check-in timestamp and audit trail.
+
+**Consequence:** The Attendance entity explicitly documents `visit_type` as mutable only via the conversion workflow (Flow 7 business event). All other Attendance fields except `time_in` (which is correctable via Flow 15) are immutable after creation. `Attendance.correction_note` and `Attendance.updated_at` are exclusively indicators of a Flow 15 correction — a null `updated_at` with a `MEMBER` `visit_type` on a record that originally had `WALK_IN` is a valid, non-anomalous state.
+
+**Rejected:** Treating the Flow 7 conversion as a Flow 15-type correction (wrong semantic model — corrections fix mistakes; conversion records a legitimate business event). Making all Attendance fields fully immutable (forces deletion + recreation for conversions, destroying the original audit record).
+
+---
+
+## ADR-039: Remove `Gym.default_membership_fee`
+
+**Date:** 2026-06-25
+**Status:** Accepted
+
+**Decision:** `Gym.default_membership_fee` is removed from the `Gym` entity. Membership pricing is governed entirely by `MembershipPlan.default_price` (ADR-015). `Gym.default_walkin_fee` is retained — it is actively referenced in the walk-in fee prompt (Flow 3) and is not affected by this decision.
+
+**Why:** ADR-015 established the `MembershipPlan` catalog as the authoritative source for membership pricing. `Gym.default_membership_fee` was a holdover from the original pre-ADR-015 design (where memberships had no plan catalog) and was never removed when plans were introduced. Retaining a dead configuration field creates ambiguity: if an owner sees "default membership fee" in Gym Settings alongside plan prices in the Membership Plans catalog, it is unclear which the system uses. The answer is always "the plan price" — and since no user flow, module specification, or report uses `Gym.default_membership_fee` as a price source, the field is dead configuration that should be removed.
+
+**Consequence:** US-1.3 is updated to cover only the default walk-in fee. Settings → Pricing section removes the membership fee default field. Membership pricing is configured exclusively via Settings → Membership Plans (US-3.9, ADR-015).
+
+**Rejected:** Retaining the field as a "fallback" for custom memberships not tied to a plan. No flow was defined that uses this fallback; the plan catalog's last-active-plan guard ensures at least one plan always exists, making the fallback scenario impossible under the current design.

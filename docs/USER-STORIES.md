@@ -20,6 +20,8 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 > **Design Review #7 (2026-06-24):** Planning Phase Exit Review — patch applied. Blocker fixed: `Attendance.updated_at` added to DOMAIN-MODEL.md (Flow 15 referenced the field; entity definition did not include it). Two new P0 stories added: US-1.9 (Walk-In Conversion Prompt Threshold Setting — `Gym.walkin_conversion_prompt_visits` was cross-referenced in 4 documents but had no governing story) and US-4.11 (Attendance Record Correction — Flow 15 and Roadmap item existed but no acceptance criteria defined). Four low-severity domain model consistency fixes applied (User.updated_at, MembershipPlan.updated_at, ProductCategory timestamps). ADR-033 (Device Target Strategy) added — desktop-first, mobile-responsive. Total MVP story count: 77 → 79. See DECISIONS.md ADR-033.
 
+> **Blocker Resolution Patch (2026-06-25):** Seven pre-tech-stack blockers resolved. Changes: `Product` soft delete corrected to `deleted_at` (B1, ADR-005 amendment); `FORCED_SALE` enum category added to inventory adjustment (B2, ADR-034); UTC timestamp strategy adopted, `Gym.timezone` added (B3, ADR-035); Dashboard "Frequent walk-ins" panel confirmed as top-5 ranking, not threshold-filtered (B4, ADR-036); "Upcoming" membership status and filter chip added (B5, ADR-037); `visit_type` mutability exception in Flow 7 documented (B6, ADR-038); `Gym.default_membership_fee` removed (B7, ADR-039). See DECISIONS.md ADR-034 through ADR-039. No change to total MVP story count (79).
+
 ---
 
 ## 1. Authentication & Settings
@@ -32,9 +34,18 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - Failed login shows a generic error (no "username not found" vs "wrong password" distinction, to avoid leaking which usernames exist).
   - Session persists until logout or timeout.
 
-**US-1.2 (P0)** — As the Gym Owner, I want to configure my gym's name, address, and contact info, so that this information is available throughout the system (e.g., for future receipts/reports).
+**US-1.2 (P0)** — As the Gym Owner, I want to configure my gym's name, address, contact info, and local timezone, so that this information is available throughout the system and all times and dates display correctly for my location.
+- Acceptance Criteria:
+  - Gym settings form includes: name, address, contact info, and timezone selector.
+  - Timezone field uses an IANA timezone identifier (e.g., "Asia/Manila"). Default: "Asia/Manila".
+  - The selected timezone determines how all UTC-stored timestamps are displayed throughout the system (ADR-035).
+  - All "today" comparisons (membership expiry, check-in counts, at-risk windows) use the current calendar date in the configured timezone.
 
-**US-1.3 (P0)** — As the Gym Owner, I want to set the default membership fee and default walk-in fee, so that new registrations use sensible defaults without me typing them every time.
+**US-1.3 (P0)** — As the Gym Owner, I want to set the default walk-in fee, so that the walk-in fee prompt pre-populates with the correct amount without me typing it every time.
+- Acceptance Criteria:
+  - Settings → Pricing contains a single "Default walk-in fee" field.
+  - The value pre-populates the walk-in fee input during attendance recording (Flow 3); the owner may override it per transaction.
+  - Membership pricing is configured exclusively via Settings → Membership Plans (US-3.9) — there is no separate "default membership fee" setting (ADR-039).
 
 **US-1.4 (P0)** — As the Gym Owner, I want to set a "membership expiring soon" warning threshold (e.g., 5 days), so that the dashboard can flag members who need renewal outreach.
 
@@ -57,7 +68,7 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 - Acceptance Criteria:
   - Setting is configurable in Settings → System Preferences with a numeric "Walk-in conversion prompt threshold (visits)" field. Default: 5.
   - A walk-in client whose cumulative visit count reaches or exceeds this threshold — with no Membership record — triggers the conversion prompt during their next check-in (US-4.2, Flow 4).
-  - The same threshold governs "frequent walk-in" across all system surfaces: the Dashboard "Frequent walk-ins" live feed panel, the Attendance Analytics "Walk-In Insights" panel (US-4.10), and the Frequent Walk-Ins Report (US-8.8). All surfaces use `Gym.walkin_conversion_prompt_visits` — no surface applies a hardcoded threshold.
+  - This threshold governs three surfaces: (1) the pre-check-in conversion prompt (US-4.2, Flow 3/14); (2) the Attendance Analytics "Walk-In Insights" frequent walk-in count (US-4.10); (3) the Frequent Walk-Ins Report (US-8.8). The Dashboard "Frequent walk-ins" live feed panel displays the top-5 walk-in clients by visit count regardless of this threshold (ADR-036). No surface applies a hardcoded threshold.
   - Setting zero or a negative value is blocked with a validation error.
   - When the threshold is updated, the frequent walk-in count recalculates immediately on the next query — no backfill required (derived at runtime from Attendance records).
 
@@ -92,7 +103,7 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - Profile header displays a quick-stats strip: total all-time visits, visits this month, days until membership expiry (MEMBER clients), and walk-in visit count + days since last visit (WALK_IN clients).
   - Membership history tab shows a visual indicator (e.g., "VOID" badge) when the associated payment transaction was voided. The membership record itself remains unchanged; only the financial indicator is flagged.
   - Attendance history tab includes date range and visit type (MEMBER / WALK_IN) filters.
-  - A future-dated membership (start_date > today) displays an "Upcoming" status badge, not "Active." The client's type badge still shows `MEMBER` from the moment the membership record is created.
+  - A future-dated membership (`start_date > today`) displays an "Upcoming" status badge, not "Active." The client's type badge still shows `MEMBER` from the moment the membership record is created. The client appears in the "Upcoming" filter chip on the Client List (ADR-037).
 
 **US-2.5 (P0)** — As the Gym Owner, I want a client to exist in the system without ever having a membership (pure walk-in), so that I can track casual visitors too.
 
@@ -107,10 +118,12 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 **US-2.9 (P0)** — As the Gym Owner, I want to filter the client list by type and status, so that I can quickly find clients who need renewal outreach, conversion follow-up, or re-engagement without scrolling through all records.
 - Acceptance Criteria:
-  - Filter chips are always visible on the Client List: `All` · `Active` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive`.
-  - `Active` — shows MEMBER clients with an active membership AND WALK_IN clients whose last visit is within the inactivity threshold.
+  - Filter chips are always visible on the Client List: `All` · `Active` · `Upcoming` · `At risk` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive`.
+  - `Active` — shows MEMBER clients with an active membership (`start_date ≤ today ≤ end_date`) AND WALK_IN clients whose last visit is within the inactivity threshold.
+  - `Upcoming` — shows MEMBER clients with a future-dated membership (`start_date > today`) and no currently active membership (ADR-037).
+  - `At risk` — shows MEMBER clients with an active membership whose last visit exceeds `Gym.member_inactivity_warning_days`, or who have an active membership and no attendance records (ADR-019).
   - `Expiring soon` — shows MEMBER clients within `Gym.expiration_warning_days` of membership end.
-  - `Expired` — shows MEMBER clients with no current active membership.
+  - `Expired` — shows MEMBER clients with no active or upcoming membership; most recent membership has `end_date < today`.
   - `Walk-in only` — shows all WALK_IN type clients (both Active and Inactive walk-ins).
   - `Inactive` — shows WALK_IN clients whose last visit exceeds `Gym.walkin_inactivity_threshold_days`, or who have no attendance records.
   - Filters combine with name search: a filter chip and a name query are applied simultaneously.
@@ -146,8 +159,9 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 **US-3.1 (P0)** — As the Gym Owner, I want to create a membership for a client by selecting a plan (1/2/3 months or custom duration) and price, so that I can register new paying members.
 - Acceptance Criteria:
-  - System blocks creating a new active membership if the client already has an active (non-expired) membership — one active membership per client at a time.
-  - The blocking message reads: "[Client name] has an active membership until [end date]. Did you mean to Renew instead?" with a "Go to Renew" action that routes directly to the renewal flow.
+  - System blocks creating a new membership if the client already has any active or upcoming membership — one active or future-committed membership per client at a time (ADR-037).
+  - For an **active** membership: blocking message reads "[Client name] has an active membership until [end date]. Did you mean to Renew instead?" with a "Go to Renew" action.
+  - For an **upcoming** membership: blocking message reads "[Client name] has a membership starting [start date]. No new membership can be created until that period ends." No "Go to Renew" redirect (renewing an upcoming membership is not applicable).
   - Price defaults from the plan but can be overridden per transaction; the overridden price is what's recorded (price snapshot), not a live reference to the plan price.
 
 **US-3.2 (P0)** — As the Gym Owner, I want to renew an expired or expiring membership, so that the client can continue using the gym.
@@ -317,7 +331,13 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 **US-6.2 (P0)** — As the Gym Owner, I want to edit any product field at any time, so I can update pricing, images, categories, or thresholds without restrictions.
 
-**US-6.3 (P0)** — As the Gym Owner, I want to archive a product so it no longer appears in the POS, while keeping its full sales and inventory history intact.
+**US-6.3 (P0)** — As the Gym Owner, I want to archive (soft-delete) a product so it no longer appears in the POS, while keeping its full sales and inventory history intact.
+- Acceptance Criteria:
+  - Archiving a product sets `Product.deleted_at` to the current timestamp (soft delete, ADR-005).
+  - Archived products (`deleted_at IS NOT NULL`) are hidden from the POS product grid and catalog browse views.
+  - All historical sales, inventory transactions, and reports referencing the archived product remain fully intact and queryable.
+  - Archived products remain visible in Inventory Management and Movement History.
+  - An archived product can be restored (un-archived) by clearing `deleted_at`, making it visible in POS again.
 
 **US-6.4 (P0)** — As the Gym Owner, I want to configure serving-based products (e.g., protein powder) with a servings-per-container count and a price-per-serving, so the system tracks remaining scoops rather than container count.
 - Acceptance Criteria:
@@ -561,7 +581,7 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 **US-8.21 (P0)** — As the Gym Owner, I want a slow-moving and dead stock report showing products with no sales activity in a configurable window, so I can identify dead inventory and avoid re-ordering products that aren't selling.
 - Acceptance Criteria:
-  - Lookback window selector: **30 days** (default) · 60 days · 90 days. Report shows all active (`is_active = true`) products with zero sales in the selected window.
+  - Lookback window selector: **30 days** (default) · 60 days · 90 days. Report shows all active (`deleted_at IS NULL`) products with zero sales in the selected window.
   - Columns: product name, category, current stock, cost value locked in stock (`current_stock × cost_price` where `cost_price` is set; "—" if null), last sale date (or "Never sold" if no sales history exists), days since last sale.
   - Products with null `cost_price` show "—" in the cost value column; excluded from any cost-value subtotal.
   - Default sort: days since last sale descending (longest-inactive products first).

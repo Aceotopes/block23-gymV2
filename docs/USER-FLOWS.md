@@ -267,6 +267,8 @@ Walk-in→Member conversion is recorded implicitly (ADR-020):
     No separate conversion event entity is created.
 ```
 
+**visit_type mutation note (ADR-038):** The `visit_type` update from `WALK_IN` to `MEMBER` in step above is a **business workflow mutation**, not a data correction. It is NOT governed by Flow 15 (Attendance Record Correction). `Attendance.correction_note` and `Attendance.updated_at` are NOT set by this mutation — those fields are exclusively set by Flow 15 time-correction edits. The `visit_type` field has a single, explicit mutable path: this conversion flow only.
+
 **Note:** If the client also wants to purchase a product during this visit, that is handled as a separate, standalone POS sale — see Flow 8. Client transactions (membership fees, walk-in fees) and POS sales are always separate flows.
 
 **Reasoning:** Pre-fee conversion (Path A) produces one `MEMBERSHIP` transaction via Flow 5 — the walk-in fee is not collected. Post-fee conversion (Path B) produces a separate `MEMBERSHIP` transaction after the walk-in fee was already collected — two distinct financial events, two distinct records. The combined `WALK_IN_FEE + MEMBERSHIP` single-transaction model is not used: creating it after Flow 3 has committed the walk-in fee record would double-count walk-in revenue, and voiding the original walk-in fee to replace it misuses the void mechanism (reserved for data-entry errors, not business flow transitions). The manual price-override field covers any owner who wants to discount the membership price to account for the walk-in fee already paid. See ADR-024.
@@ -278,7 +280,7 @@ Walk-in→Member conversion is recorded implicitly (ADR-020):
 ```
 Owner opens POS screen
     ↓
-Product grid loads — all active products with image, name, and price
+Product grid loads — all active products (`deleted_at IS NULL`) with image, name, and price
     Category tabs displayed above grid: "All" (default) + one tab per ProductCategory
     ↓
 Owner selects a category tab (or searches by name)

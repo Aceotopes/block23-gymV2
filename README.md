@@ -4,7 +4,7 @@ A web-based management system for Block 23 Gym — handling member registration,
 
 ## Current Phase
 
-**Planning** — Requirements, domain model, and module specifications are complete. No application code yet.
+**Planning complete — ready for Tech Stack Identification.** All 39 architecture decisions are locked (ADR-001 through ADR-039). No application code yet.
 
 ## What This System Does
 
@@ -14,27 +14,25 @@ Replaces paper sign-in sheets and Excel sales logs with a centralized digital sy
 
 | Document | Description |
 |---|---|
-| [User Stories](docs/USER-STORIES.md) | 37 P0 (MVP) + 15 P2 (post-MVP) stories |
-| [User Flows](docs/USER-FLOWS.md) | End-to-end interaction flows for all modules |
-| [Domain Model](docs/DOMAIN-MODEL.md) | Entity-relationship diagram and schema rationale |
+| [User Stories](docs/USER-STORIES.md) | 79 P0 (MVP) + 14 P2 (post-MVP) stories across 8 modules |
+| [User Flows](docs/USER-FLOWS.md) | 17 end-to-end interaction flows covering all modules and edge cases |
+| [Domain Model](docs/DOMAIN-MODEL.md) | Entity definitions, field-level rationale, and schema design decisions |
 | [Module Specs](docs/MODULE-SPECS.md) | Field-level specs, business rules, and edge cases per module |
+| [Roadmap](docs/ROADMAP.md) | 8-milestone delivery sequence |
+| [Decisions](docs/DECISIONS.md) | 39 architecture decision records (ADR-001 – ADR-039) |
+| [Development Log](docs/DEVELOPMENT-LOG.md) | Per-commit change history |
 
 ## Modules (MVP Scope)
 
-- Auth & Settings
-- Client Management
-- Membership Management
-- Attendance
-- Sales & Transactions
-- Inventory & Products
-- Dashboard & Reports
+1. Auth & Settings
+2. Client Management
+3. Membership Management
+4. Attendance
+5. Client Payments
+6. POS & Product Sales
+7. Inventory
+8. Dashboard & Reports
 
 ## Tech Stack
 
 To be decided.
-
-## Navigation
-
-- [Roadmap](docs/ROADMAP.md) — delivery phases and milestones
-- [Decisions](docs/DECISIONS.md) — architecture decision log
-- [Development Log](docs/DEVELOPMENT-LOG.md) — per-commit change history

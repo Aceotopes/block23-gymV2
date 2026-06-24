@@ -10,12 +10,12 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 ### Milestone 1 — Foundation & Auth
 - [ ] Project setup (repo, database, backend, frontend scaffold)
 - [ ] Owner login with hashed credentials and session management (US-1.1)
-- [ ] Gym settings: name, address, contact info (US-1.2)
-- [ ] Default membership and walk-in fee configuration (US-1.3)
+- [ ] Gym settings: name, address, contact info, and timezone (IANA identifier — governs all date/time display and "today" comparisons, ADR-035) (US-1.2)
+- [ ] Default walk-in fee configuration (US-1.3) — membership pricing is managed per plan; no gym-level default membership fee (ADR-039)
 - [ ] Expiring-soon warning threshold setting (US-1.4)
 - [ ] Walk-in inactivity threshold setting — drives the "Inactive" client status (US-1.7)
 - [ ] Member inactivity warning threshold setting — drives the "At risk" MEMBER client signal (US-1.8)
-- [ ] Walk-in conversion prompt threshold setting — governs the check-in conversion prompt, Dashboard "Frequent walk-ins" panel, Attendance Analytics Walk-In Insights, and Frequent Walk-Ins Report (US-1.9)
+- [ ] Walk-in conversion prompt threshold setting — governs the check-in conversion prompt, Attendance Analytics Walk-In Insights, and Frequent Walk-Ins Report (US-1.9) — does NOT govern Dashboard "Frequent walk-ins" panel (ADR-036)
 
 ### Milestone 2 — Client Management
 - [ ] New client registration — name required, contact optional (US-2.1)
@@ -24,12 +24,12 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [ ] Client profile view: personal info, quick-stats strip, membership history (voided indicator), attendance history (filters), context-aware membership button (US-2.4)
 - [ ] Support pure walk-in clients with no membership (US-2.5)
 - [ ] Soft-delete / archive clients via overflow menu; "Show archived" toggle on Client List (US-2.6)
-- [ ] Status and type filter chips on Client List: All / Active / Expiring soon / Expired / Walk-in only / Inactive; client type (MEMBER/WALK_IN) badge on list and profile (US-2.9)
+- [ ] Status and type filter chips on Client List: All / Active / Upcoming / At risk / Expiring soon / Expired / Walk-in only / Inactive; client type (MEMBER/WALK_IN) badge on list and profile (US-2.9, ADR-037)
 - [ ] Walk-in conversion signals on Client Profile + Dashboard "Frequent walk-ins" feed (US-2.10)
 - [ ] At-risk member "At risk" filter chip on Client List + Dashboard "At-risk members" live feed panel (US-2.11)
 
 ### Milestone 3 — Membership Management
-- [ ] Create membership with plan selection and price override; blocking state with "Go to Renew" redirect if active membership exists (US-3.1)
+- [ ] Create membership with plan selection and price override; blocked if client has an active membership ("Go to Renew" redirect) or an upcoming membership (informational block, no redirect) (US-3.1, ADR-037)
 - [ ] Renew membership with context-aware button labels — extend from end date if not expired, from today if expired (US-3.2)
 - [ ] Custom plan duration — inline "Duration (days)" input when "Custom duration" selected (US-3.3)
 - [ ] Full membership history per client (US-3.4)
@@ -56,7 +56,7 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [ ] End-of-day collections summary: today's revenue totals by payment method (Cash / GCash / Card / Other) spanning CLIENT_TRANSACTION and POS_SALE, with date selector for prior days (US-5.4)
 
 ### Milestone 6 — POS & Product Sales
-- [ ] Product catalog: create, edit, archive products with name, category, image, selling price, cost price, product type, low-stock threshold, reorder_point, and gross margin display on the form (US-6.1 – US-6.3, US-6.15)
+- [ ] Product catalog: create, edit, soft-delete (archive) products via `deleted_at` — archived products excluded from POS grid and active-stock reports but retained for historical records (US-6.1 – US-6.3, US-6.15, ADR-005)
 - [ ] Serving-based product configuration: servings-per-container, price-per-serving, container_selling_price (optional), remaining servings tracking (US-6.4, US-6.14)
 - [ ] Product categories (US-6.5)
 - [ ] POS screen: category filter tabs, product grid with images, product search, SERVING_BASED_PRODUCT container mode toggle, shopping cart, quantity adjustment (US-6.6 – US-6.8, US-6.16)

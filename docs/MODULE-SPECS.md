@@ -16,6 +16,8 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 
 > **Design Review #7 (2026-06-24):** Planning Phase Exit Review — patch applied. Attendance Record Correction spec updated to reference `Attendance.updated_at` and US-4.11. Settings module System Preferences section now cross-references US-1.9 for the walk-in conversion prompt threshold. ADR-033 (Device Target Strategy) added — desktop-first, mobile-responsive; tablet not a primary target. See DECISIONS.md ADR-033.
 
+> **Blocker Resolution Patch (2026-06-25):** Seven pre-tech-stack blockers resolved across all modules. `Product.is_active` replaced with `Product.deleted_at` throughout (B1/ADR-005); `FORCED_SALE` added to inventory adjustment categories (B2/ADR-034); UTC timestamp strategy documented (B3/ADR-035); Dashboard "Frequent walk-ins" confirmed top-5, not threshold (B4/ADR-036); "Upcoming" filter chip and status added to Client List and Membership (B5/ADR-037); `visit_type` mutability exception documented in Attendance (B6/ADR-038); `Gym.default_membership_fee` removed from Settings (B7/ADR-039). See DECISIONS.md ADR-034 through ADR-039.
+
 ---
 
 ## 1. Dashboard Module
@@ -45,7 +47,7 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - **Expiring soon members:** list of members whose memberships expire within the warning window, sorted by soonest first, with days-remaining indicator and color-coded urgency (red < 7 days, amber 7–14 days).
 - **Inventory alerts:** products below `low_stock_threshold` with remaining count. For `SERVING_BASED_PRODUCT` items, shows remaining servings (e.g., "Whey Protein: 8 servings remaining"). Each alert row also shows the days-until-stockout estimate: "~N days remaining" (from US-7.6; blank if no recent sales data).
 - **Today's Collections:** today's revenue totals by payment method (Cash / GCash / Card / Other) spanning both `CLIENT_TRANSACTION` and `POS_SALE` records. Voided transactions excluded. Links to the full Collections Summary view (US-5.4). Enables daily cash drawer reconciliation from the Dashboard.
-- **Frequent walk-ins:** top 5 walk-in clients (no active membership) sorted by visit count descending, with last visit date and visit count. "View all →" links to the Client List filtered to "Walk-in only." Supports same-visit conversion outreach. (ADR-016)
+- **Frequent walk-ins:** top 5 walk-in clients (no active membership) sorted by total visit count descending, with last visit date and visit count. No minimum visit threshold — always shows the top 5 regardless of `Gym.walkin_conversion_prompt_visits` (ADR-036). "View all →" links to the Client List filtered to "Walk-in only." Supports same-visit conversion outreach. (ADR-016)
 - **At-risk members:** active MEMBER clients (`end_date >= today`) whose last visit exceeds `Gym.member_inactivity_warning_days`. Sorted by days since last visit descending. Shows up to 5 clients with: name, days since last visit, and membership expiry date. "View all →" links to the Client List filtered by "At risk." (ADR-019, US-2.11)
 
 **Business Rules Enforced:**
@@ -82,11 +84,12 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 **MVP Scope / Forms:**
 
 **Client List:**
-- Status filter chips always visible: `All` · `Active` · `At risk` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive`. Filters combine with name search. Filter state persists within the session. (ADR-014, ADR-017, ADR-019)
-  - `Active` — MEMBER clients with an active membership + WALK_IN clients whose last visit is within `Gym.walkin_inactivity_threshold_days`
+- Status filter chips always visible: `All` · `Active` · `Upcoming` · `At risk` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive`. Filters combine with name search. Filter state persists within the session. (ADR-014, ADR-017, ADR-019, ADR-037)
+  - `Active` — MEMBER clients with an active membership (`start_date ≤ today ≤ end_date`) + WALK_IN clients whose last visit is within `Gym.walkin_inactivity_threshold_days`
+  - `Upcoming` — MEMBER clients with a future-dated membership (`start_date > today`) and no currently active membership (ADR-037)
   - `At risk` — MEMBER clients with an active membership (`end_date >= today`) whose last `Attendance.visit_date` exceeds `Gym.member_inactivity_warning_days`, OR active MEMBER clients with no attendance records at all. Results sort by days since last visit descending by default. Does not overlap with "Inactive" (WALK_IN only). A client can match both "At risk" and "Expiring soon" simultaneously. (ADR-019)
   - `Expiring soon` — MEMBER clients within `Gym.expiration_warning_days` of membership end
-  - `Expired` — MEMBER clients with no current active membership
+  - `Expired` — MEMBER clients with no active or upcoming membership; most recent membership has `end_date < today`
   - `Walk-in only` — all WALK_IN type clients (Active and Inactive walk-ins combined)
   - `Inactive` — WALK_IN clients whose last visit exceeds `Gym.walkin_inactivity_threshold_days`, or who have never visited
 - Table columns: Full Name, Type (MEMBER / WALK_IN badge), Status (derived), Membership Expiry (members only — blank for walk-in clients), Contact Number, Actions.
@@ -165,7 +168,9 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - If "Custom duration" plan is selected, a "Duration (days)" numeric input field appears inline and is required.
 - `price` defaults from the selected plan's `default_price`, but is always overridable per transaction (price snapshot, not a live reference — ADR-003).
 - `start_date` defaults to today but can be future-dated (pre-purchase).
-- **Blocking state:** if the client already has an active (non-expired) membership, the Create Membership action is blocked. The blocking message reads: "[Client name] has an active membership until [end date]. Did you mean to Renew instead?" with a "Go to Renew" action that routes directly to the renewal flow.
+- **Blocking state:** the Create Membership action is blocked if the client has any active OR upcoming membership (ADR-037):
+  - **Active membership:** "[Client name] has an active membership until [end date]. Did you mean to Renew instead?" with a "Go to Renew" action.
+  - **Upcoming membership:** "[Client name] has a membership starting [start date]. No new membership can be created until that period ends." No "Go to Renew" redirect.
 
 **Renew Membership:**
 - Same plan/duration selector as Create, same price-override mechanic.
@@ -269,6 +274,7 @@ Attendance (single top-level nav entry)
 - **Pre-fee conversion prompt:** When a walk-in client's visit count reaches `Gym.walkin_conversion_prompt_visits` and they have no Membership record, a conversion prompt is shown before the fee is collected. Dismissible; the fee proceeds if dismissed.
 - **`Attendance.created_by` is mandatory (ADR-021):** Set to the authenticated user at check-in time.
 - **Attendance record correction is time-bounded:** Corrections limited to same-calendar-day records; require a reason note stored in `Attendance.correction_note`; only `time_in` is editable; `Attendance.updated_at` is set to current timestamp on save; no deletions permitted. (US-4.11)
+- **`visit_type` is mutable only via Flow 7 conversion:** Updating `visit_type` from `WALK_IN` to `MEMBER` during the same-visit walk-in → member conversion is a business workflow mutation, not a data correction. `correction_note` and `updated_at` are NOT set during this mutation. In all other contexts, `visit_type` is immutable after creation. (ADR-038)
 - **Attendance Analytics scope boundary:** Analytics panels surface aggregate counts, trends, and operational signals only. Detailed filterable record lists and CSV exports belong in the Reports module (US-8.5, US-8.13, US-8.14). This prevents duplication and maintains a clear boundary between in-module operational intelligence and archive-quality reporting.
 
 **Edge Cases:**
@@ -357,7 +363,7 @@ This module's primary function is the **history/audit view**, the **void action*
   - `low_stock_threshold` (required — triggers dashboard alert when `current_stock` falls below this value)
   - `reorder_point` (optional — the stock level at which the owner should place a reorder; distinct from `low_stock_threshold`; see Module 7 for how it is surfaced in the Inventory view)
   - `is_active` (toggle — controls POS grid visibility)
-- **Archive Product:** sets `is_active = false`; product disappears from POS grid but all sales and inventory history remain fully intact.
+- **Archive Product (soft delete):** sets `Product.deleted_at = now()`; product disappears from POS grid but all sales and inventory history remain fully intact. Archived products can be restored by clearing `deleted_at`. (ADR-005)
 - **Product Categories:** create/edit product categories (e.g., Beverages, Supplements).
 
 **Product Types:**
@@ -366,7 +372,7 @@ This module's primary function is the **history/audit view**, the **void action*
 
 **POS Screen:**
 - **Category Tabs:** displayed above the product grid — one tab per `ProductCategory` that has at least one active product, plus an "All" tab (default on load). Selecting a tab filters the grid to that category. Category filter and name search work simultaneously. (US-6.16)
-- **Product Grid:** displays all `is_active = true` products with image, name, and price. Tap to add to cart.
+- **Product Grid:** displays all active products (`deleted_at IS NULL`) with image, name, and price. Tap to add to cart.
 - **Product Search:** real-time name filter; works alongside the active category tab.
 - **SERVING_BASED_PRODUCT mode toggle:** when `container_selling_price` is set, the product shows a "Per Serving / Per Container" toggle. Default: Per Serving. Selecting Per Container initiates Flow 16.
 - **Shopping Cart:** running list of added items with quantity, unit price, and line total. Cart total visible throughout.
@@ -388,13 +394,13 @@ This module's primary function is the **history/audit view**, the **void action*
 - **Stock validation:** selling a quantity that would take stock below zero is blocked by default. Owner can proceed via an explicit "Force Sale" confirmation, which logs a flagged `ADJUSTMENT` entry — the override is never silent. (ADR-009)
 - **Cash change calculator:** when payment method = Cash, the "Cash received" field is displayed and the "Change" amount is computed in real time. Sale cannot be confirmed until cash received ≥ cart total. (US-6.13)
 - **Void reason category required:** the void action cannot be confirmed without selecting a `void_reason_category`. When category = `OTHER`, a detail note is required. (ADR-028)
-- Archived products (`is_active = false`) do not appear in the POS grid. They remain available in inventory management and historical reports.
+- Archived products (`deleted_at IS NOT NULL`) do not appear in the POS grid. They remain available in inventory management and historical reports.
 - Cart state is not persisted between sessions — navigating away without completing checkout discards the cart without creating any transaction record.
 
 **Edge Cases:**
 - **Selling the last serving exactly to zero:** valid, must not be treated as an error.
 - **SERVING_BASED_PRODUCT stock management:** `current_stock` tracks whole servings only. If a partial serving remains in a container after the last "full" serving is recorded as sold, the owner handles any write-off via a manual inventory adjustment.
-- **Product archived mid-transaction:** if a product is archived while it exists in an open cart on another session, the cart completes normally — archiving is a catalog-forward action, not a retroactive block.
+- **Product archived mid-transaction:** if a product is soft-deleted (`deleted_at` set) while it exists in an open cart on another session, the cart completes normally — archiving is a catalog-forward action, not a retroactive block.
 - **Container mode: product without container_selling_price:** Per Container toggle is hidden; only Per Serving mode is available.
 - **Container mode: stock check in servings:** Force Sale applies when `quantity × servings_per_container > current_stock`; the warning shows "Only X servings remaining (~Z containers)."
 - **Cash received < cart total:** the sale cannot be confirmed. The "Change" display shows a negative or error state.
@@ -437,7 +443,8 @@ This module's primary function is the **history/audit view**, the **void action*
 
 **Manual Adjustment:**
 - Enter delta quantity + select `adjustment_reason_category` (required) + optional detail note.
-- `adjustment_reason_category` options: `DAMAGE` / `EXPIRY` / `THEFT` / `COUNT_CORRECTION` / `NATURAL_WASTAGE` / `PROMOTION` / `OTHER`.
+- `adjustment_reason_category` options (owner-selectable): `DAMAGE` / `EXPIRY` / `THEFT` / `COUNT_CORRECTION` / `NATURAL_WASTAGE` / `PROMOTION` / `OTHER`.
+- `FORCED_SALE` is a system-only category assigned automatically on Force Sale overrides — it does not appear in the owner-facing selector (ADR-034).
 - When category = `OTHER`, a detail note is required.
 - Creates `InventoryTransaction` (type=`ADJUSTMENT`) with `adjustment_reason_category` and `note` stored.
 
@@ -452,7 +459,7 @@ This module's primary function is the **history/audit view**, the **void action*
 
 **Edge Cases:**
 - **Selling the last serving exactly to zero:** valid, no error.
-- **Force Sale override:** if stock would go below zero, owner must explicitly confirm. The override logs a flagged `ADJUSTMENT` entry so the discrepancy is visible. For `SERVING_BASED_PRODUCT` in container mode, the Force Sale prompt shows "Only X servings remaining (~Z containers)."
+- **Force Sale override:** if stock would go below zero, owner must explicitly confirm. The override automatically creates a flagged `InventoryTransaction` (type=`ADJUSTMENT`, `adjustment_reason_category = FORCED_SALE`, note = "Forced sale override — stock went negative") — no owner category selection required. `FORCED_SALE` entries are visually distinct in Inventory Movement History. For `SERVING_BASED_PRODUCT` in container mode, the Force Sale prompt shows "Only X servings remaining (~Z containers)." (ADR-034)
 - **Discontinued product with remaining stock:** product is archived but stock is not zeroed. Owner manually adjusts if needed.
 - **Total cost paid on restock left blank:** fully valid — `total_restock_cost = null`. The Inventory Movement History entry shows no cost data for that row.
 - **Days-until-stockout with zero average sales:** displays "No recent sales data" — no division by zero error.
@@ -492,7 +499,7 @@ This module's primary function is the **history/audit view**, the **void action*
 - **Restock Cost Report:** inventory spend aggregated from `InventoryTransaction.total_restock_cost` where `type = PURCHASE`. Detail rows per restock event; subtotal per product; grand total for the period. Null `total_restock_cost` entries listed separately with footnote and excluded from totals. Filterable by period and product category. (US-8.18)
 - **Membership Net Change Report:** per month — new memberships, renewals, expired memberships, net change (new + renewals − expired), cumulative active member count at end of period. Positive net change highlighted green; negative highlighted red. Default range: last 12 months. (US-8.19)
 - **Period-over-Period Revenue Comparison:** current period revenue vs. equivalent prior period side-by-side, broken down by source (Membership / Walk-In / Product / Total). % change column per row. Period presets: This Week vs. Last Week · This Month vs. Last Month · This Year vs. Last Year · Custom Range (prior range auto-matched to same duration). Voided transactions excluded. (US-8.20)
-- **Slow-Moving / Dead Stock Report:** active products with zero sales in a configurable lookback window (30 / 60 / 90 days, default 30). Columns: product, category, current stock, cost value locked in stock (`current_stock × cost_price`; "—" if null), last sale date, days since last sale. Default sort: longest-inactive first. Archived products excluded. (US-8.21)
+- **Slow-Moving / Dead Stock Report:** active products (`deleted_at IS NULL`) with zero sales in a configurable lookback window (30 / 60 / 90 days, default 30). Columns: product, category, current stock, cost value locked in stock (`current_stock × cost_price`; "—" if null), last sale date, days since last sale. Default sort: longest-inactive first. Archived products (`deleted_at IS NOT NULL`) excluded. (US-8.21)
 - **Converted Walk-Ins Report:** clients who converted from walk-in to member (derived per ADR-020) with conversion date within the selected period. Columns: client name, first walk-in date, walk-in visits before conversion, conversion date, days from first visit to conversion, membership plan purchased, price paid. Summary row: total conversions, average visits before conversion, average days to convert. (US-8.22)
 - **CSV Export:** every report listed above can be exported to CSV.
 
@@ -536,9 +543,9 @@ This module's primary function is the **history/audit view**, the **void action*
 **Purpose:** Centralize gym-specific configuration.
 
 **MVP Scope / Forms:**
-- **Gym Information:** name, address, contact info.
-- **Pricing:** default membership fee, default walk-in fee.
-- **System Preferences:** membership expiration warning period (days) (US-1.4); walk-in inactivity threshold (days, default: 7) (US-1.7); at-risk member threshold (days since last visit, default: 14) (US-1.8); walk-in conversion prompt threshold (visits, default: 5) — governs the check-in conversion prompt, Dashboard "Frequent walk-ins" panel, Attendance Analytics Walk-In Insights, and Frequent Walk-Ins Report (US-1.9).
+- **Gym Information:** name, address, contact info, timezone (IANA identifier, e.g., "Asia/Manila" — governs all date/time display and "today" comparisons, ADR-035).
+- **Pricing:** default walk-in fee only. Membership pricing is set per plan in the Membership Plans section — there is no gym-level default membership fee (ADR-039).
+- **System Preferences:** membership expiration warning period (days) (US-1.4); walk-in inactivity threshold (days, default: 7) (US-1.7); at-risk member threshold (days since last visit, default: 14) (US-1.8); walk-in conversion prompt threshold (visits, default: 5) — governs the check-in conversion prompt, Attendance Analytics Walk-In Insights, and Frequent Walk-Ins Report (US-1.9). Does NOT govern the Dashboard "Frequent walk-ins" panel (ADR-036).
 - **Membership Plans:** create, edit, and retire membership plan catalog entries. (ADR-015)
 
 **Membership Plans section:**
@@ -550,7 +557,7 @@ This module's primary function is the **history/audit view**, the **void action*
 - At least one active plan must exist at all times — the UI prevents deactivating the last active plan.
 
 **Business Rules Enforced:**
-- Changing a default price in Gym Information or in a Membership Plan affects only *future* transactions — it must never retroactively alter `price_paid` snapshots on existing records (enforced structurally by the Domain Model's snapshot design, ADR-003).
+- Changing the default walk-in fee in Gym Information, or changing a `default_price` in a Membership Plan, affects only *future* transactions — it must never retroactively alter `price_paid` snapshots on existing records (enforced structurally by the Domain Model's snapshot design, ADR-003).
 - Deactivating a plan does not cascade to existing memberships created under that plan.
 - When `member_inactivity_warning_days` is updated, the at-risk signal for all active MEMBER clients recalculates immediately on the next query — no backfill required (computed at runtime from Attendance records).
 - Setting `member_inactivity_warning_days` or `walkin_conversion_prompt_visits` to zero or a negative value is blocked with a validation error (same rule as all other numeric threshold settings).
