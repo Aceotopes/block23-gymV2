@@ -18,6 +18,7 @@ Replaces paper sign-in sheets and Excel sales logs with a centralized digital sy
 | [User Flows](docs/USER-FLOWS.md) | 17 end-to-end interaction flows covering all modules and edge cases |
 | [Domain Model](docs/DOMAIN-MODEL.md) | Entity definitions, field-level rationale, and schema design decisions |
 | [Module Specs](docs/MODULE-SPECS.md) | Field-level specs, business rules, and edge cases per module |
+| [Tech Stack](docs/TECH-STACK.md) | Approved technologies, architecture guidelines, and development rules |
 | [Roadmap](docs/ROADMAP.md) | 8-milestone delivery sequence |
 | [Decisions](docs/DECISIONS.md) | 39 architecture decision records (ADR-001 – ADR-039) |
 | [Development Log](docs/DEVELOPMENT-LOG.md) | Per-commit change history |

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Planning phase — no application code exists.** Planning documents are the source of truth for all design decisions. No tech stack has been selected. No implementation decisions should be made until the design is stable.
+**Tech stack selected — ready for Design System and implementation.** Planning documents and the tech stack are stable. No application code exists yet. See `docs/TECH-STACK.md` for the approved stack and all development rules.
 
 ## Planning Workflow
 
@@ -48,6 +48,7 @@ Each document has a defined ownership scope. Write changes to the right document
 | `docs/ROADMAP.md` | Milestone scope, delivery sequencing, and post-MVP backlog. |
 | `docs/DECISIONS.md` | Numbered ADRs — what was decided, why, and what was rejected. Every significant design decision goes here. |
 | `docs/DEVELOPMENT-LOG.md` | One entry per commit, newest first. Records what changed and which decisions were made. |
+| `docs/TECH-STACK.md` | Approved technology stack, architecture guidelines, development rules, and Claude Code guidance. Single source of truth for all technology decisions. |
 
 ## Document Synchronization Map
 

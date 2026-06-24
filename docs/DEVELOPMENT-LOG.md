@@ -5,6 +5,38 @@ Newest entries at the top.
 
 ---
 
+## [#011] Technology Stack Finalized — 2026-06-25
+
+**Commit:** _(Pending)_
+
+**Changes from previous commit:**
+
+- **docs/TECH-STACK.md (NEW):** Technology stack document created as the single source of truth for all technology decisions. Contains: Executive Summary, Technology Decision Matrix, Architecture Guidelines (Frontend, Backend, Database, Auth, State Management, Storage, Deployment, Testing), Development Rules (19 domain/architecture rules + 5 tooling rules), Rejected Technologies (Drizzle ORM, Auth.js, Railway), Future Architecture Considerations, Claude Code Guidance, and Remaining Decisions table.
+
+- **docs/TECH-STACK.md — Five supplementary decisions resolved and added:**
+  - **Package manager:** pnpm — faster installs, content-addressable store, native workspace support for future monorepo
+  - **Testing framework:** Vitest — ESM-native, TypeScript-native, no Babel transform required; unit tests for Zod schemas, derived status logic, and Server Action business rules; integration tests against a Neon test branch
+  - **E2E testing:** Playwright selected but deferred to post-Milestone-3; added once core flows are stable
+  - **Linting & formatting:** ESLint (eslint-config-next) + Prettier + prettier-plugin-tailwindcss; eslint-config-next includes react-hooks plugin which catches App Router-specific bugs; tailwindcss plugin auto-sorts class order
+  - **Connection pooling:** Neon built-in pooler over Prisma Accelerate — free, zero additional service, already part of the Neon setup; `DATABASE_URL` (pooled) for app runtime, `DATABASE_URL_UNPOOLED` (direct) for `prisma migrate deploy`
+
+- **README.md:** TECH-STACK.md added to the Project Documents table.
+
+- **CLAUDE.md:** Project status updated from "Planning phase" to "Tech stack selected — ready for Design System and implementation." TECH-STACK.md added to the Planning Documents table.
+
+**Decisions made:**
+
+- Full technology stack approved (see TECH-STACK.md Section 2 — Technology Decision Matrix)
+- pnpm as package manager
+- Vitest for unit and integration testing; scope: Zod schemas, derived status logic, Server Action business rules, Prisma query integration against Neon test branch
+- Playwright deferred to post-Milestone-3
+- ESLint (eslint-config-next) + Prettier + prettier-plugin-tailwindcss
+- Neon built-in connection pooler (not Prisma Accelerate)
+
+**Planning Phase Status:** Complete. Tech stack finalized. Next step: DESIGN-SYSTEM.md.
+
+---
+
 ## [#010] Blocker Resolution Patch — Pre-Tech-Stack Planning Complete — 2026-06-25
 
 **Commit:** _(Done)_

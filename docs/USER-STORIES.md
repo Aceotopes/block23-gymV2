@@ -386,7 +386,7 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 **US-6.16 (P0)** — As the Gym Owner, I want category filter tabs on the POS product grid so I can navigate to a product quickly without scrolling the entire catalog.
 - Acceptance Criteria:
   - Category tabs are displayed above the product grid: one tab per `ProductCategory` that has at least one active product, plus an "All" tab (default on load).
-  - Selecting a category tab filters the grid to show only `is_active = true` products in that category.
+  - Selecting a category tab filters the grid to show only active products (`deleted_at IS NULL`) in that category.
   - The category tab filter and the product name search work simultaneously — both constraints are applied together.
   - A category with no active products is hidden from the tab bar.
 
@@ -585,7 +585,7 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - Columns: product name, category, current stock, cost value locked in stock (`current_stock × cost_price` where `cost_price` is set; "—" if null), last sale date (or "Never sold" if no sales history exists), days since last sale.
   - Products with null `cost_price` show "—" in the cost value column; excluded from any cost-value subtotal.
   - Default sort: days since last sale descending (longest-inactive products first).
-  - Archived products (`is_active = false`) are excluded — this report is for active catalog items only.
+  - Archived products (`deleted_at IS NOT NULL`) are excluded — this report is for active catalog items only.
   - Exportable to CSV.
 
 **US-8.22 (P0)** — As the Gym Owner, I want a converted walk-ins report showing which walk-in clients became members during a period and how long it took them, so I can understand my conversion outcomes and what drives them.

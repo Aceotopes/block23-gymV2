@@ -362,7 +362,6 @@ This module's primary function is the **history/audit view**, the **void action*
   - `container_selling_price` (optional — `SERVING_BASED_PRODUCT` only; enables Per Container mode on the POS screen; ADR-027)
   - `low_stock_threshold` (required — triggers dashboard alert when `current_stock` falls below this value)
   - `reorder_point` (optional — the stock level at which the owner should place a reorder; distinct from `low_stock_threshold`; see Module 7 for how it is surfaced in the Inventory view)
-  - `is_active` (toggle — controls POS grid visibility)
 - **Archive Product (soft delete):** sets `Product.deleted_at = now()`; product disappears from POS grid but all sales and inventory history remain fully intact. Archived products can be restored by clearing `deleted_at`. (ADR-005)
 - **Product Categories:** create/edit product categories (e.g., Beverages, Supplements).
 
@@ -454,7 +453,7 @@ This module's primary function is the **history/audit view**, the **void action*
 - `SERVING_BASED_PRODUCT`: restocking adds `quantity_received × servings_per_container` servings to `current_stock`.
 - **Shrinkage derivation:** shrinkage = total negative `quantity_delta` from ADJUSTMENT entries for a product over a period. This is derived at query time from the ledger — not a stored field. The Inventory Usage Report (US-8.9) includes a shrinkage breakdown by `adjustment_reason_category`.
 - `low_stock_threshold` and `reorder_point` are distinct concepts: `low_stock_threshold` controls the dashboard alert; `reorder_point` is the inventory-planning signal for when to place a supplier order (accounts for lead time). A product may have both, neither, or only one.
-- Discontinued products (`is_active = false`) remain visible in Inventory Management and movement history even after archiving.
+- Archived products (`deleted_at IS NOT NULL`) remain visible in Inventory Management and movement history — the ledger is never hidden.
 - Days-until-stockout estimate is advisory only — the calculation uses the last 30 days of ledger sales and is recalculated on each view load.
 
 **Edge Cases:**
