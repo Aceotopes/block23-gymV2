@@ -461,3 +461,31 @@ All eight new reports are derivable from existing schema fields with zero new en
 - **ADR-028 (void categories):** US-8.15 delivers the void pattern detection benefit ADR-028 cited as its primary justification.
 - **ADR-003 / ADR-026 (snapshots):** All new financial reports respect snapshot rules — no report reads live catalog prices or cost prices for historical periods.
 - **ADR-015 (membership plans):** US-8.17 uses `Membership.membership_plan_id` + `price_paid` — both designed for this query pattern.
+
+---
+
+## ADR-033: Device Target Strategy
+
+**Date:** 2026-06-24
+**Status:** Accepted
+
+**Decision:** The system is designed desktop-first with full mobile-responsive support as a secondary target. Tablet is not a dedicated design target.
+
+- **Primary targets:** Desktop and laptop browsers.
+- **Secondary target:** Mobile phone browsers — responsive adaptation, not a native app.
+- **Tablet:** Not a primary design target; covered adequately by mobile-responsive layouts without dedicated breakpoints.
+
+**Why:** All primary operational workflows — client management, membership management, attendance recording, POS checkout, inventory management, reports, analytics, and settings — are data-dense and best served by a full desktop viewport. The gym owner operates from a desk or front counter. Reports and data tables require full-width column sets; compressing them to a tablet-first or mobile-first design forces truncation or horizontal scrolling on the surfaces the owner uses most.
+
+Mobile support is required for the owner's secondary usage patterns: monitoring the Dashboard from their phone while away from the desk, reviewing today's check-ins, checking revenue totals, and reviewing inventory alerts. These workflows are read-heavy and tolerate simplified layouts. No data-entry workflow is expected to be performed primarily on mobile.
+
+**Implications:**
+- All data tables, reports, and admin views are designed for a desktop viewport first.
+- Mobile layouts adapt responsively — simplified column sets, stacked card layouts, and bottom-navigation patterns are acceptable.
+- No tablet-specific design specifications or breakpoints are required.
+- The Design System must establish mobile breakpoints for responsive adaptation, not tablet-specific experiences.
+- No native mobile app is in scope for MVP.
+
+**Rejected:** Tablet-first design. Rejected because (1) the owner's primary device is a laptop or desktop, not a tablet; (2) reports and data tables require full-width display that desktop-first serves better; (3) tablet-specific breakpoints add design and implementation cost without proportionate benefit when mobile-responsive design covers tablets adequately.
+
+**Rejected:** Native mobile app. Out of scope for MVP — a web-responsive design covers the owner's secondary mobile monitoring workflows without the overhead of a separate application.

@@ -18,6 +18,8 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 > **Design Review #6 (2026-06-24):** Reports Module comprehensive review and expansion. Eight new P0 reports: US-8.15 (void analysis), US-8.16 (new vs. renewals), US-8.17 (membership plan performance), US-8.18 (restock cost), US-8.19 (membership net change), US-8.20 (period-over-period revenue comparison), US-8.21 (slow-moving / dead stock), US-8.22 (converted walk-ins). US-8.2 updated — annual and custom-range period options added. US-8.5 updated — full acceptance criteria specified. US-8.7 updated — slow-moving sort option added. Total MVP story count: 69 → 77. See DECISIONS.md ADR-029.
 
+> **Design Review #7 (2026-06-24):** Planning Phase Exit Review — patch applied. Blocker fixed: `Attendance.updated_at` added to DOMAIN-MODEL.md (Flow 15 referenced the field; entity definition did not include it). Two new P0 stories added: US-1.9 (Walk-In Conversion Prompt Threshold Setting — `Gym.walkin_conversion_prompt_visits` was cross-referenced in 4 documents but had no governing story) and US-4.11 (Attendance Record Correction — Flow 15 and Roadmap item existed but no acceptance criteria defined). Four low-severity domain model consistency fixes applied (User.updated_at, MembershipPlan.updated_at, ProductCategory timestamps). ADR-033 (Device Target Strategy) added — desktop-first, mobile-responsive. Total MVP story count: 77 → 79. See DECISIONS.md ADR-033.
+
 ---
 
 ## 1. Authentication & Settings
@@ -50,6 +52,14 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - At-risk is a derived operational signal, NOT a change to `Client.status` — an at-risk member's status remains Active or Expiring Soon as determined by their membership dates. The at-risk signal is surfaced in filters and alerts only. (ADR-019)
   - When the threshold is updated, the at-risk signal recalculates immediately on the next query — no backfill required.
   - Setting zero or a negative value is blocked with a validation error.
+
+**US-1.9 (P0)** — As the Gym Owner, I want to configure the walk-in conversion prompt threshold (number of visits), so that the system surfaces a membership conversion opportunity at the right moment during check-in.
+- Acceptance Criteria:
+  - Setting is configurable in Settings → System Preferences with a numeric "Walk-in conversion prompt threshold (visits)" field. Default: 5.
+  - A walk-in client whose cumulative visit count reaches or exceeds this threshold — with no Membership record — triggers the conversion prompt during their next check-in (US-4.2, Flow 4).
+  - The same threshold governs "frequent walk-in" across all system surfaces: the Dashboard "Frequent walk-ins" live feed panel, the Attendance Analytics "Walk-In Insights" panel (US-4.10), and the Frequent Walk-Ins Report (US-8.8). All surfaces use `Gym.walkin_conversion_prompt_visits` — no surface applies a hardcoded threshold.
+  - Setting zero or a negative value is blocked with a validation error.
+  - When the threshold is updated, the frequent walk-in count recalculates immediately on the next query — no backfill required (derived at runtime from Attendance records).
 
 ### Future
 
@@ -239,6 +249,16 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - Analytics data includes historical attendance records from soft-deleted clients (for trend accuracy) but excludes them from active-member counts.
   - Attendance Analytics contains no revenue data, membership financial history, or inventory data — attendance-domain scope only.
   - No CSV export from Attendance Analytics — detailed filterable and exportable records belong in the Reports module (US-8.5, US-8.13, US-8.14).
+
+**US-4.11 (P0)** — As the Gym Owner, I want to correct the recorded check-in time on a same-day attendance record, so that clerical errors in `time_in` can be fixed without deleting the attendance record.
+- Acceptance Criteria:
+  - An attendance record's `time_in` may be edited only on the same calendar day it was created. Prior-day records are read-only at MVP; the edit action is not displayed for records from previous dates.
+  - The correction action is accessible from the Today's Check-Ins list on both the Check-In Station screen (US-4.8) and the Attendance History view (US-4.3) — available on each row as an inline edit action.
+  - Only `time_in` is editable via the correction flow. `visit_type`, `client_id`, `visit_date`, `fee_charged`, and all other fields are not changeable after creation.
+  - A reason note is required before the correction can be saved. The note is stored in `Attendance.correction_note`.
+  - On save, `Attendance.updated_at` is set to the current timestamp. A non-null `updated_at` is the sole marker of a corrected record — no separate status flag is used.
+  - A confirmation dialog is shown before saving: "Update check-in time for [Name] from [old_time] to [new_time]? Reason: [note]." with Confirm and Cancel options.
+  - Attendance records cannot be deleted — `time_in` correction is the only mutation permitted on a created record at MVP.
 
 ### Future
 
@@ -567,15 +587,15 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 | Module | P0 (Committed MVP) | P2 (Future) |
 |---|---|---|
-| Auth & Settings | 6 | 2 |
+| Auth & Settings | 7 | 2 |
 | Clients | 9 | 2 |
 | Membership | 7 | 2 |
-| Attendance | 8 | 2 |
+| Attendance | 9 | 2 |
 | Client Payments | 4 | 2 |
 | POS & Product Sales | 14 | 2 |
 | Inventory | 8 | 1 |
 | Dashboard & Reports | 21 | 1 |
-| **Total** | **77** | **14** |
+| **Total** | **79** | **14** |
 
 ---
 

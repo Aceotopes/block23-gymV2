@@ -15,6 +15,7 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [ ] Expiring-soon warning threshold setting (US-1.4)
 - [ ] Walk-in inactivity threshold setting — drives the "Inactive" client status (US-1.7)
 - [ ] Member inactivity warning threshold setting — drives the "At risk" MEMBER client signal (US-1.8)
+- [ ] Walk-in conversion prompt threshold setting — governs the check-in conversion prompt, Dashboard "Frequent walk-ins" panel, Attendance Analytics Walk-In Insights, and Frequent Walk-Ins Report (US-1.9)
 
 ### Milestone 2 — Client Management
 - [ ] New client registration — name required, contact optional (US-2.1)
@@ -46,7 +47,7 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [ ] Today's check-ins standalone view in Attendance History (US-4.9)
 - [ ] Attendance records preserved after membership expiry or client soft-delete (US-4.4)
 - [ ] Allow multiple check-ins per client per day — explicit confirmation required for same-day duplicates (US-4.5)
-- [ ] Attendance record correction: same-day time_in edit with required reason note (Flow 15)
+- [ ] Attendance record correction: same-day `time_in` edit only; required reason note stored in `Attendance.correction_note`; `Attendance.updated_at` set on save; prior-day records read-only (US-4.11, Flow 15)
 
 ### Milestone 5 — Client Payments
 - [ ] Payment method (Cash, GCash, Card, Other) recorded on every membership and walk-in fee transaction (US-5.1)

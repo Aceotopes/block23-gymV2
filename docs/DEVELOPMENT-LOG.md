@@ -5,6 +5,55 @@ Newest entries at the top.
 
 ---
 
+## [#009] Planning Phase Exit Review Patch + Device Strategy ADR — 2026-06-24
+
+**Commit:** _(pending)_
+
+**Changes from previous commit:**
+
+- **DOMAIN-MODEL.md:**
+  - `User` entity: `created_at` → `created_at / updated_at` for consistency with all other mutable entities (password changes and profile edits have no audit timestamp otherwise).
+  - `MembershipPlan` entity: `created_at` → `created_at / updated_at` — plans are editable (US-3.9); price change history requires an `updated_at` for auditability.
+  - `ProductCategory` entity: `created_at / updated_at` added — the only entity previously without timestamps; categories can be renamed (US-6.5).
+  - `Attendance` entity: `updated_at` (nullable timestamp) added after `created_at`. Set to current timestamp when a correction is applied (Flow 15, US-4.11); null on all unedited records. **Resolves the BLOCKER identified in the Planning Phase Exit Review** — Flow 15 referenced `updated_at = now` but the entity definition did not include the field.
+
+- **USER-STORIES.md:**
+  - Design Review #7 banner added.
+  - US-1.9 (NEW P0): Walk-In Conversion Prompt Threshold Setting — configurable in Settings → System Preferences with default of 5 visits. Governs the check-in conversion prompt (US-4.2, Flow 4), Dashboard "Frequent walk-ins" panel, Attendance Analytics Walk-In Insights (US-4.10), and Frequent Walk-Ins Report (US-8.8). Closes the gap: `Gym.walkin_conversion_prompt_visits` was referenced in 4 documents but no user story governed its configuration.
+  - US-4.11 (NEW P0): Attendance Record Correction — same-day `time_in` edit only; required reason note stored in `Attendance.correction_note`; `Attendance.updated_at` set on save; prior-day records read-only; confirmation dialog required; no deletion permitted. Closes the gap: Flow 15 and the Roadmap item both existed but no acceptance criteria existed for the feature.
+  - Summary table updated: Auth & Settings 6 → 7 P0; Attendance 8 → 9 P0; Total 77 → 79 P0.
+
+- **DECISIONS.md:**
+  - ADR-033 added: Device Target Strategy — desktop-first design; mobile-responsive support required for owner monitoring workflows (Dashboard, check-ins, revenue, inventory alerts); tablet is not a primary target; no native mobile app in scope. Rejected: tablet-first design; native mobile app.
+
+- **MODULE-SPECS.md:**
+  - Design Review #7 banner added.
+  - Attendance module — Record Correction spec updated: references US-4.11 and `Attendance.updated_at` set on save; prior-day edit action not displayed (previously said "read-only" without specifying that the edit action is hidden).
+  - Attendance module — Business Rule updated: Correction rule now references `Attendance.updated_at` and US-4.11.
+  - Settings module — System Preferences list updated: each threshold now cross-references its governing user story; walk-in conversion prompt threshold now cites US-1.9 with a description of all surfaces it governs.
+
+- **ROADMAP.md:**
+  - Milestone 1: US-1.9 added (walk-in conversion prompt threshold setting).
+  - Milestone 4: Attendance record correction item updated to reference US-4.11 and `Attendance.updated_at`.
+
+- **CLAUDE.md:**
+  - ADR count updated: ADR-001 through ADR-029 → ADR-001 through ADR-033.
+  - Locked Design Decisions: ADR-033 (Device Target Strategy) entry added.
+  - Domain Model Quick Reference — Attendance entry updated: `correction_note` and `updated_at` added with their constraints.
+
+**Decisions made:**
+
+- ADR-033: Device Target Strategy — desktop-first, mobile-responsive (see DECISIONS.md for full rationale and rejected alternatives)
+
+**Issues / Notes:**
+
+- All four domain model timestamp fixes are consistency patches only — no business rules, flows, or report derivations are affected.
+- The `Attendance.updated_at` BLOCKER is resolved: the entity definition and Flow 15 are now consistent.
+- US-1.9 and US-4.11 close all story coverage gaps identified in the Planning Phase Exit Review. Block23GymV2 is now cleared for exit from the Planning Phase.
+- Next phases: tech stack selection (ADR-030 through ADR-032), ERD design, Design System.
+
+---
+
 ## [#008] Reports Module Expansion — Design Review #6 — 2026-06-24
 
 **Commit:** _(Done)_

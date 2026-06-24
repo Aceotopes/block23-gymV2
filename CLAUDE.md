@@ -65,7 +65,7 @@ Changes in one document almost always require updates in others. Use this map.
 
 ## Locked Design Decisions
 
-These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-029) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
+These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-033) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
 
 **gym_id on every entity (ADR-001, ADR-025):** Multi-tenancy foundation. Every entity — including child/detail entities (`Membership`, `TransactionLineItem`, `InventoryTransaction`) — carries a `gym_id` FK. Enables database-level Row-Level Security without join-chain subqueries.
 
@@ -91,12 +91,14 @@ These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-029) represent reso
 
 **Whole-container sale mode (ADR-027):** `SERVING_BASED_PRODUCT` with a `container_selling_price` set supports Per Container mode in POS checkout. Stock deduction = quantity × `servings_per_container`. Do not model this as a separate `STANDARD_PRODUCT` — that breaks stock synchronization.
 
+**Device target strategy (ADR-033):** Desktop-first design with mobile-responsive support. Tablet is NOT a primary design target. All data tables, reports, and admin views are designed for desktop viewports first. Mobile layouts adapt responsively. No native mobile app in scope for MVP.
+
 ## Domain Model Quick Reference
 
 Non-obvious field constraints that affect business rules across multiple documents:
 
 - **Membership** — `price_paid` (snapshot at purchase time), `status` (derived: `end_date >= today`), `renewed_from_membership_id` (self-FK — renewal chains, old record never mutated)
-- **Attendance** — `membership_id` (snapshot of which membership was active at check-in; never retroactively updated), `time_out` (nullable; reserved for future analytics — no MVP business logic touches it)
+- **Attendance** — `membership_id` (snapshot of which membership was active at check-in; never retroactively updated), `time_out` (nullable; reserved for future analytics — no MVP business logic touches it), `correction_note` (nullable; populated when `time_in` is corrected via Flow 15 / US-4.11), `updated_at` (nullable; set when a correction is applied — null on unedited records; non-null value is the sole marker of a corrected record)
 - **Product** — `product_type` (`STANDARD_PRODUCT` | `SERVING_BASED_PRODUCT`), `selling_price` (per unit or per serving), `current_stock` (units or remaining servings), `servings_per_container` (SERVING_BASED only), `container_selling_price` (nullable; SERVING_BASED only — enables Per Container POS mode), `low_stock_threshold` (dashboard alert trigger, distinct from `reorder_point`), `reorder_point` (nullable; inventory planning signal, accounts for lead time)
 - **Transaction** — `transaction_type` (`CLIENT_TRANSACTION` | `POS_SALE`), `status` (`COMPLETED` | `VOID`), `void_reason_category` (enum, required when status=VOID: `DUPLICATE_ENTRY` | `WRONG_AMOUNT` | `WRONG_PRODUCT` | `CLIENT_CANCELLED` | `SYSTEM_ERROR` | `OTHER`), `void_reason_note` (optional detail; required when category=OTHER)
 - **TransactionLineItem** — `item_type` must match parent `transaction_type`; `unit_price` is always a price snapshot; `cost_price_snapshot` is always a cost snapshot (nullable — null if `Product.cost_price` was not set at time of sale); `fee_override_note` (nullable; populated on `WALK_IN_FEE` items when amount differs from `Gym.default_walkin_fee`)

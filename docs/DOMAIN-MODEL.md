@@ -65,7 +65,7 @@ erDiagram
 | username | string | |
 | password_hash | string | never store plaintext |
 | role | enum | MVP: `OWNER` only. Future: `STAFF`, `MANAGER` |
-| created_at | timestamp | |
+| created_at / updated_at | timestamp | |
 
 ---
 
@@ -109,7 +109,7 @@ erDiagram
 | duration_days | int | |
 | default_price | decimal | |
 | is_active | bool | allows retiring old plans without deleting history |
-| created_at | timestamp | |
+| created_at / updated_at | timestamp | |
 
 **Reasoning:** Separating the *plan catalog* from the *individual membership instance* lets the owner manage default offerings (1/2/3 month + custom) without that catalog being entangled with what any specific client actually paid.
 
@@ -153,6 +153,7 @@ erDiagram
 | created_by | FK → User, required | records which user logged the check-in; forward-compatible with staff accounts (US-1.5, P2) without migration; follows `Transaction.created_by` pattern (ADR-021) |
 | correction_note | text, nullable | populated when `time_in` is edited post-creation (Flow 15); stores the owner's reason for the correction; null on all unedited records |
 | created_at | timestamp | |
+| updated_at | timestamp, nullable | set to current timestamp when a correction is applied (Flow 15, US-4.11); null on all records that have never been corrected — the presence of a non-null value is the sole marker of a corrected record |
 
 **Reasoning for `membership_id` snapshot link:** Without it, a report asking "was this person a paying member on March 3rd" would require reconstructing membership date ranges retroactively — fragile and slow. Storing the link at the moment of check-in makes this a simple, permanently-correct lookup.
 
@@ -167,6 +168,7 @@ erDiagram
 | id | UUID/PK | |
 | gym_id | FK → Gym | |
 | name | string | e.g. "Beverage", "Supplement" |
+| created_at / updated_at | timestamp | |
 
 ---
 

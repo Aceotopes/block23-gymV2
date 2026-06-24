@@ -14,6 +14,8 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 
 > **Design Review #6 (2026-06-24):** Reports Module comprehensive review and expansion. Eight new P0 reports added (US-8.15–US-8.22). US-8.2 updated — annual and custom-range period options added. US-8.5 updated — full spec with member/walk-in breakdown, period-over-period toggle, and export. US-8.7 updated — slow-moving sort option added. See DECISIONS.md ADR-029.
 
+> **Design Review #7 (2026-06-24):** Planning Phase Exit Review — patch applied. Attendance Record Correction spec updated to reference `Attendance.updated_at` and US-4.11. Settings module System Preferences section now cross-references US-1.9 for the walk-in conversion prompt threshold. ADR-033 (Device Target Strategy) added — desktop-first, mobile-responsive; tablet not a primary target. See DECISIONS.md ADR-033.
+
 ---
 
 ## 1. Dashboard Module
@@ -235,10 +237,11 @@ Attendance (single top-level nav entry)
 - Date filter presets: **Today** (default on open) · Yesterday · Last 7 Days · Last 30 Days · Custom Date Range. Selected filter persists within the session.
 - Columns: client name, visit type, time in, visit date.
 
-**Attendance Record Correction (Flow 15):**
+**Attendance Record Correction (Flow 15, US-4.11):**
 - Limited to same-day records only; only `time_in` is editable.
 - Required reason note stored in `Attendance.correction_note`.
-- Prior-day records are read-only at MVP.
+- On save, `Attendance.updated_at` is set to the current timestamp — the sole marker of a corrected record; no separate status flag is used.
+- Prior-day records are read-only at MVP; the edit action is not displayed for prior-day records.
 - Attendance records cannot be deleted — correction only.
 
 **Attendance Analytics (US-4.10):**
@@ -265,7 +268,7 @@ Attendance (single top-level nav entry)
 - **Expiry warning at check-in:** After a successful check-in where the member's active membership is within `Gym.expiration_warning_days`, a non-blocking dismissible renewal notice is displayed.
 - **Pre-fee conversion prompt:** When a walk-in client's visit count reaches `Gym.walkin_conversion_prompt_visits` and they have no Membership record, a conversion prompt is shown before the fee is collected. Dismissible; the fee proceeds if dismissed.
 - **`Attendance.created_by` is mandatory (ADR-021):** Set to the authenticated user at check-in time.
-- **Attendance record correction is time-bounded:** Corrections limited to same-calendar-day records; require a reason note stored in `Attendance.correction_note`; only `time_in` is editable; no deletions permitted.
+- **Attendance record correction is time-bounded:** Corrections limited to same-calendar-day records; require a reason note stored in `Attendance.correction_note`; only `time_in` is editable; `Attendance.updated_at` is set to current timestamp on save; no deletions permitted. (US-4.11)
 - **Attendance Analytics scope boundary:** Analytics panels surface aggregate counts, trends, and operational signals only. Detailed filterable record lists and CSV exports belong in the Reports module (US-8.5, US-8.13, US-8.14). This prevents duplication and maintains a clear boundary between in-module operational intelligence and archive-quality reporting.
 
 **Edge Cases:**
@@ -535,7 +538,7 @@ This module's primary function is the **history/audit view**, the **void action*
 **MVP Scope / Forms:**
 - **Gym Information:** name, address, contact info.
 - **Pricing:** default membership fee, default walk-in fee.
-- **System Preferences:** membership expiration warning period (days); walk-in inactivity threshold (days, default: 7); at-risk member threshold (days since last visit, default: 14); walk-in conversion prompt threshold (visits, default: 5).
+- **System Preferences:** membership expiration warning period (days) (US-1.4); walk-in inactivity threshold (days, default: 7) (US-1.7); at-risk member threshold (days since last visit, default: 14) (US-1.8); walk-in conversion prompt threshold (visits, default: 5) — governs the check-in conversion prompt, Dashboard "Frequent walk-ins" panel, Attendance Analytics Walk-In Insights, and Frequent Walk-Ins Report (US-1.9).
 - **Membership Plans:** create, edit, and retire membership plan catalog entries. (ADR-015)
 
 **Membership Plans section:**
