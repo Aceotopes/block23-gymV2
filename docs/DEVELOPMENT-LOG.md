@@ -5,6 +5,38 @@ Newest entries at the top.
 
 ---
 
+## [#014] Design System hardening — enforceable SSOT + owner-confirmed language — 2026-06-25
+
+**Commit:** _(Done)_
+
+**Purpose:** Turn `DESIGN-SYSTEM.md` from a sound-but-under-specified spec into the enforceable single source of truth for all UI work, and re-validate the locked design language (ADR-045) with the owner against real alternatives. Documentation-only — no application code. **No new ADR; no token, color, font, scope, story, flow, or domain change.** The design language is unchanged — it is now elaborated and owner-confirmed.
+
+**Method:** UI/UX Pro Max skill (audit + style/color/typography data) → 5-phase audit & rewrite → owner interview via AskUserQuestion (vibe / accent / theme / typography), challenging each against the energetic gym-app norm.
+
+**Owner decisions (interview, all reaffirmed the locked language):**
+
+- **Vibe:** operational instrument (rejected athletic energy, friendly).
+- **Accent:** indigo (rejected orange/emerald/sky — each collides with an existing domain status hue: At-risk orange, Active/Success emerald, Info/Upcoming sky).
+- **Theme:** dark-first (rejected light-first, auto).
+- **Typography:** Geist Sans + Geist Mono (rejected warmer Poppins-style, technical IBM Plex/JetBrains).
+
+**Changes by file:**
+
+- **DESIGN-SYSTEM.md (REWRITTEN, 306 → ~612 lines):** Rebuilt into an enforceable SSOT. Preserved every normative token, the §3.4 status table, and the §3.5 Recharts palette verbatim. Added: §2 brand personality + measurable design goals; §5.3 12-column grid system; §6 elevation + z-index scale (new); §10 interaction-state matrix; §11 full component standards (buttons, inputs, select, cards, tabs, dialog/sheet, chips, command palette, **toasts/notifications**, tooltip/popover, **pagination/virtualization**, charts); §13.7 money/number/**date-time formatting** (all display in `Gym.timezone`, ADR-035); §13.8 mandatory empty/loading/error trio; §13.9 action-feedback/loading; §8 imagery + no-illustration policy; §12 navigation (mobile bottom nav = 4 + "More"); §14.4 URL-state for list filters; §17 per-workflow design coverage table (every screen → pattern + components — the Phase 4 cross-check); §18 AI implementation guidelines; §19 deferred/open items. §2.1 owner-confirmation callout added.
+- **DECISIONS.md:** ADR-045 — **Confirmation (2026-06-25)** note appended (owner re-interrogated and reaffirmed; indigo is the only collision-free accent). No new ADR; ADR count unchanged at 42.
+- **TECH-STACK.md:** Remaining Technology Decisions table — added **List-state mechanism (URL search params vs. Zustand)**, to resolve before Milestone 2; surfaces the §14.4/§19 recommendation as an open decision rather than a silent override.
+
+**Decisions captured:** None new (no ADR). ADR-045 reaffirmed by the owner. One open decision recorded for Milestone 2 (list-state mechanism).
+
+**Issues / Notes:**
+
+- Intentionally did **not** edit README, ROADMAP, CLAUDE.md, USER-STORIES, USER-FLOWS, DOMAIN-MODEL, MODULE-SPECS, or INFORMATION-ARCHITECTURE — no scope, ADR count, story, flow, entity, or milestone changed. DESIGN-SYSTEM.md is a downstream consumer; its expansion stays faithful to those sources and introduces no contradiction. Verified no other document references the design system by section number (renumbering is safe).
+- **Open question for the owner:** adopt URL search params for list filter/sort/page/tab/period state (DESIGN-SYSTEM §19 / TECH-STACK open decisions)? If yes → new ADR + TECH-STACK State Management update.
+
+**Planning Phase Status:** Complete. Design System is now the enforceable, owner-confirmed UI SSOT. Next step: implementation — Milestone 1 (project scaffold, owner auth, settings), starting with `schema.prisma`.
+
+---
+
 ## [#013] Design System — DESIGN-SYSTEM.md + ADR-045 — 2026-06-25
 
 **Commit:** _(Done)_

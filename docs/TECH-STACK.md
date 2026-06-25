@@ -471,6 +471,7 @@ The following decisions are open. They do not block project initialization or th
 | **CI/CD pipeline** | First PR merge | Vercel's built-in CI handles build and preview deployments; GitHub Actions may be added to run the Vitest suite before merge — decide when the first tests are written |
 | **Error monitoring** (Sentry / none) | Pre-launch (before real users) | Sentry has a generous free tier and a Next.js integration; needed to catch runtime errors in production; does not affect development |
 | **Email service** (Resend / none) | Post-MVP (P2 scope) | Membership expiry notifications and scheduled report emails are P2-deferred; Resend is the recommended choice when scope arrives |
+| **List-state mechanism** (URL search params vs. Zustand) | Milestone 2 (Client List) | `DESIGN-SYSTEM.md` §14.4/§19 recommends encoding list filter/sort/page/tab/period state in **URL search params** (refresh-safe, shareable, back-restorable, Server-Component-friendly) — refining the State Management note that assigned "session-persistent filter state" to Zustand. Both satisfy the MODULE-SPECS "persists within the session" requirement. Recommendation: URL params for list state; keep Zustand for the POS cart only. Confirm and, if accepted, record as an ADR and update §3 State Management Standards. |
 
 All pre-initialization decisions are resolved. The project is ready to proceed.
 
