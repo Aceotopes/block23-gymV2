@@ -79,13 +79,13 @@ erDiagram
 | contact_number | string, nullable | |
 | email | string, nullable | reserved for future notifications |
 | notes | text, nullable | freeform owner notes |
-| date_registered | date | |
-| client_type | derived, not stored | `MEMBER` if client has ≥1 Membership record; `WALK_IN` if zero. Never changes back to WALK_IN after a membership is created. |
+| date_registered | date | business "joined" date shown to the owner. Distinct from the system `created_at` insert timestamp (the two coincide at MVP but are kept separate so the displayed join date is a stable business value, not a system artifact). |
+| client_type | derived, not stored | `MEMBER` if client has ≥1 non-cancelled Membership record; `WALK_IN` if zero. Cancelled memberships (ADR-041) do not count. Once a non-cancelled membership exists, type never reverts to WALK_IN. |
 | status | derived, not stored | branches by client_type — see derivation logic below |
 | created_at / updated_at / deleted_at | timestamp | soft delete only |
 
 **Status derivation logic (ADR-017, ADR-037):**
-- **`MEMBER` type clients** — derived from membership dates (precedence order: EXPIRING_SOON → ACTIVE → UPCOMING → EXPIRED):
+- **`MEMBER` type clients** — derived from membership dates, excluding cancelled memberships (ADR-041) (precedence order: EXPIRING_SOON → ACTIVE → UPCOMING → EXPIRED):
   - `EXPIRING_SOON`: has an active membership (`start_date ≤ today ≤ end_date`) with `end_date` within `Gym.expiration_warning_days` of today
   - `ACTIVE`: has an active membership (`start_date ≤ today ≤ end_date`) where `end_date` is not within the warning window
   - `UPCOMING`: no active membership, but at least one membership where `start_date > today` (ADR-037)
@@ -96,7 +96,7 @@ erDiagram
 
 **Reasoning:** A stored status flag requires a background sync job and *will* drift. Both `client_type` and `status` are computed at query time from Membership and Attendance records that already exist — zero additional storage, zero sync risk, guaranteed correctness. See ADR-002 and ADR-017.
 
-**At-risk signal (derived, not stored — ADR-019):** A MEMBER client with an active membership (`end_date >= today`) and no Attendance record within `Gym.member_inactivity_warning_days` days is considered at-risk. This is a query-time operational signal, NOT a `Client.status` value — an at-risk member's status remains Active or Expiring Soon as determined by their membership dates. At-risk is surfaced in the "At risk" Client List filter chip, the Dashboard "At-risk members" panel, and the At-risk Members Report (US-8.14). A client with an active membership and zero attendance records at all is treated as at-risk immediately.
+**At-risk signal (derived, not stored — ADR-019):** A MEMBER client with an in-effect membership (`start_date ≤ today ≤ end_date` — ACTIVE, including Expiring Soon; UPCOMING members are excluded, their period has not begun) and no Attendance record within `Gym.member_inactivity_warning_days` days is considered at-risk. This is a query-time operational signal, NOT a `Client.status` value — an at-risk member's status remains Active or Expiring Soon as determined by their membership dates. At-risk is surfaced in the "At risk" Client List filter chip, the Dashboard "At-risk members" panel, and the At-risk Members Report (US-8.14). A client with an in-effect membership and zero attendance records at all is treated as at-risk immediately (ADR-040).
 
 ---
 
@@ -125,16 +125,20 @@ erDiagram
 | id | UUID/PK | |
 | gym_id | FK → Gym | |
 | client_id | FK → Client | |
-| membership_plan_id | FK → MembershipPlan, nullable | nullable to allow a fully custom one-off membership not tied to a catalog plan |
+| membership_plan_id | FK → MembershipPlan, nullable | references the catalog plan the membership was sold under. NULL only for an **ad-hoc custom-duration** membership created inline (the "Custom duration" option in the Add/Renew modal) that is not tied to a saved catalog plan (ADR-015). Standard plans and reusable custom-duration plans always set this. Reports treat a null plan as "Custom (ad-hoc)" (US-8.17, US-8.22). |
 | start_date | date | |
 | end_date | date | |
 | price_paid | decimal | **snapshot**, independent of plan's current default_price |
 | renewed_from_membership_id | FK → Membership, nullable, self-referencing | links renewal chains without overwriting history; NULL = new membership, NOT NULL = renewal — the basis for the New vs. Renewals Report (US-8.16) and Membership Net Change Report (US-8.19) |
-| created_at | timestamp | |
+| cancelled_at | timestamp, nullable | null = normal record; non-null = membership soft-cancelled because it was created in error (ADR-041). A cancelled membership is excluded from ALL status/active/upcoming/expiry/renewal derivations, does not count toward `client_type = MEMBER`, and never blocks creating a new membership; it remains in Membership History with a "Cancelled" badge. Never hard-deleted (downstream references exist). |
+| cancellation_reason | text, nullable | required when `cancelled_at` is set; the owner's reason for cancelling (ADR-041) |
+| created_at | timestamp | stored in UTC (ADR-035) |
 
-**Status is derived, not stored:** `ACTIVE` if `end_date >= today`, else `EXPIRED`. Same reasoning as Client.status above — avoids drift.
+**Status is derived, not stored (ADR-040):** for a non-cancelled membership — `UPCOMING` if `start_date > today`; `ACTIVE` if `start_date ≤ today ≤ end_date`; `EXPIRED` if `end_date < today`. The canonical "in-effect" test (grants access, counts as an active membership) is `start_date ≤ today ≤ end_date`. `EXPIRING_SOON` is a Client-level display state (an ACTIVE membership within `Gym.expiration_warning_days` of `end_date`), not a `Membership.status` value. Cancelled memberships (`cancelled_at IS NOT NULL`) have no status. Same derive-don't-store reasoning as Client.status — avoids drift.
 
-**Business rule enforced at the application layer:** a client may have at most one membership with `end_date >= today` at any given time (no overlapping active memberships).
+**Business rule enforced at the application layer (ADR-040):** a client may have at most one **in-effect** membership (`start_date ≤ today ≤ end_date`) at a time. A client may simultaneously hold one ACTIVE membership and one or more UPCOMING memberships (produced by early renewal) — this is valid and is not an overlap.
+
+**Renewal date math (ADR-040):** new `start_date = max(today, latest_end_date + 1 day)`, new `end_date = start_date + duration_days`, where `latest_end_date` is the greatest `end_date` among the client's non-cancelled memberships with `end_date >= today` (active or upcoming). Renewing while active or upcoming chains the new period onto the latest end date (the new record is UPCOMING until it begins); renewing after full expiry starts today; stacked early renewals chain onto the furthest-future end date. The previous record is never mutated; the new record links via `renewed_from_membership_id`.
 
 ---
 
@@ -150,13 +154,15 @@ erDiagram
 | time_out | time, nullable | **not used in MVP fee logic**, but captured as a free nullable field now so future occupancy/duration analytics don't require a schema migration |
 | visit_type | enum | `MEMBER` / `WALK_IN` — **mutable via Flow 7 conversion only** (see mutation note below); immutable in all other contexts (ADR-038) |
 | membership_id | FK → Membership, nullable | **snapshot link** — records which membership (if any) was active at time of visit, so later expiry/renewal never rewrites historical attendance meaning |
-| fee_charged | decimal, nullable | populated for WALK_IN visits; null or zero for MEMBER visits |
+| fee_charged | decimal, nullable | **denormalized display convenience** — the walk-in fee snapshot at check-in for WALK_IN visits; null or zero for MEMBER visits. The authoritative revenue record is the `WALK_IN_FEE` line item on the associated `CLIENT_TRANSACTION`; not updated if that transaction is later voided. See "Walk-in fee — single source of truth" below. |
 | created_by | FK → User, required | records which user logged the check-in; forward-compatible with staff accounts (US-1.5, P2) without migration; follows `Transaction.created_by` pattern (ADR-021) |
 | correction_note | text, nullable | populated when `time_in` is edited post-creation via **Flow 15 data correction only**; stores the owner's reason for the correction; null on all unedited records; NOT populated by Flow 7 conversion mutation |
 | created_at | timestamp | stored in UTC (ADR-035) |
 | updated_at | timestamp, nullable | set to current timestamp when a **Flow 15 data correction** is applied (US-4.11); null on all records that have never been corrected — a non-null value is the sole marker of a Flow 15 correction; NOT set by the Flow 7 visit_type business mutation (ADR-038) |
 
 **Reasoning for `membership_id` snapshot link:** Without it, a report asking "was this person a paying member on March 3rd" would require reconstructing membership date ranges retroactively — fragile and slow. Storing the link at the moment of check-in makes this a simple, permanently-correct lookup.
+
+**Walk-in fee — single source of truth:** There is intentionally no foreign key from `Attendance` to its walk-in-fee `CLIENT_TRANSACTION`. The two are correlated by `client_id` + date when needed (e.g., showing a VOID badge beside a visit). All revenue figures, collections, and reports read from the `Transaction` / `TransactionLineItem` ledger — never from `Attendance.fee_charged`, which is a denormalized display value only. This keeps one revenue source of truth and avoids double-counting.
 
 **`visit_type` mutation rule (ADR-038):** `visit_type` is mutable in exactly one context — the same-visit walk-in → member conversion workflow (Flow 7). When the owner purchases a membership for a client mid-visit, the existing Attendance record's `visit_type` is updated from `WALK_IN` to `MEMBER`. This is a business workflow mutation reflecting real-time status change, not a data correction. `correction_note` and `updated_at` are NOT set by this mutation. In all other contexts, `visit_type` is immutable after creation.
 
@@ -207,7 +213,7 @@ erDiagram
 | type | enum | `PURCHASE`, `SALE`, `ADJUSTMENT` |
 | quantity_delta | decimal | positive for purchase/adjustment-up, negative for sale/adjustment-down |
 | resulting_stock | decimal | snapshot of stock level immediately after this movement — enables point-in-time auditing without recomputation |
-| reference_transaction_line_item_id | FK → TransactionLineItem, nullable | links a SALE movement back to the sale that caused it |
+| reference_transaction_line_item_id | FK → TransactionLineItem, nullable | links a `SALE` movement back to the sale line item that caused it; on a **void reversal** the new `ADJUSTMENT` entry also sets this to the original line item, so a voided sale's reversal is traceable to the exact line it reverses (Flow 11) |
 | adjustment_reason_category | enum, nullable | required when type = `ADJUSTMENT` — `DAMAGE`, `EXPIRY`, `THEFT`, `COUNT_CORRECTION`, `NATURAL_WASTAGE`, `PROMOTION`, `OTHER`, `FORCED_SALE`; `FORCED_SALE` is system-assigned on Force Sale overrides (ADR-034) and does not appear in the owner-facing manual adjustment selector; all other values are owner-selected; enables shrinkage analysis by category |
 | total_restock_cost | decimal, nullable | populated when type = `PURCHASE` — total amount paid for this restock event; enables basic spending tracking without per-unit supplier management (ADR-027 scope); aggregated by period in the Restock Cost Report (US-8.18) — null entries are excluded from period totals |
 | note | string, nullable | optional supporting detail; required for `ADJUSTMENT` type only when adjustment_reason_category = `OTHER` |
@@ -235,6 +241,8 @@ erDiagram
 | created_at | timestamp | |
 
 **Reasoning — why one Transaction table:** A single `Transaction` table provides one unified revenue ledger for all money flowing through the gym. `CLIENT_TRANSACTION` records always carry a `client_id` and contain only `MEMBERSHIP` or `WALK_IN_FEE` line items. `POS_SALE` records have no client and contain only `PRODUCT` line items. The `transaction_type` enum makes the distinction explicit at the data level while keeping revenue reporting simple — all income is queryable from one table regardless of whether it came from a membership fee or a protein shake sale. See ADR-006 and ADR-012.
+
+**`transaction_date` vs `created_at`:** `transaction_date` is the business timestamp of the sale/payment — it drives all revenue reports and the "today" boundary computed in `Gym.timezone`. `created_at` is the system insert time. The two coincide at MVP (no back-dated entry exists), but they are kept distinct so a future back-dated-entry feature cannot conflate business time with system time. Both are stored in UTC (ADR-035).
 
 ---
 

@@ -4,7 +4,7 @@ A web-based management system for Block 23 Gym — handling member registration,
 
 ## Current Phase
 
-**Planning complete — ready for Tech Stack Identification.** All 39 architecture decisions are locked (ADR-001 through ADR-039). No application code yet.
+**Planning complete, tech stack selected — ready for the Design System.** 41 architecture decisions are recorded (ADR-001 through ADR-044; ADR-030–032 intentionally unused — see DECISIONS.md). No application code yet.
 
 ## What This System Does
 
@@ -14,13 +14,14 @@ Replaces paper sign-in sheets and Excel sales logs with a centralized digital sy
 
 | Document | Description |
 |---|---|
-| [User Stories](docs/USER-STORIES.md) | 79 P0 (MVP) + 14 P2 (post-MVP) stories across 8 modules |
-| [User Flows](docs/USER-FLOWS.md) | 17 end-to-end interaction flows covering all modules and edge cases |
+| [User Stories](docs/USER-STORIES.md) | 80 P0 (MVP) + 14 P2 (post-MVP) stories across 8 modules |
+| [User Flows](docs/USER-FLOWS.md) | 20 end-to-end interaction flows covering all modules and edge cases |
 | [Domain Model](docs/DOMAIN-MODEL.md) | Entity definitions, field-level rationale, and schema design decisions |
 | [Module Specs](docs/MODULE-SPECS.md) | Field-level specs, business rules, and edge cases per module |
-| [Tech Stack](docs/TECH-STACK.md) | Approved technologies, architecture guidelines, and development rules |
+| [Information Architecture](docs/INFORMATION-ARCHITECTURE.md) | Top-level navigation and screen map — the app shell structure |
+| [Tech Stack](docs/TECH-STACK.md) | Approved technologies, architecture guidelines, accessibility & NFR baselines, development rules |
 | [Roadmap](docs/ROADMAP.md) | 8-milestone delivery sequence |
-| [Decisions](docs/DECISIONS.md) | 39 architecture decision records (ADR-001 – ADR-039) |
+| [Decisions](docs/DECISIONS.md) | 41 architecture decision records (ADR-001 – ADR-044; ADR-030–032 unused) |
 | [Development Log](docs/DEVELOPMENT-LOG.md) | Per-commit change history |
 
 ## Modules (MVP Scope)
@@ -36,4 +37,4 @@ Replaces paper sign-in sheets and Excel sales logs with a centralized digital sy
 
 ## Tech Stack
 
-To be decided.
+Next.js 15 (App Router) · TypeScript · PostgreSQL 16 · Prisma · Better Auth · shadcn/ui + Tailwind CSS v4 · Zod · React Hook Form · TanStack Table/Query · Zustand · Recharts · Vercel (MVP) → Coolify/Hetzner (self-host). See [Tech Stack](docs/TECH-STACK.md) for the full decision matrix and binding development rules.

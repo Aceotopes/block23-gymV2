@@ -466,6 +466,10 @@ All eight new reports are derivable from existing schema fields with zero new en
 
 ---
 
+> **Numbering note (2026-06-25):** ADR-030, ADR-031, and ADR-032 are intentionally unused. They were reserved during the Planning Phase Exit Review (Log #009) for technology-stack decisions. Those decisions were instead consolidated into `TECH-STACK.md` (see §5, "Rejected Technologies": Prisma over Drizzle, Better Auth over Auth.js, Vercel over Railway) rather than recorded as standalone ADRs. The gap is preserved so existing ADR references stay stable; the canonical ADR count is the number of recorded entries (41), not the highest number (044).
+
+---
+
 ## ADR-033: Device Target Strategy
 
 **Date:** 2026-06-24
@@ -588,3 +592,108 @@ Mobile support is required for the owner's secondary usage patterns: monitoring 
 **Consequence:** US-1.3 is updated to cover only the default walk-in fee. Settings → Pricing section removes the membership fee default field. Membership pricing is configured exclusively via Settings → Membership Plans (US-3.9, ADR-015).
 
 **Rejected:** Retaining the field as a "fallback" for custom memberships not tied to a plan. No flow was defined that uses this fallback; the plan catalog's last-active-plan guard ensures at least one plan always exists, making the fallback scenario impossible under the current design.
+
+---
+
+## ADR-040: Canonical "in-effect" membership definition, `Membership.status` states, and renewal date math
+
+**Date:** 2026-06-25
+**Status:** Accepted
+
+**Decision:**
+
+1. **One canonical "in-effect" test.** A membership is *in effect* (grants access, counts as an active membership) when `start_date ≤ today ≤ end_date`. This single test replaces the `end_date >= today` test previously used in two places in `DOMAIN-MODEL.md` (the `Membership.status` derivation and the no-overlap invariant).
+
+2. **`Membership.status` is derived (never stored) with three states** for a non-cancelled membership: `UPCOMING` (`start_date > today`), `ACTIVE` (`start_date ≤ today ≤ end_date`), `EXPIRED` (`end_date < today`). `EXPIRING_SOON` remains a Client-level display state (an ACTIVE membership within `Gym.expiration_warning_days` of `end_date`) — it is **not** a `Membership.status` value. Cancelled memberships (ADR-041) have no status.
+
+3. **No-overlap invariant restated:** a client may have at most one **in-effect** membership (`start_date ≤ today ≤ end_date`) at a time. A client may simultaneously hold one ACTIVE and one or more UPCOMING memberships (produced by early renewal) — this is valid and is not an overlap.
+
+4. **Unified renewal date math:** new `start_date = max(today, latest_end_date + 1 day)`, new `end_date = start_date + duration_days`, where `latest_end_date` is the greatest `end_date` among the client's non-cancelled memberships with `end_date >= today` (active or upcoming). Renewing while active or upcoming chains the new period onto the latest end date (the new record is UPCOMING until it begins); renewing after full expiry starts today; stacked early renewals chain onto the furthest-future end date. The previous record is never mutated; the new record links via `renewed_from_membership_id`.
+
+**Why:** ADR-037 introduced `UPCOMING` using the in-effect test `start_date ≤ today ≤ end_date`, but the `Membership.status` derivation and the no-overlap invariant retained the older `end_date >= today` test. Under that test a future-dated (upcoming) membership is reported as ACTIVE, the "Active Members" KPI over-counts, and early renewal appears to violate the no-overlap rule. Standardizing on one in-effect test makes the headline KPI, status badges, and the Active/Upcoming filter chips single-valued and correct — exactly the surfaces the Design System renders.
+
+**Rejected:**
+- Keeping `end_date >= today` as the "active" test — mislabels upcoming memberships as active and over-counts active members.
+- Setting an early-renewal `start_date = today` — creates a genuine overlap of two in-effect memberships, double-counting access and violating the invariant.
+
+**Relationship:** Resolves the CB-1 / H-2 inconsistencies from the Architecture Readiness Review. Extends ADR-002 (derived status) and ADR-037 (UPCOMING). Cancelled-membership exclusion is governed by ADR-041.
+
+---
+
+## ADR-041: Membership cancellation (soft) for erroneous records
+
+**Date:** 2026-06-25
+**Status:** Accepted
+
+**Decision:** Add `Membership.cancelled_at` (nullable timestamp) and `Membership.cancellation_reason` (nullable text, required when cancelling). A **Cancel membership** action (Client Profile → Membership History row overflow) soft-cancels a membership created in error. A cancelled membership:
+- is excluded from ALL status/active/upcoming/expiry/renewal derivations (as if it never granted access),
+- does not count toward `client_type = MEMBER`,
+- never blocks creating a new membership,
+- remains in Membership History with a "Cancelled" badge,
+- is never hard-deleted (downstream references exist: `Attendance.membership_id` snapshots, renewal chains, `TransactionLineItem.reference_membership_id`).
+
+**Cancellation and payment void are independent.** Cancelling a membership does NOT auto-void its payment; voiding a payment does NOT cancel the membership (this preserves the existing rule). To reverse money, the owner voids the associated `CLIENT_TRANSACTION` separately (Flow 11).
+
+**There is no free "edit membership."** Dates, plan, and price are immutable after creation (snapshot integrity, ADR-003). To correct a wrong duration/plan/client, cancel and recreate.
+
+**Why:** `MODULE-SPECS.md` (and the Payments module) repeatedly referenced "cancel or adjust the membership … a separate action in the Membership module," but no such action existed anywhere. An erroneously created membership otherwise grants gym access with no remedy, and voiding the payment explicitly does not cancel it. A constrained soft-cancel resolves the gap while preserving the audit trail and snapshot guarantees.
+
+**Rejected:**
+- Hard delete — orphans attendance snapshots and renewal chains; violates the soft-delete philosophy of ADR-005.
+- Free-form membership editing — mutating `start_date`/`end_date`/`price_paid` breaks snapshot and renewal-chain guarantees; cancel-and-recreate is safer and fully auditable.
+
+**Consequence:** New P0 story US-3.10; new Flow 18 (Cancel Membership). Membership History shows a "Cancelled" badge. The ADR-040 renewal math ignores cancelled memberships when computing `latest_end_date`.
+
+---
+
+## ADR-042: Information Architecture & top-level navigation; Membership is a distributed capability
+
+**Date:** 2026-06-25
+**Status:** Accepted
+
+**Decision:** The application has **eight top-level navigation entries**: Dashboard · Clients · Attendance · Client Payments · POS · Inventory · Reports · Settings. The "Membership Management" functional module does **not** have its own top-level nav entry; its surfaces are distributed:
+- membership create / renew / cancel / history → the **Client Profile** (within Clients),
+- plan catalog management → **Settings**,
+- expiry monitoring → the **Dashboard**,
+- membership status lists → the **Client List** filter chips (operational outreach) and the **Reports** module (US-8.6, archival/exportable lists).
+
+Attendance keeps its single nav entry with three internal views (ADR-023). The previously referenced Module 3 "dedicated filterable list (Active / Expired / Expiring Soon)" is realized by the Client List chips + US-8.6 — **not** a separate screen. The consolidated map lives in `INFORMATION-ARCHITECTURE.md`.
+
+**Why:** The Design System's app shell, navigation, and layout require a single, explicit IA. The Membership module's "home" was ambiguous — membership status lists appeared to live in three different places. Declaring Membership a distributed capability removes the phantom screen and the surface overlap.
+
+**Rejected:** A standalone Membership nav entry — duplicates Client List filtering and the US-8.6 report, and fragments the client-centric workflow where memberships are actually managed.
+
+---
+
+## ADR-043: Better Auth integration with the domain `User` entity
+
+**Date:** 2026-06-25
+**Status:** Accepted
+
+**Decision:** Better Auth is configured to use the domain `User` table as its user model. `gym_id` and `role` are declared as Better Auth **additional fields** on the user; the credentials provider manages `password_hash`. Better Auth owns its own session (and any verification) tables. The session payload exposes `{ userId, gymId, role }`. No parallel user table is introduced — the Prisma `User` model remains the single canonical user record and is auth-library-agnostic (consistent with the migration note in `TECH-STACK.md` §6).
+
+**Why:** The domain `User` carries multi-tenant (`gym_id`) and authorization (`role`) fields that Better Auth does not define by default. Without an explicit integration decision, an implementer could create a second Better-Auth-owned user table, splitting identity across two tables. Better Auth's additional-fields mechanism keeps one user record and a clean path to the future organization plugin for multi-tenant sessions.
+
+**Rejected:** A separate Better-Auth-owned user table linked by FK to the domain `User` — two sources of identity truth, extra joins, and drift risk between the auth record and the tenant/role record.
+
+---
+
+## ADR-044: Accessibility baseline — WCAG 2.1 AA
+
+**Date:** 2026-06-25
+**Status:** Accepted
+
+**Decision:** The system targets **WCAG 2.1 Level AA**. Baseline requirements (elaborated in `TECH-STACK.md` → Accessibility Standards):
+- keyboard operability for all interactive elements (check-in search, POS cart, filter chips, dialogs, data tables),
+- visible focus states on every focusable element,
+- semantic markup and ARIA via shadcn/ui + Radix primitives (which provide roles and focus management),
+- color contrast ≥ 4.5:1 for normal text and ≥ 3:1 for large text and UI affordances,
+- status is never conveyed by color alone — status badges carry text labels (already specified across the modules),
+- form fields have associated labels and programmatically associated error messages,
+- chart and transition animations respect `prefers-reduced-motion`.
+
+These constraints are inputs to the Design System's color and typography token choices.
+
+**Why:** Accessibility was undocumented. Contrast, focus, color-only signaling, and reduced motion are token-level decisions that must precede the Design System; "Radix is accessible" covers component semantics but not system-level color and contrast choices.
+
+**Rejected:** Leaving accessibility implicit in the component library — component accessibility is necessary but not sufficient; contrast ratios and color-independent status signaling are design-token decisions Radix cannot make on the project's behalf.

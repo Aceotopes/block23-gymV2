@@ -5,9 +5,58 @@ Newest entries at the top.
 
 ---
 
+## [#012] Architecture Readiness Patch — Pre-Design-System — 2026-06-25
+
+**Commit:** _(Done)_
+
+**Purpose:** Resolve all findings from the Architecture Readiness Review (2 critical, 5 high, 6 medium, 4 low) before the Design System phase. Documentation-only changes — no application code. Five new ADRs, one new planning document, one new P0 story, three new user flows.
+
+**New ADRs:**
+
+- **ADR-040 — Canonical "in-effect" membership definition, `Membership.status` states, and renewal date math:** One canonical in-effect test (`start_date ≤ today ≤ end_date`) replaces the old `end_date >= today` used in the `Membership.status` derivation and the no-overlap invariant. `Membership.status` = `UPCOMING` / `ACTIVE` / `EXPIRED`. No-overlap restated as "at most one in-effect membership" (one ACTIVE + N UPCOMING is valid). Unified renewal math: `start_date = max(today, latest_end_date + 1 day)`, `end_date = start_date + duration_days`. Resolves CB-1 and H-2.
+- **ADR-041 — Membership cancellation (soft):** `Membership.cancelled_at` + `cancellation_reason` soft-cancel an erroneous membership; excluded from all derivations, never blocks a new membership, retained with a "Cancelled" badge; independent of payment void; no free edit (cancel + recreate). Resolves H-1.
+- **ADR-042 — Information Architecture & navigation:** Eight top-level nav entries; Membership is a distributed capability with no standalone nav entry; the phantom "membership list" screen is realized by Client List chips + US-8.6. Resolves CB-2.
+- **ADR-043 — Better Auth integration with the domain `User`:** Better Auth uses the domain `User` table with `gym_id`/`role` as additional fields; no parallel user table; session = `{ userId, gymId, role }`. Resolves H-4.
+- **ADR-044 — Accessibility baseline:** WCAG 2.1 AA target with keyboard/focus/contrast/color-independence/motion requirements feeding the Design System tokens. Resolves H-3.
+
+**New document:**
+
+- **docs/INFORMATION-ARCHITECTURE.md (NEW):** Authoritative top-level navigation (8 entries), per-area screen map, "where Membership lives" table, cross-area deep links, and responsive adaptation. The app-shell input for the Design System (ADR-042). Resolves CB-2.
+
+**Changes by file:**
+
+- **DECISIONS.md:** ADR-040 through ADR-044 appended. Numbering note added explaining the intentional ADR-030–032 gap (M-5).
+- **DOMAIN-MODEL.md:** Membership entity — `cancelled_at` + `cancellation_reason` added; `membership_plan_id` note clarified (null = ad-hoc custom, M-3); status derivation rewritten to UPCOMING/ACTIVE/EXPIRED; no-overlap invariant restated; renewal date math note added (ADR-040). Client entity — `client_type` and status derivation exclude cancelled memberships; `date_registered` vs `created_at` clarified (L-1). Attendance — `fee_charged` marked denormalized; "single source of truth" note added (M-2). Transaction — `transaction_date` vs `created_at` clarified (L-1). InventoryTransaction — `reference_transaction_line_item_id` reversal-traceability note added (L-4).
+- **MODULE-SPECS.md:** Architecture Readiness Patch banner added. Module 1 — Active Members KPI and Frequent walk-ins populations tightened (ADR-040, M-6). Module 3 — Create custom-duration clarified; Cancel Membership section added; Monitor Expiration reconciled to chips + US-8.6 (ADR-042); business rules rewritten for canonical in-effect/renewal/cancellation; edge cases expanded. Module 6 — Product Management cross-referenced Flow 20. Module 7 — Manual Adjustment cross-referenced Flow 19; shrinkage zero-sales edge added (L-2).
+- **USER-STORIES.md:** Architecture Readiness Patch banner added. US-2.10 / US-2.11 populations & chip set corrected (M-1, M-6). US-3.2 renewal math, US-3.3 custom-duration ACs updated (ADR-040, M-3). US-3.10 (NEW P0) Cancel Membership. US-7.8 zero-sales edge (L-2). US-8.22 "Custom (ad-hoc)" wording (M-3). Summary table: Membership 7 → 8, Total 79 → 80.
+- **USER-FLOWS.md:** Architecture Readiness Patch banner added. Flow 5 custom-duration option clarified. Flow 6 renewal math updated (ADR-040). Flow 11 reversal traceability note (L-4). New flows: Flow 18 (Cancel Membership), Flow 19 (Manual Inventory Adjustment), Flow 20 (Product Management). Flow count 17 → 20.
+- **ROADMAP.md:** Milestone 3 — renewal math reference updated, custom-duration clarified, history badges noted, US-3.10 (Cancel Membership) added.
+- **TECH-STACK.md:** Better Auth integration paragraph added (ADR-043). New Accessibility Standards section (ADR-044). New consolidated Non-Functional Requirements section (L-3).
+- **README.md:** Current Phase corrected ("tech stack selected — ready for the Design System"); ADR count corrected to 41 (ADR-001–044, 030–032 unused); story count 80, flow count 20; INFORMATION-ARCHITECTURE.md added to the documents table; Tech Stack section populated (was "To be decided") (H-5).
+- **CLAUDE.md:** Planning Documents table — INFORMATION-ARCHITECTURE.md added. Locked Decisions intro ADR range → ADR-044. Five new Locked Decision entries (ADR-040–044). Domain Model Quick Reference — Membership line updated (status states, cancellation, nullable plan). Key Business Rules — renewal math, creation blocking, and cancellation-vs-void rules updated.
+
+**Decisions made:**
+
+- ADR-040: Canonical in-effect membership definition, Membership.status states, unified renewal math
+- ADR-041: Soft membership cancellation for erroneous records
+- ADR-042: Information architecture & top-level navigation; Membership is distributed
+- ADR-043: Better Auth integration with the domain User entity
+- ADR-044: Accessibility baseline — WCAG 2.1 AA
+
+**Issues / Notes:**
+
+- All review findings (CB-1, CB-2, H-1–H-5, M-1–M-6, L-1–L-4) are resolved. No application code exists yet.
+- Total MVP story count: 79 → 80. User flows: 17 → 20. Recorded ADRs: 36 → 41 (highest number 044; 030–032 intentionally unused).
+- `Membership.cancelled_at` / `cancellation_reason` are the only new schema fields; both are nullable and additive. No backfill required.
+- Next step: DESIGN-SYSTEM.md, with INFORMATION-ARCHITECTURE.md and the TECH-STACK accessibility/NFR baselines as inputs.
+
+**Planning Phase Status:** Complete. Architecture Readiness Review findings cleared. Next step: Design System.
+
+---
+
 ## [#011] Technology Stack Finalized — 2026-06-25
 
-**Commit:** _(Pending)_
+**Commit:** _(Done)_
 
 **Changes from previous commit:**
 

@@ -10,6 +10,8 @@ All flows assume the Gym Owner is logged in. Decision points are marked with `?`
 
 > **Design Review #5 (2026-06-24):** Flow 8 updated — cash change calculator added to checkout; SERVING_BASED_PRODUCT container mode branch added (references Flow 16). Flow 9 updated — optional total restock cost capture added. Flow 11 updated — void_reason_category selection replaces free-text-only approach. New flows: Flow 16 (Whole-Container Sale), Flow 17 (End-of-Day Collections Review). See DECISIONS.md ADR-026, ADR-027, ADR-028.
 
+> **Architecture Readiness Patch (2026-06-25):** Flow 5 custom-duration option clarified (ad-hoc → `membership_plan_id` null). Flow 6 renewal date math updated to the canonical formula (ADR-040). Flow 11 reversal traceability note added. New flows: Flow 18 (Cancel Membership, ADR-041), Flow 19 (Manual Inventory Adjustment), Flow 20 (Product Management). See DECISIONS.md ADR-040–ADR-044.
+
 ---
 
 ## Flow 1: Owner Login
@@ -172,8 +174,9 @@ Client already has an ACTIVE membership? ──Yes──→ Block. Show:
     │
     No
     ↓
-Owner selects a Membership Plan from active plan catalog
-    (Custom duration option → "Duration (days)" numeric input field appears inline, required)
+Owner selects a Membership Plan from the active plan catalog,
+    OR the inline "Custom duration" option (not a saved plan → membership_plan_id = null,
+    "Custom (ad-hoc)"); selecting it shows a required "Duration (days)" input
     ↓
 Price defaults from plan's default_price, owner may override (override value is what gets recorded)
     ↓
@@ -206,14 +209,18 @@ System shows current membership status: ACTIVE (ends [date]) or EXPIRED (ended [
     ↓
 Owner selects renewal plan/duration from active plan catalog + price (override allowed)
     ↓
-Renewal date calculation:
+Renewal date calculation (ADR-040):
+    new start_date = max(today, latest_end_date + 1 day)
+    new end_date   = new start_date + plan duration
+    (latest_end_date = greatest end_date among the client's non-cancelled
+     memberships with end_date >= today)
     │
-    ├── Current membership is still ACTIVE (renewing early)
-    │       → New end_date = current end_date + plan duration
-    │         (extends from existing expiry, NOT from today — confirmed business rule)
+    ├── Active or Upcoming membership exists (renewing early)
+    │       → new period chains onto latest_end_date + 1 day
+    │         (new record is UPCOMING until it begins; old record untouched)
     │
-    └── Current membership is EXPIRED
-            → New start_date = today, end_date = today + plan duration
+    └── Fully expired (no membership with end_date >= today)
+            → new start_date = today, end_date = today + plan duration
     ↓
 New Membership record created, linked via renewed_from_membership_id to the previous one
     ↓
@@ -405,6 +412,8 @@ Transaction marked status=VOID (not deleted)
     void_reason_category and void_reason_note stored on the Transaction record
     ↓
 Linked InventoryTransactions reversed (stock restored) via new ADJUSTMENT entries —
+    each reversal ADJUSTMENT sets reference_transaction_line_item_id to the original
+    sale line item, so the reversal is traceable to the exact line it reverses;
     original SALE entries remain in the ledger for audit, reversal is additive, not a deletion
     ↓
 Revenue reports automatically exclude VOID transactions from totals,
@@ -671,6 +680,97 @@ Owner reconciles Cash total against the physical cash drawer
 ```
 
 **Edge case — zero transactions on selected date:** Display the table with all rows showing ₱0 and a "No transactions recorded for this date" notice.
+
+---
+
+## Flow 18: Cancel Membership (Soft — corrects an erroneous record)
+
+```
+Owner opens Client Profile → Membership History tab
+    ↓
+Owner opens the row overflow menu on the membership created in error
+    ↓
+Owner clicks "Cancel membership"
+    ↓
+Confirmation dialog: "Cancel this membership? It will stop granting access and
+                      leave the active counts. All history is preserved. Reason required."
+    ↓
+Owner enters cancellation reason (required) → confirms
+    ↓
+Membership.cancelled_at = now, cancellation_reason = entered reason
+    ↓
+Membership is excluded from all status/active/upcoming/expiry/renewal derivations,
+    no longer counts toward client_type = MEMBER, and no longer blocks a new membership
+    ↓
+Membership History row shows a "Cancelled" badge (record retained, never deleted)
+```
+
+**Independent of payment void (ADR-041):** Cancelling the membership does NOT void its payment. If the money must be reversed, the owner voids the associated CLIENT_TRANSACTION separately (Flow 11). Voiding the payment does NOT cancel the membership.
+
+**No free edit:** A membership's dates, plan, and price are immutable after creation (snapshot integrity). To fix a wrong duration/plan/client, cancel and recreate.
+
+---
+
+## Flow 19: Manual Inventory Adjustment
+
+```
+Owner opens Inventory → selects product → "Adjust stock"
+    ↓
+Owner enters a quantity delta (positive = increase, negative = decrease)
+    ↓
+Owner selects adjustment_reason_category (required):
+    DAMAGE / EXPIRY / THEFT / COUNT_CORRECTION / NATURAL_WASTAGE / PROMOTION / OTHER
+    (FORCED_SALE is system-only and never appears here — ADR-034)
+    ↓
+Category = OTHER? ──Yes──→ Detail note required
+    │
+    No (note optional)
+    ↓
+Owner confirms
+    ↓
+InventoryTransaction (type=ADJUSTMENT) created:
+    quantity_delta = entered delta
+    resulting_stock = previous stock + delta
+    adjustment_reason_category + note stored
+    ↓
+Product.current_stock updated; entry appears in Inventory Movement History
+```
+
+**Edge case — adjustment below zero:** the same Force Sale rule (ADR-009) does not apply to manual adjustments; a manual decrease that would take stock below zero is blocked with a validation error (the owner records the actual count, not a negative).
+
+---
+
+## Flow 20: Product Management (Create / Edit / Archive / Restore)
+
+**Create / Edit:**
+```
+Owner opens POS → Product Management → "Add product" (or Edit on a row)
+    ↓
+Enters: name (required), category (required), image (optional),
+        selling_price (required), cost_price (optional),
+        product_type (STANDARD_PRODUCT / SERVING_BASED_PRODUCT),
+        servings_per_container (required if SERVING_BASED_PRODUCT),
+        container_selling_price (optional, SERVING_BASED_PRODUCT only),
+        low_stock_threshold (required), reorder_point (optional)
+    ↓
+Gross margin (₱ and %) shown read-only when selling_price and cost_price are set (US-6.15)
+    ↓
+Owner saves → product appears in the POS grid (deleted_at IS NULL)
+```
+
+**Archive (soft delete) / Restore:**
+```
+Owner opens Edit → "Archive product"
+    ↓
+Product.deleted_at = now → product disappears from POS grid and active-stock views
+    ↓
+All sales and inventory history remain intact and queryable
+    (archived products stay visible in Inventory Management and Movement History)
+    ↓
+Restore: clear deleted_at → product reappears in the POS grid
+```
+
+**Edge case — archive a product that still has stock:** archiving does not zero stock. The remaining stock value still shows in Inventory Management; the owner records a manual adjustment (Flow 19) if the stock should be written off. (ADR-005)
 
 ---
 

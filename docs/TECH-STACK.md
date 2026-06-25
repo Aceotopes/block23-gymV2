@@ -8,7 +8,7 @@ This document is the single source of truth for all technology decisions in Bloc
 
 ### Why This Stack Was Selected
 
-Block23 Gym V2 is a **desktop-first gym management system** built by a **single developer** with a **future path to multi-gym SaaS and self-hosted deployment**. The stack was selected to optimize for three constraints simultaneously: development velocity (solo developer with Claude Code), correctness (79 P0 stories with complex business rules), and migration safety (gym_id on every entity, UTC timestamps, soft deletes — all architectural decisions that cost nothing now and are expensive to retrofit later).
+Block23 Gym V2 is a **desktop-first gym management system** built by a **single developer** with a **future path to multi-gym SaaS and self-hosted deployment**. The stack was selected to optimize for three constraints simultaneously: development velocity (solo developer with Claude Code), correctness (80 P0 stories with complex business rules), and migration safety (gym_id on every entity, UTC timestamps, soft deletes — all architectural decisions that cost nothing now and are expensive to retrofit later).
 
 ### Why It Fits Block23 Gym V2
 
@@ -126,6 +126,8 @@ All report views, membership history, attendance history, and settings pages are
 
 **Credentials-only at MVP.** The `User` entity has `username` and `password_hash`. Better Auth's credentials provider handles login. No OAuth providers at MVP. Social login (Google, etc.) is a post-MVP addition that Better Auth supports without an architecture change.
 
+**Better Auth uses the domain `User` table — no parallel user table (ADR-043).** Better Auth is configured against the existing Prisma `User` model; `gym_id` and `role` are declared as Better Auth **additional fields**, and the credentials provider manages `password_hash`. Better Auth owns its own session (and any verification) tables. The session payload exposes `{ userId, gymId, role }`. The Prisma `User` model remains the single canonical user record and stays auth-library-agnostic — do not create a second Better-Auth-owned user table linked to the domain `User`.
+
 **All application routes are protected by default.** Better Auth middleware runs on all routes. Public routes (login page only at MVP) are explicitly opted out. Do not rely on UI-level route hiding for access control — the middleware must enforce it.
 
 **Sessions are server-managed.** Better Auth handles session creation, renewal, and invalidation server-side. Do not store user identity in localStorage or client-side cookies that the server cannot invalidate.
@@ -195,6 +197,40 @@ R2_PUBLIC_URL         # Public base URL for serving R2 assets
 **Future self-hosting: Coolify on Hetzner VPS.** The Next.js app is containerized (Dockerfile or Nixpacks). Coolify manages the Docker deployment, Traefik reverse proxy, and Let's Encrypt SSL. The PostgreSQL instance runs as a separate Coolify-managed service on the same VPS. The migration from Vercel to Coolify requires: (1) adding a Dockerfile, (2) updating environment variables, (3) pointing DNS. No code changes.
 
 **Home server deployment** uses the same Coolify pattern. Any Linux machine running Docker and Coolify can host the stack. The only additional requirement is a reverse tunnel (Cloudflare Tunnel or similar) if the server is behind a NAT without a public IP.
+
+---
+
+### Accessibility Standards
+
+**Target: WCAG 2.1 Level AA (ADR-044).** This is a binding baseline and a direct input to the Design System's color and typography tokens.
+
+- **Keyboard operability.** Every interactive element is keyboard-operable: the auto-focused check-in search, POS cart and quantity controls, filter chips, dialogs, and data tables. No mouse-only interactions.
+- **Visible focus.** Every focusable element has a visible focus indicator. Do not remove focus outlines without an equivalent replacement.
+- **Semantics via shadcn/ui + Radix.** Use the accessible primitives for their roles, labelling, and focus management (Dialog focus trap, Select/Combobox ARIA, etc.). Do not hand-roll interactive widgets that Radix already provides accessibly.
+- **Contrast.** Color contrast ≥ 4.5:1 for normal text and ≥ 3:1 for large text and meaningful UI affordances (borders of inputs, icons that convey state). Design tokens must be chosen to satisfy this.
+- **Never color alone.** Status is never conveyed by color only — status badges carry text labels (already specified across the modules: "MEMBER · Active", "Upcoming", "VOID", "Cancelled", red/amber shrinkage with values, etc.).
+- **Forms.** Every field has an associated `<label>`; validation errors are programmatically associated with their field (`aria-describedby`) and announced, not just colored.
+- **Motion.** Chart and transition animations respect `prefers-reduced-motion`.
+
+These requirements are validated during the Design System and component build, not deferred to a post-launch audit.
+
+---
+
+### Non-Functional Requirements (consolidated)
+
+The performance and reliability NFRs referenced throughout the stories are gathered here for one canonical reference:
+
+| NFR | Target | Source |
+|---|---|---|
+| Dashboard load | ≤ 3 seconds | US-8.1, Module 1 |
+| Client name search | ≤ 2 seconds, partial match | US-2.3, Module 2 |
+| Audit preservation | No hard deletes of financial/historical records; corrections are additive (void, soft-cancel, soft-delete) | ADR-004, ADR-005, ADR-041 |
+| Tenant isolation | Every query scoped by `gym_id`; RLS-ready for SaaS | ADR-001, ADR-025 |
+| Financial correctness | Price/cost snapshots immutable; reports never read live catalog for historical periods | ADR-003, ADR-026 |
+| Time correctness | UTC storage; gym-local display and "today" boundary via `Gym.timezone` | ADR-035 |
+| Accessibility | WCAG 2.1 AA | ADR-044 |
+
+These are not new requirements — they consolidate targets already stated in the stories and ADRs so implementation and testing have a single checklist.
 
 ---
 

@@ -18,6 +18,8 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 
 > **Blocker Resolution Patch (2026-06-25):** Seven pre-tech-stack blockers resolved across all modules. `Product.is_active` replaced with `Product.deleted_at` throughout (B1/ADR-005); `FORCED_SALE` added to inventory adjustment categories (B2/ADR-034); UTC timestamp strategy documented (B3/ADR-035); Dashboard "Frequent walk-ins" confirmed top-5, not threshold (B4/ADR-036); "Upcoming" filter chip and status added to Client List and Membership (B5/ADR-037); `visit_type` mutability exception documented in Attendance (B6/ADR-038); `Gym.default_membership_fee` removed from Settings (B7/ADR-039). See DECISIONS.md ADR-034 through ADR-039.
 
+> **Architecture Readiness Patch (2026-06-25):** Review findings resolved. Membership: canonical in-effect definition and renewal math (ADR-040), soft cancellation added (ADR-041, US-3.10, Flow 18), ad-hoc custom-duration clarified. Dashboard "Active members" and "Frequent walk-ins" populations tightened. Inventory manual adjustment (Flow 19) and product management (Flow 20) flows referenced; shrinkage zero-sales edge added. Membership has no standalone nav — distributed capability (ADR-042). See DECISIONS.md ADR-040–ADR-044 and `INFORMATION-ARCHITECTURE.md`.
+
 ---
 
 ## 1. Dashboard Module
@@ -27,7 +29,7 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 **MVP Scope:**
 
 **KPI Strip (6 cards, always visible at top):**
-- Active members — with delta vs. last month (e.g., "+3 from last month")
+- Active members — count of clients with an in-effect membership (`start_date ≤ today ≤ end_date`; excludes Upcoming and cancelled memberships — ADR-040, ADR-041), with delta vs. last month (e.g., "+3 from last month")
 - Today's check-ins — with delta vs. yesterday
 - MTD (month-to-date) revenue — with % change vs. same period last month
 - Today's Revenue — all completed transactions (CLIENT_TRANSACTION + POS_SALE) collected today, voided excluded (US-5.4, US-8.1)
@@ -47,8 +49,8 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - **Expiring soon members:** list of members whose memberships expire within the warning window, sorted by soonest first, with days-remaining indicator and color-coded urgency (red < 7 days, amber 7–14 days).
 - **Inventory alerts:** products below `low_stock_threshold` with remaining count. For `SERVING_BASED_PRODUCT` items, shows remaining servings (e.g., "Whey Protein: 8 servings remaining"). Each alert row also shows the days-until-stockout estimate: "~N days remaining" (from US-7.6; blank if no recent sales data).
 - **Today's Collections:** today's revenue totals by payment method (Cash / GCash / Card / Other) spanning both `CLIENT_TRANSACTION` and `POS_SALE` records. Voided transactions excluded. Links to the full Collections Summary view (US-5.4). Enables daily cash drawer reconciliation from the Dashboard.
-- **Frequent walk-ins:** top 5 walk-in clients (no active membership) sorted by total visit count descending, with last visit date and visit count. No minimum visit threshold — always shows the top 5 regardless of `Gym.walkin_conversion_prompt_visits` (ADR-036). "View all →" links to the Client List filtered to "Walk-in only." Supports same-visit conversion outreach. (ADR-016)
-- **At-risk members:** active MEMBER clients (`end_date >= today`) whose last visit exceeds `Gym.member_inactivity_warning_days`. Sorted by days since last visit descending. Shows up to 5 clients with: name, days since last visit, and membership expiry date. "View all →" links to the Client List filtered by "At risk." (ADR-019, US-2.11)
+- **Frequent walk-ins:** top 5 **walk-in-only clients** (`client_type = WALK_IN` — zero non-cancelled membership records) sorted by total visit count descending, with last visit date and visit count. No minimum visit threshold — always shows the top 5 regardless of `Gym.walkin_conversion_prompt_visits` (ADR-036). "View all →" links to the Client List filtered to "Walk-in only." Supports same-visit conversion outreach. (ADR-016)
+- **At-risk members:** MEMBER clients with an in-effect membership (`start_date ≤ today ≤ end_date`) whose last visit exceeds `Gym.member_inactivity_warning_days`. Sorted by days since last visit descending. Shows up to 5 clients with: name, days since last visit, and membership expiry date. "View all →" links to the Client List filtered by "At risk." (ADR-019, US-2.11)
 
 **Business Rules Enforced:**
 - All chart and metric data excludes voided transactions (both `CLIENT_TRANSACTION` and `POS_SALE`).
@@ -87,7 +89,7 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - Status filter chips always visible: `All` · `Active` · `Upcoming` · `At risk` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive`. Filters combine with name search. Filter state persists within the session. (ADR-014, ADR-017, ADR-019, ADR-037)
   - `Active` — MEMBER clients with an active membership (`start_date ≤ today ≤ end_date`) + WALK_IN clients whose last visit is within `Gym.walkin_inactivity_threshold_days`
   - `Upcoming` — MEMBER clients with a future-dated membership (`start_date > today`) and no currently active membership (ADR-037)
-  - `At risk` — MEMBER clients with an active membership (`end_date >= today`) whose last `Attendance.visit_date` exceeds `Gym.member_inactivity_warning_days`, OR active MEMBER clients with no attendance records at all. Results sort by days since last visit descending by default. Does not overlap with "Inactive" (WALK_IN only). A client can match both "At risk" and "Expiring soon" simultaneously. (ADR-019)
+  - `At risk` — MEMBER clients with an in-effect membership (`start_date ≤ today ≤ end_date`) whose last `Attendance.visit_date` exceeds `Gym.member_inactivity_warning_days`, OR in-effect MEMBER clients with no attendance records at all. UPCOMING members are excluded (their period has not begun — ADR-040). Results sort by days since last visit descending by default. Does not overlap with "Inactive" (WALK_IN only). A client can match both "At risk" and "Expiring soon" simultaneously. (ADR-019)
   - `Expiring soon` — MEMBER clients within `Gym.expiration_warning_days` of membership end
   - `Expired` — MEMBER clients with no active or upcoming membership; most recent membership has `end_date < today`
   - `Walk-in only` — all WALK_IN type clients (Active and Inactive walk-ins combined)
@@ -141,7 +143,7 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - **Archived client appears in attendance history query:** record is retained and visible in reports; the client row in the list is greyed out under "Show archived."
 - **Walk-in filter + name search + sort by visit count:** all three can be applied simultaneously; each constraint narrows results cumulatively.
 - **Inactivity threshold change:** when the owner updates `walkin_inactivity_threshold_days`, the derived status of all WALK_IN clients recalculates immediately — no backfill needed since it's computed on query.
-- **Active MEMBER client with no attendance records:** treated as at-risk immediately — expected for new memberships before the first visit, including future-dated memberships before `start_date`.
+- **Active (in-effect) MEMBER client with no attendance records:** treated as at-risk immediately — expected for a newly started membership before the first visit. Upcoming members (membership not yet started) are NOT at-risk — their period has not begun (ADR-040).
 - **At-risk member who visits again:** the at-risk signal clears on the next query automatically (derived at runtime, no stored state to update).
 - **Client simultaneously matching "At risk" and "Expiring soon":** both filter chips show the client. Name search and either filter chip can be combined cumulatively.
 
@@ -165,7 +167,7 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 
 **Create Membership:**
 - Select `MembershipPlan` from the active plan catalog (populated from `MembershipPlan` where `is_active = true`).
-- If "Custom duration" plan is selected, a "Duration (days)" numeric input field appears inline and is required.
+- The selector also offers an inline **"Custom duration"** option that is *not* a saved catalog plan. Selecting it shows a required "Duration (days)" numeric input; the resulting membership has `membership_plan_id = null` ("Custom (ad-hoc)") with `end_date` derived from the duration. Owners who offer a recurring non-standard package can instead save a custom-duration *plan* in Settings (which sets `membership_plan_id`). (ADR-015)
 - `price` defaults from the selected plan's `default_price`, but is always overridable per transaction (price snapshot, not a live reference — ADR-003).
 - `start_date` defaults to today but can be future-dated (pre-purchase).
 - **Blocking state:** the Create Membership action is blocked if the client has any active OR upcoming membership (ADR-037):
@@ -178,16 +180,26 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 - The new Membership record is linked to the prior one via `renewed_from_membership_id`, preserving the full renewal chain.
 
 **View Membership History:**
-- Chronological list of all Membership records for a client, including the renewal chain and VOID badge where the associated payment was voided.
+- Chronological list of all Membership records for a client, including the renewal chain, a VOID badge where the associated payment was voided, and a "Cancelled" badge where the membership itself was cancelled (ADR-041).
+
+**Cancel Membership (soft — corrects an erroneous record):**
+- Accessible from the Membership History row overflow menu on the Client Profile.
+- Requires a cancellation reason. On confirm, `Membership.cancelled_at = now()` and `cancellation_reason` is stored (ADR-041, Flow 18).
+- A cancelled membership is excluded from all status/active/upcoming/expiry/renewal derivations, does not count toward `client_type = MEMBER`, never blocks creating a new membership, and is not counted in "Active members." It remains in Membership History with a "Cancelled" badge and is never hard-deleted.
+- Cancelling does NOT void the associated payment; voiding the payment does NOT cancel the membership. To reverse money, the owner voids the `CLIENT_TRANSACTION` separately (Flow 11). The two corrections are independent.
+- There is no free "edit membership": dates, plan, and price are immutable after creation (snapshot integrity). To fix a wrong duration/plan/client, cancel and recreate.
 
 **Monitor Expiration:**
-- Surfaced via Dashboard (Expiring Soon panel) + a dedicated filterable list (Active / Expired / Expiring Soon).
+- Surfaced via the Dashboard (Expiring Soon panel), the Client List status filter chips (Active / Upcoming / Expiring soon / Expired — operational outreach), and the Membership Reports (US-8.6 — archival/exportable lists). There is no separate standalone "membership list" screen; membership is a distributed capability with no top-level nav entry (ADR-042, see `INFORMATION-ARCHITECTURE.md`).
 
 **Business Rules Enforced:**
-- **One active membership per client at a time** — creating a new membership while one is still active is blocked, with a redirect prompt to "Renew" instead.
-- **Renewal date math (confirmed rule):**
-  - Renewing while current membership is still active → new period extends from the *existing end date*.
-  - Renewing after expiry → new period starts from *today*.
+- **One in-effect membership per client at a time (ADR-040)** — a membership is in effect when `start_date ≤ today ≤ end_date`; at most one is in effect per client. Creating a new membership is blocked while the client has an active membership (redirect to "Renew") or an upcoming membership (informational block, no redirect). Cancelled memberships do not count. A client may hold one ACTIVE plus one or more UPCOMING memberships (via early renewal) without violating the rule. (ADR-037, ADR-041)
+- **`Membership.status` is `UPCOMING` / `ACTIVE` / `EXPIRED`, derived (ADR-040):** `EXPIRING_SOON` is a Client-level display state, not a membership status. A future-dated membership is UPCOMING (not ACTIVE) until its `start_date` arrives.
+- **Renewal date math (ADR-040):** new `start_date = max(today, latest_end_date + 1 day)`, new `end_date = start_date + duration_days`, where `latest_end_date` is the greatest `end_date` among the client's non-cancelled memberships with `end_date >= today`.
+  - Renewing while active or upcoming → new period chains onto the latest end date (the new record is UPCOMING until it begins).
+  - Renewing after full expiry → new period starts today.
+  - Stacked early renewals chain onto the furthest-future end date. The previous record is never mutated.
+- **Membership cancellation is soft and additive (ADR-041):** a membership created in error is cancelled via `cancelled_at`; the record is retained, excluded from all derivations, and never blocks a new membership. Cancellation and payment void are independent actions.
 - Membership price is always a **snapshot** (`price_paid`), independent of the plan's current default price (ADR-003).
 - Expired memberships remain fully visible and queryable — never hidden or deleted.
 - An expired member is **not blocked from attendance**; they attend as a walk-in until they renew.
@@ -198,8 +210,12 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 **Edge Cases:**
 - **Future-dated membership start (pre-purchase):** must not count as "active" until `start_date` arrives; profile displays "Upcoming" badge.
 - **Custom duration plans:** support the exact same renewal math as standard duration plans.
+- **Ad-hoc custom duration:** selecting the inline "Custom duration" option (not a saved plan) creates a membership with `membership_plan_id = null` and a custom-derived `end_date`; reports label it "Custom (ad-hoc)" (ADR-015).
 - **Plan retired after membership created:** existing memberships remain valid; plan just no longer appears in the modal selector.
-- **Voided payment on a membership:** the membership record remains fully active. Cancelling or adjusting the membership is a separate manual action.
+- **Voided payment on a membership:** the membership record remains fully in effect — voiding a payment never cancels a membership. To remove an erroneous membership, use Cancel Membership (ADR-041); to reverse the money, void the payment. The two are independent.
+- **Membership created for the wrong client / wrong duration:** cancel it (soft, ADR-041) and recreate. There is no free edit of dates/plan/price (snapshot integrity).
+- **Early renewal producing an upcoming membership:** the client shows ACTIVE (precedence) with an UPCOMING record chained on; renewing again chains onto the furthest-future end date (ADR-040).
+- **Client whose only membership is upcoming (not yet begun):** shows neither "Renew" nor "Renew early" — a disabled/informational state until it becomes active (ADR-037).
 
 **Deferred:**
 - Membership freeze/pause.
@@ -286,7 +302,7 @@ Attendance (single top-level nav entry)
 - **Conversion prompt dismissed:** owner proceeds to walk-in fee normally. No re-prompt on the same visit. The visit count still increments; the prompt appears again on the next qualifying visit.
 - **Same-day correction attempted on a prior-day record:** edit is disabled; record is read-only. No escalation path at MVP.
 - **Duplicate check-in confirmed intentionally:** second Attendance record is created normally; labeled "2nd visit" in the Today's Check-Ins list. Total check-in count increments; unique visitor count does not.
-- **Active MEMBER client who has never attended:** at-risk signal triggers immediately. Expected for pre-purchased memberships before the first visit.
+- **Active (in-effect) MEMBER client who has never attended:** at-risk signal triggers immediately. Expected for a newly started membership before the first visit. Upcoming (pre-purchased, not yet started) memberships are not at-risk (ADR-040).
 
 **Deferred:**
 - `time_out` capture and session-duration analytics (field reserved in schema now; analytics view will gain session-duration chart when time_out is available).
@@ -349,7 +365,7 @@ This module's primary function is the **history/audit view**, the **void action*
 
 **MVP Scope / Forms:**
 
-**Product Management:**
+**Product Management (Flow 20):**
 - **Create/Edit Product:**
   - `name` (required)
   - `category` (required — select from ProductCategory)
@@ -440,7 +456,7 @@ This module's primary function is the **history/audit view**, the **void action*
 - PURCHASE entries show `total_restock_cost` when present.
 - ADJUSTMENT entries show `adjustment_reason_category` (structured label) and `note` (detail text when provided).
 
-**Manual Adjustment:**
+**Manual Adjustment (Flow 19):**
 - Enter delta quantity + select `adjustment_reason_category` (required) + optional detail note.
 - `adjustment_reason_category` options (owner-selectable): `DAMAGE` / `EXPIRY` / `THEFT` / `COUNT_CORRECTION` / `NATURAL_WASTAGE` / `PROMOTION` / `OTHER`.
 - `FORCED_SALE` is a system-only category assigned automatically on Force Sale overrides — it does not appear in the owner-facing selector (ADR-034).
@@ -463,6 +479,7 @@ This module's primary function is the **history/audit view**, the **void action*
 - **Total cost paid on restock left blank:** fully valid — `total_restock_cost = null`. The Inventory Movement History entry shows no cost data for that row.
 - **Days-until-stockout with zero average sales:** displays "No recent sales data" — no division by zero error.
 - **Shrinkage with no adjustments this month:** shrinkage column shows a dash for the product.
+- **Shrinkage % with zero sales:** when a product has shrinkage but zero sales in the period, the ">10% of sales" red threshold cannot be computed (division by zero). The shrinkage value is shown in amber (non-zero), and the red escalation is suppressed until the product has recorded sales in the period.
 - **Reorder point not set:** the reorder indicator is not shown for that product. `low_stock_threshold` alert remains active independently.
 - **Adjustment category = OTHER with no detail note:** blocked — system requires the detail note before the adjustment can be confirmed.
 - **Product with null cost_price:** excluded from the Inventory Valuation total. The excluded count is shown so the owner knows the figure may be understated.
@@ -491,7 +508,7 @@ This module's primary function is the **history/audit view**, the **void action*
 - **Inventory Usage Report:** stock movement summary per product over a date range — units sold, restocked, and manually adjusted. Includes a **Shrinkage section**: total negative adjustment quantity per product, broken down by `adjustment_reason_category` where set. Surfaces discrepancies between expected and actual stock. (US-8.9)
 - **Gross Profit Report:** per product, for the selected period — units/servings sold, revenue (sum of `unit_price × quantity`), COGS (sum of `cost_price_snapshot × quantity`), gross profit (revenue − COGS), and gross margin % (gross profit ÷ revenue × 100). Products with null `cost_price_snapshot` on any line items are flagged. Summary row shows blended totals and margin. Filterable by date range and product category. (US-8.12)
 - **Member Engagement Report:** for each active MEMBER client — total all-time visits, visits this month, visits last month, days since last visit. Default sort: days since last visit descending (least engaged first). Filterable by date range. (US-8.13)
-- **At-risk Members Report:** active MEMBER clients (`end_date >= today`) whose last attendance date exceeds `Gym.member_inactivity_warning_days`. Columns: name, membership expiry date, last visit date, days since last visit, total all-time visits. Sorted by days since last visit descending. (US-8.14)
+- **At-risk Members Report:** MEMBER clients with an in-effect membership (`start_date ≤ today ≤ end_date`) whose last attendance date exceeds `Gym.member_inactivity_warning_days`. Columns: name, membership expiry date, last visit date, days since last visit, total all-time visits. Sorted by days since last visit descending. (US-8.14)
 - **Void Analysis Report:** aggregated voided transactions by `void_reason_category` and period, spanning both `CLIENT_TRANSACTION` and `POS_SALE`. Summary section: count and total voided amount per category. Detail section: individual voided transactions with date, type, amount, void reason category, void note, and payment method. Filterable by period and transaction type. Grand total row per period. Delivers the void pattern-detection benefit stated in ADR-028. (US-8.15)
 - **New vs. Renewals Report:** new memberships (`renewed_from_membership_id IS NULL`) vs. renewals (`IS NOT NULL`) per period — count, revenue, and renewal rate % per row. Filterable by period and membership plan. Summary row with blended renewal rate % for the full range. (US-8.16)
 - **Membership Plan Performance Report:** per `MembershipPlan` (including retired plans with sales in the period) — memberships sold, total revenue, average price paid, plan status. Note on form: price comparison is against the current default price, which may differ from the default at time of sale if later edited. Filterable by period and plan status. (US-8.17)

@@ -22,6 +22,8 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 > **Blocker Resolution Patch (2026-06-25):** Seven pre-tech-stack blockers resolved. Changes: `Product` soft delete corrected to `deleted_at` (B1, ADR-005 amendment); `FORCED_SALE` enum category added to inventory adjustment (B2, ADR-034); UTC timestamp strategy adopted, `Gym.timezone` added (B3, ADR-035); Dashboard "Frequent walk-ins" panel confirmed as top-5 ranking, not threshold-filtered (B4, ADR-036); "Upcoming" membership status and filter chip added (B5, ADR-037); `visit_type` mutability exception in Flow 7 documented (B6, ADR-038); `Gym.default_membership_fee` removed (B7, ADR-039). See DECISIONS.md ADR-034 through ADR-039. No change to total MVP story count (79).
 
+> **Architecture Readiness Patch (2026-06-25):** All review findings resolved. New ADRs: ADR-040 (canonical in-effect membership definition, `Membership.status` = UPCOMING/ACTIVE/EXPIRED, renewal math), ADR-041 (soft membership cancellation), ADR-042 (information architecture & navigation), ADR-043 (Better Auth integration), ADR-044 (accessibility baseline). New P0 story US-3.10 (Cancel Membership). US-2.11 chip set corrected to 8 chips (Upcoming added); US-2.10 / US-3.2 / US-3.3 / US-8.22 / US-7.8 acceptance criteria updated. Total MVP story count: 79 → 80. See DECISIONS.md ADR-040–ADR-044.
+
 ---
 
 ## 1. Authentication & Settings
@@ -59,7 +61,7 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 **US-1.8 (P0)** — As the Gym Owner, I want to set a member attendance inactivity threshold (e.g., 14 days since last visit), so that active paying members who have stopped coming in are flagged as "at risk" before their membership lapses and they fail to renew.
 - Acceptance Criteria:
   - Setting is configurable in Settings → System Preferences with a numeric "At-risk member threshold (days since last visit)" field. Default: 14.
-  - An at-risk member is defined as: `client_type = MEMBER`, active membership (`end_date >= today`), AND last `Attendance.visit_date` exceeds the threshold — OR an active MEMBER client with no Attendance records at all.
+  - An at-risk member is defined as: `client_type = MEMBER`, an in-effect membership (`start_date ≤ today ≤ end_date`; ACTIVE/Expiring Soon, not UPCOMING — ADR-040), AND last `Attendance.visit_date` exceeds the threshold — OR an in-effect MEMBER client with no Attendance records at all.
   - At-risk is a derived operational signal, NOT a change to `Client.status` — an at-risk member's status remains Active or Expiring Soon as determined by their membership dates. The at-risk signal is surfaced in filters and alerts only. (ADR-019)
   - When the threshold is updated, the at-risk signal recalculates immediately on the next query — no backfill required.
   - Setting zero or a negative value is blocked with a validation error.
@@ -134,12 +136,12 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 - Acceptance Criteria:
   - For walk-in-only clients (no active or past membership), the profile header quick-stats strip prominently shows total walk-in visits with a conversion signal: "X visits — no membership."
   - The "Walk-in only" client list filter sorts results by visit count descending by default, surfacing the highest-frequency walk-ins first.
-  - A "Frequent walk-ins" live feed panel on the Dashboard shows the top 5 walk-in clients (no active membership) sorted by visit count, with their last visit date. "View all →" links to the client list filtered by Walk-in only.
+  - A "Frequent walk-ins" live feed panel on the Dashboard shows the top 5 **walk-in-only clients** (`client_type = WALK_IN` — zero non-cancelled membership records) sorted by visit count, with their last visit date. "View all →" links to the client list filtered by Walk-in only.
 
 **US-2.11 (P0)** — As the Gym Owner, I want an "At risk" filter on the Client List and a dashboard panel showing at-risk members, so I can identify and contact paying members who have stopped attending before they lapse and fail to renew.
 - Acceptance Criteria:
-  - A new "At risk" filter chip is added to the Client List, updating the chip set to: `All` · `Active` · `At risk` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive`.
-  - "At risk" shows MEMBER clients with an active membership (`end_date >= today`) whose last visit exceeds `Gym.member_inactivity_warning_days`, or who have an active membership and no attendance records.
+  - A new "At risk" filter chip is added to the Client List. The full chip set is: `All` · `Active` · `Upcoming` · `At risk` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive` (8 chips, including `Upcoming` per ADR-037).
+  - "At risk" shows MEMBER clients with an in-effect membership (`start_date ≤ today ≤ end_date`) whose last visit exceeds `Gym.member_inactivity_warning_days`, or who have an in-effect membership and no attendance records. UPCOMING members are excluded (ADR-040).
   - "At risk" does not overlap with "Inactive" (WALK_IN clients only). A client can simultaneously match "At risk" and "Expiring soon" — both filter chips show them.
   - "At risk" results sort by days since last visit descending (longest absence first) by default.
   - An "At-risk members" live feed panel is added to the Dashboard: up to 5 clients with name, days since last visit, and membership expiry date. "View all →" links to the Client List filtered by "At risk."
@@ -166,16 +168,16 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 **US-3.2 (P0)** — As the Gym Owner, I want to renew an expired or expiring membership, so that the client can continue using the gym.
 - Acceptance Criteria:
-  - If renewing **before** expiry, the new period **extends from the current end date** (not from today) — confirmed business rule.
-  - If renewing **after** expiry, the new period starts from the renewal date.
-  - The renewal creates a new Membership record linked to the previous one (`renewed_from_membership_id`), preserving full history.
-  - The action button on the Client Profile is context-aware: displays "Add membership" for clients with no membership history; "Renew" for clients with an expired or expiring-soon membership; "Renew early" for clients with a currently active membership not near expiry.
+  - Renewal date math (ADR-040): new `start_date = max(today, latest_end_date + 1 day)` and new `end_date = start_date + duration_days`, where `latest_end_date` is the greatest `end_date` among the client's non-cancelled memberships with `end_date >= today`.
+  - Renewing while **active or upcoming** chains the new period onto the latest end date (the new record is **Upcoming** until it begins); renewing after **full expiry** starts from today. Stacked early renewals chain onto the furthest-future end date.
+  - The renewal creates a new Membership record linked to the previous one (`renewed_from_membership_id`), preserving full history. The previous record is never mutated.
+  - The action button on the Client Profile is context-aware: "Add membership" (no membership history); "Renew" (expired or expiring-soon); "Renew early" (active, not near expiry). A client whose only membership is **upcoming** (not yet begun) shows a disabled/informational state — neither Renew nor Renew early — until it becomes active (ADR-037).
 
 **US-3.3 (P0)** — As the Gym Owner, I want to create custom membership plans with non-standard durations (e.g., 45 days), so that I can offer flexible deals.
 - Acceptance Criteria:
-  - When "Custom duration" is selected in the membership modal, a "Duration (days)" numeric input field appears inline.
-  - The custom duration field is required before the form can be submitted.
-  - Custom duration plans follow the same renewal date math as standard plans (ADR — renewal extends from end_date if active, from today if expired).
+  - The Add/Renew modal offers an inline **"Custom duration"** option. Selecting it shows a required "Duration (days)" numeric input. The resulting membership has `membership_plan_id = null` ("Custom (ad-hoc)") and `end_date` computed from the entered duration.
+  - For a recurring non-standard package, the owner can instead save a **custom-duration plan** in Settings → Membership Plans (duration type "Custom days"), which sets `membership_plan_id` like any catalog plan (US-3.9, ADR-015).
+  - Custom durations follow the same renewal date math as standard plans (ADR-040).
 
 **US-3.4 (P0)** — As the Gym Owner, I want to view a client's full membership history, so that I can see all past plans, prices paid, and renewal patterns.
 
@@ -191,6 +193,15 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - I can retire (deactivate) a plan by setting it to inactive. Retired plans no longer appear in the Add/Renew membership modal. All existing memberships created under that plan are unaffected.
   - Retired plans remain visible in Settings (with an inactive badge) and can be reactivated.
   - The Add/Renew membership modal populates its plan selector from `MembershipPlan` where `is_active = true`, in order of creation.
+
+**US-3.10 (P0)** — As the Gym Owner, I want to cancel a membership that was created in error, so that an erroneous membership stops granting access and disappears from active counts without destroying the audit trail.
+- Acceptance Criteria:
+  - A "Cancel membership" action is available from the Membership History row overflow menu on the Client Profile (Flow 18).
+  - Cancelling requires a reason note; on confirm, `Membership.cancelled_at` is set to the current timestamp and `cancellation_reason` is stored (ADR-041).
+  - A cancelled membership is excluded from all status/active/upcoming/expiry/renewal derivations, does not count toward `client_type = MEMBER`, and is not counted in "Active members." It never blocks creating a new membership.
+  - The cancelled membership remains in Membership History with a "Cancelled" badge — it is never hard-deleted.
+  - Cancelling a membership does NOT void its payment; voiding a payment does NOT cancel a membership. The two corrections are independent (Flow 11 / Flow 18).
+  - There is no free edit of an existing membership's dates, plan, or price (snapshot integrity) — to correct those, cancel and recreate.
 
 ### Future
 
@@ -440,6 +451,7 @@ All stories are written from the perspective of the **Gym Owner**, the only user
   - When `adjustment_reason_category` is set, the shrinkage breakdown by category is visible on hover or in an expanded detail row.
   - Products with zero shrinkage in the period display a dash.
   - A shrinkage value greater than zero is highlighted in amber; a value exceeding 10% of that product's total sales quantity for the period is highlighted in red.
+  - When a product has shrinkage but zero sales in the period, the ">10% of sales" red threshold is not computed (no division by zero); the value stays amber until the product has recorded sales in the period.
   - The shrinkage calculation draws from the `InventoryTransaction` ledger — the same source as the Inventory Usage Report (US-8.9).
 
 ### Future
@@ -511,7 +523,7 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 
 **US-8.14 (P0)** — As the Gym Owner, I want an at-risk members report listing active members who haven't visited in N days, so I can take targeted outreach action before their memberships expire without renewal.
 - Acceptance Criteria:
-  - Report lists all active MEMBER clients (`end_date >= today`) whose last attendance date exceeds `Gym.member_inactivity_warning_days`, sorted by days since last visit descending.
+  - Report lists all MEMBER clients with an in-effect membership (`start_date ≤ today ≤ end_date`) whose last attendance date exceeds `Gym.member_inactivity_warning_days`, sorted by days since last visit descending.
   - For each client: name, membership expiry date, last visit date, days since last visit, total all-time visits.
   - Exportable to CSV.
 
@@ -592,7 +604,7 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 - Acceptance Criteria:
   - A client is "converted" when `client_type = MEMBER` AND they have ≥1 `Attendance` record with `visit_type = WALK_IN` where `visit_date` predates their earliest `Membership.created_at` (derived per ADR-020). The "conversion date" is the `created_at` of the client's earliest Membership record.
   - Report filters to clients whose conversion date falls within the selected period.
-  - Columns: client name, first walk-in date, walk-in visits before conversion (count of WALK_IN Attendance records predating earliest Membership.created_at), conversion date, days from first visit to conversion, membership plan purchased (MembershipPlan.name; "Custom" if membership_plan_id is null), price paid.
+  - Columns: client name, first walk-in date, walk-in visits before conversion (count of WALK_IN Attendance records predating earliest Membership.created_at), conversion date, days from first visit to conversion, membership plan purchased (`MembershipPlan.name`; "Custom (ad-hoc)" if `membership_plan_id` is null), price paid.
   - Summary row: total conversions in period, average walk-in visits before conversion, average days from first visit to conversion.
   - Filterable by period (Monthly / This Year / Custom Range).
   - Exportable to CSV.
@@ -609,13 +621,13 @@ All stories are written from the perspective of the **Gym Owner**, the only user
 |---|---|---|
 | Auth & Settings | 7 | 2 |
 | Clients | 9 | 2 |
-| Membership | 7 | 2 |
+| Membership | 8 | 2 |
 | Attendance | 9 | 2 |
 | Client Payments | 4 | 2 |
 | POS & Product Sales | 14 | 2 |
 | Inventory | 8 | 1 |
 | Dashboard & Reports | 21 | 1 |
-| **Total** | **79** | **14** |
+| **Total** | **80** | **14** |
 
 ---
 

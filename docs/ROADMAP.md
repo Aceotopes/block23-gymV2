@@ -30,9 +30,10 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 
 ### Milestone 3 — Membership Management
 - [ ] Create membership with plan selection and price override; blocked if client has an active membership ("Go to Renew" redirect) or an upcoming membership (informational block, no redirect) (US-3.1, ADR-037)
-- [ ] Renew membership with context-aware button labels — extend from end date if not expired, from today if expired (US-3.2)
-- [ ] Custom plan duration — inline "Duration (days)" input when "Custom duration" selected (US-3.3)
-- [ ] Full membership history per client (US-3.4)
+- [ ] Renew membership with context-aware button labels — canonical renewal date math: chain onto latest end_date + 1 if active/upcoming, start today if fully expired; new record may be Upcoming (US-3.2, ADR-040)
+- [ ] Custom plan duration — inline "Duration (days)" option creates an ad-hoc membership (`membership_plan_id` null); reusable custom packages saved as catalog plans (US-3.3, ADR-015)
+- [ ] Full membership history per client — with VOID (payment) and Cancelled (membership) badges (US-3.4)
+- [ ] Cancel an erroneously created membership (soft cancel via `cancelled_at`, reason required) — excluded from all derivations, retained in history with a "Cancelled" badge; independent of payment void (US-3.10, Flow 18, ADR-041)
 - [ ] Expired memberships remain visible; client still allowed as walk-in (US-3.5)
 - [ ] Expiring-soon membership list (US-3.6)
 - [ ] Membership plan catalog management in Settings: create, edit, retire plans (US-3.9)

@@ -48,7 +48,8 @@ Each document has a defined ownership scope. Write changes to the right document
 | `docs/ROADMAP.md` | Milestone scope, delivery sequencing, and post-MVP backlog. |
 | `docs/DECISIONS.md` | Numbered ADRs — what was decided, why, and what was rejected. Every significant design decision goes here. |
 | `docs/DEVELOPMENT-LOG.md` | One entry per commit, newest first. Records what changed and which decisions were made. |
-| `docs/TECH-STACK.md` | Approved technology stack, architecture guidelines, development rules, and Claude Code guidance. Single source of truth for all technology decisions. |
+| `docs/TECH-STACK.md` | Approved technology stack, architecture guidelines, accessibility & NFR baselines, development rules, and Claude Code guidance. Single source of truth for all technology decisions. |
+| `docs/INFORMATION-ARCHITECTURE.md` | Top-level navigation and screen map — the app shell structure. Single source of truth for IA and where each screen lives. |
 
 ## Document Synchronization Map
 
@@ -66,7 +67,7 @@ Changes in one document almost always require updates in others. Use this map.
 
 ## Locked Design Decisions
 
-These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-039) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
+These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-044; ADR-030–032 intentionally unused) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
 
 **gym_id on every entity (ADR-001, ADR-025):** Multi-tenancy foundation. Every entity — including child/detail entities (`Membership`, `TransactionLineItem`, `InventoryTransaction`) — carries a `gym_id` FK. Enables database-level Row-Level Security without join-chain subqueries.
 
@@ -106,11 +107,21 @@ These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-039) represent reso
 
 **Remove Gym.default_membership_fee (ADR-039):** `Gym.default_membership_fee` is removed. `MembershipPlan.default_price` is the authoritative source for membership pricing. `Gym.default_walkin_fee` is retained — walk-in fees are not plan-based.
 
+**Canonical in-effect membership + renewal math (ADR-040):** A membership is "in effect" when `start_date ≤ today ≤ end_date` (the one canonical test — replaces the old `end_date >= today`). `Membership.status` is derived: `UPCOMING` / `ACTIVE` / `EXPIRED`. At most one in-effect membership per client; one ACTIVE plus one or more UPCOMING (from early renewal) is valid. Renewal: new `start_date = max(today, latest_end_date + 1 day)`, new `end_date = start_date + duration_days`.
+
+**Membership cancellation (ADR-041):** `Membership.cancelled_at` + `cancellation_reason` soft-cancel an erroneous membership. A cancelled membership is excluded from ALL derivations (status, active, upcoming, expiry, renewal, `client_type`), never blocks a new membership, and is retained with a "Cancelled" badge. Cancellation and payment void are independent. No free edit of membership dates/plan/price — cancel and recreate.
+
+**Information architecture (ADR-042):** Eight top-level nav entries: Dashboard · Clients · Attendance · Client Payments · POS · Inventory · Reports · Settings. Membership has NO standalone nav entry — it is distributed (Client Profile, Settings, Dashboard, Reports). See `INFORMATION-ARCHITECTURE.md`.
+
+**Better Auth uses the domain `User` table (ADR-043):** `gym_id` and `role` are Better Auth additional fields; the credentials provider manages `password_hash`. No parallel user table. Session = `{ userId, gymId, role }`.
+
+**Accessibility baseline (ADR-044):** Target WCAG 2.1 AA — keyboard operability, visible focus, contrast ≥ 4.5:1 (text) / 3:1 (large/UI), status never color-alone, labelled fields, `prefers-reduced-motion`. Detailed in `TECH-STACK.md` → Accessibility Standards.
+
 ## Domain Model Quick Reference
 
 Non-obvious field constraints that affect business rules across multiple documents:
 
-- **Membership** — `price_paid` (snapshot at purchase time), `status` (derived: `end_date >= today`), `renewed_from_membership_id` (self-FK — renewal chains, old record never mutated)
+- **Membership** — `price_paid` (snapshot at purchase time), `status` (derived, never stored: `UPCOMING`/`ACTIVE`/`EXPIRED`; in-effect = `start_date ≤ today ≤ end_date` — ADR-040), `renewed_from_membership_id` (self-FK — renewal chains, old record never mutated), `cancelled_at`/`cancellation_reason` (soft-cancel an erroneous membership — ADR-041; cancelled records excluded from all derivations), `membership_plan_id` (nullable — null = ad-hoc custom duration, "Custom (ad-hoc)")
 - **Attendance** — `membership_id` (snapshot of which membership was active at check-in; never retroactively updated), `time_out` (nullable; reserved for future analytics — no MVP business logic touches it), `correction_note` (nullable; populated when `time_in` is corrected via Flow 15 / US-4.11), `updated_at` (nullable; set when a correction is applied — null on unedited records; non-null value is the sole marker of a corrected record)
 - **Gym** — `default_walkin_fee` (active; walk-in fees are not plan-based), `timezone` (IANA identifier; governs all date/time display and "today" boundary, ADR-035). `default_membership_fee` does NOT exist — membership pricing is per-plan only (ADR-039).
 - **Product** — `product_type` (`STANDARD_PRODUCT` | `SERVING_BASED_PRODUCT`), `selling_price` (per unit or per serving), `current_stock` (units or remaining servings), `servings_per_container` (SERVING_BASED only), `container_selling_price` (nullable; SERVING_BASED only — enables Per Container POS mode), `low_stock_threshold` (dashboard alert trigger, distinct from `reorder_point`), `reorder_point` (nullable; inventory planning signal, accounts for lead time), `deleted_at` (nullable timestamp; null = active, non-null = archived — soft delete per ADR-005, not `is_active`)
@@ -122,7 +133,7 @@ Non-obvious field constraints that affect business rules across multiple documen
 
 Rules that span multiple documents and are easy to get wrong in isolation:
 
-**Membership renewal date math (US-3.2, Flow 6):** Renewing while active → new period extends from *existing end_date*. Renewing after expiry → new period starts from *today*. Both paths create a new `Membership` record linked via `renewed_from_membership_id`; the previous record is never modified.
+**Membership renewal date math (US-3.2, Flow 6, ADR-040):** new `start_date = max(today, latest_end_date + 1 day)`, new `end_date = start_date + duration_days`, where `latest_end_date` = greatest `end_date` among the client's non-cancelled memberships with `end_date >= today`. Renewing while active/upcoming chains onto the latest end (new record is UPCOMING until it begins); renewing after full expiry starts today; stacked early renewals chain onto the furthest-future end. Both paths create a new `Membership` linked via `renewed_from_membership_id`; the previous record is never modified.
 
 **Walk-in → Member conversion (Flow 7, ADR-024, ADR-038):** Walk-in fees and membership purchases are ALWAYS separate `CLIENT_TRANSACTION` records. Pre-fee conversion: owner is redirected to Flow 5 with no walk-in fee collected. Post-fee conversion: the original walk-in fee transaction remains intact; a new membership-only `CLIENT_TRANSACTION` is created separately. No automatic walk-in fee credit — owner overrides the membership price manually if desired. The attendance record's `visit_type` is updated to `MEMBER` after conversion. This mutation is a business workflow exception — `correction_note` and `updated_at` are NOT set (those are Flow 15 only).
 
@@ -130,7 +141,9 @@ Rules that span multiple documents and are easy to get wrong in isolation:
 
 **Void is additive (Flow 11):** Voiding creates new reversal entries in the inventory ledger. Original records are never modified or deleted. Voided transactions are excluded from revenue totals but remain in the audit trail. Voiding a payment does not cancel the associated membership.
 
-**Membership creation blocking (US-3.1, ADR-037):** Creating a membership is blocked if the client has an active membership (redirects to Renew) OR an upcoming membership (informational block only, no Renew redirect). These are two distinct messages.
+**Membership creation blocking (US-3.1, ADR-037):** Creating a membership is blocked if the client has an active membership (redirects to Renew) OR an upcoming membership (informational block only, no Renew redirect). These are two distinct messages. Cancelled memberships (ADR-041) do not count toward the block.
+
+**Membership cancellation vs payment void (US-3.10, Flow 18, ADR-041):** To remove an erroneous membership, cancel it (soft, `cancelled_at`); to reverse money, void the payment (Flow 11). The two are independent — neither cascades into the other. There is no free edit of an existing membership's dates/plan/price (snapshot integrity) — cancel and recreate.
 
 **Future-dated memberships (Module Spec 3, ADR-037):** A pre-purchased membership with a future `start_date` carries `UPCOMING` status until that date arrives — it is not counted as active. An existing UPCOMING membership blocks creating a new one.
 
