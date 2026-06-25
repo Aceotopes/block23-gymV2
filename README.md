@@ -4,7 +4,7 @@ A web-based management system for Block 23 Gym — handling member registration,
 
 ## Current Phase
 
-**Planning complete, tech stack selected — ready for the Design System.** 41 architecture decisions are recorded (ADR-001 through ADR-044; ADR-030–032 intentionally unused — see DECISIONS.md). No application code yet.
+**Planning, tech stack, and Design System complete — ready for implementation (Milestone 1).** 42 architecture decisions are recorded (ADR-001 through ADR-045; ADR-030–032 intentionally unused — see DECISIONS.md). No application code yet.
 
 ## What This System Does
 
@@ -19,9 +19,10 @@ Replaces paper sign-in sheets and Excel sales logs with a centralized digital sy
 | [Domain Model](docs/DOMAIN-MODEL.md) | Entity definitions, field-level rationale, and schema design decisions |
 | [Module Specs](docs/MODULE-SPECS.md) | Field-level specs, business rules, and edge cases per module |
 | [Information Architecture](docs/INFORMATION-ARCHITECTURE.md) | Top-level navigation and screen map — the app shell structure |
+| [Design System](docs/DESIGN-SYSTEM.md) | Tokens, theming, typography, layout, component inventory, and patterns (dark-first, indigo) |
 | [Tech Stack](docs/TECH-STACK.md) | Approved technologies, architecture guidelines, accessibility & NFR baselines, development rules |
 | [Roadmap](docs/ROADMAP.md) | 8-milestone delivery sequence |
-| [Decisions](docs/DECISIONS.md) | 41 architecture decision records (ADR-001 – ADR-044; ADR-030–032 unused) |
+| [Decisions](docs/DECISIONS.md) | 42 architecture decision records (ADR-001 – ADR-045; ADR-030–032 unused) |
 | [Development Log](docs/DEVELOPMENT-LOG.md) | Per-commit change history |
 
 ## Modules (MVP Scope)

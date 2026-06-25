@@ -697,3 +697,21 @@ These constraints are inputs to the Design System's color and typography token c
 **Why:** Accessibility was undocumented. Contrast, focus, color-only signaling, and reduced motion are token-level decisions that must precede the Design System; "Radix is accessible" covers component semantics but not system-level color and contrast choices.
 
 **Rejected:** Leaving accessibility implicit in the component library — component accessibility is necessary but not sufficient; contrast ratios and color-independent status signaling are design-token decisions Radix cannot make on the project's behalf.
+
+---
+
+## ADR-045: Design language — dark-first, professional indigo on neutral slate
+
+**Date:** 2026-06-25
+**Status:** Accepted
+
+**Decision:** The Design System is **dark-first** with a **professional indigo accent** (`indigo-500` on dark / `indigo-600` on light) on a **neutral slate** chrome. Semantic colors: emerald (success), amber (warning), red (danger), sky (info); at-risk uses orange to stay distinct from amber "expiring soon." Typography is **Geist Sans** (UI) + **Geist Mono** (tabular numbers/money). Base color `slate`, shadcn style `new-york`, icons `lucide`. All values are delivered as CSS variables (dark on `:root`, light override) so theme is a values flip, not a rebuild. The full specification — tokens, type scale, spacing/layout, component inventory, patterns, and the WCAG 2.1 AA application — lives in `DESIGN-SYSTEM.md`.
+
+**Why:** The product is a data-dense, desktop-first management dashboard (ADR-033) used for long report/dashboard sessions. A dark, low-fatigue canvas with a calm indigo accent maximizes legibility and reads as professional SaaS, while neutral slate chrome keeps dense tables readable. Indigo provides clear primary affordances that meet AA (white on indigo-500 ≈ 4.6:1) without competing with the emerald/amber/red semantic signals the domain relies on (status badges, deltas, shrinkage). Defining tokens as CSS variables keeps light mode and a future user toggle a low-cost flip.
+
+**Rejected:**
+- **Energetic orange / lime-on-slate brands** — higher visual intensity competes with the semantic warning/success palette on data-dense screens and tires the eye over long sessions.
+- **Emerald primary** — collides with the success semantic (status dots, positive deltas), muddying the status language.
+- **Light-only** — forgoes the lower-fatigue default the owner's long dashboard/report sessions benefit from; dark-first with variable tokens keeps light fully available.
+
+**Relationship:** Implements ADR-044 (accessibility baseline) at the token level and ADR-033 (desktop-first). Consumes ADR-042's information architecture for the app shell. Detailed in `DESIGN-SYSTEM.md`.

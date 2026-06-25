@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Tech stack selected — ready for Design System and implementation.** Planning documents and the tech stack are stable. No application code exists yet. See `docs/TECH-STACK.md` for the approved stack and all development rules.
+**Planning, tech stack, and Design System complete — ready for implementation (Milestone 1).** Planning documents, the tech stack, and the design language are stable. No application code exists yet. See `docs/TECH-STACK.md` for the approved stack and development rules, `docs/DESIGN-SYSTEM.md` for tokens/components/patterns, and `docs/INFORMATION-ARCHITECTURE.md` for the navigation/screen map.
 
 ## Planning Workflow
 
@@ -50,6 +50,7 @@ Each document has a defined ownership scope. Write changes to the right document
 | `docs/DEVELOPMENT-LOG.md` | One entry per commit, newest first. Records what changed and which decisions were made. |
 | `docs/TECH-STACK.md` | Approved technology stack, architecture guidelines, accessibility & NFR baselines, development rules, and Claude Code guidance. Single source of truth for all technology decisions. |
 | `docs/INFORMATION-ARCHITECTURE.md` | Top-level navigation and screen map — the app shell structure. Single source of truth for IA and where each screen lives. |
+| `docs/DESIGN-SYSTEM.md` | Design tokens, theming, typography, spacing/layout, component inventory, and UI patterns. Single source of truth for the visual/interaction language. |
 
 ## Document Synchronization Map
 
@@ -67,7 +68,7 @@ Changes in one document almost always require updates in others. Use this map.
 
 ## Locked Design Decisions
 
-These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-044; ADR-030–032 intentionally unused) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
+These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-045; ADR-030–032 intentionally unused) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
 
 **gym_id on every entity (ADR-001, ADR-025):** Multi-tenancy foundation. Every entity — including child/detail entities (`Membership`, `TransactionLineItem`, `InventoryTransaction`) — carries a `gym_id` FK. Enables database-level Row-Level Security without join-chain subqueries.
 
@@ -116,6 +117,8 @@ These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-044; ADR-030–032 
 **Better Auth uses the domain `User` table (ADR-043):** `gym_id` and `role` are Better Auth additional fields; the credentials provider manages `password_hash`. No parallel user table. Session = `{ userId, gymId, role }`.
 
 **Accessibility baseline (ADR-044):** Target WCAG 2.1 AA — keyboard operability, visible focus, contrast ≥ 4.5:1 (text) / 3:1 (large/UI), status never color-alone, labelled fields, `prefers-reduced-motion`. Detailed in `TECH-STACK.md` → Accessibility Standards.
+
+**Design language (ADR-045):** Dark-first, professional indigo accent (`indigo-500` dark / `indigo-600` light) on neutral slate chrome; semantic emerald/amber/red/sky (at-risk = orange to stay distinct from amber); Geist Sans + Geist Mono (tabular money/numbers); shadcn `new-york` / base color `slate` / lucide icons; tokens as CSS variables (theme = values flip). Full spec in `DESIGN-SYSTEM.md`. Status badges always carry a text label + icon — never color alone.
 
 ## Domain Model Quick Reference
 

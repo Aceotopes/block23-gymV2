@@ -5,6 +5,41 @@ Newest entries at the top.
 
 ---
 
+## [#013] Design System — DESIGN-SYSTEM.md + ADR-045 — 2026-06-25
+
+**Commit:** _(Done)_
+
+**Purpose:** Establish the visual and interaction language for Block23 Gym V2 before implementation. Documentation-only — no application code.
+
+**New ADR:**
+
+- **ADR-045 — Design language:** dark-first, professional **indigo** accent (`indigo-500` dark / `indigo-600` light) on neutral **slate** chrome; semantic emerald/amber/red/sky (at-risk = orange, distinct from amber "expiring soon"); **Geist Sans + Geist Mono** (tabular money/numbers); shadcn `new-york` / base color `slate` / lucide icons; tokens delivered as CSS variables so theme is a values flip. Rejected energetic-orange/lime, emerald-primary (collides with success), and light-only.
+
+**New document:**
+
+- **docs/DESIGN-SYSTEM.md (NEW):** Full design system — principles, dark-first theming model, color system (core tokens + dark/light values, semantic colors, the domain **status token table** with color+label+icon, Recharts palette, AA contrast commitments), typography (Geist + tabular figures, type scale), spacing/radius/layout (app shell, breakpoints, density), iconography, motion (with reduced-motion), the shadcn/ui **component inventory** mapped to every module surface, **core patterns** (status badge, KPI card, data table, filter chips, destructive confirmations, forms/validation, money/number formatting, empty/loading states, Check-In & POS), the concrete WCAG 2.1 AA application, and Tailwind v4 / shadcn implementation notes.
+
+**Decisions captured (user-selected):**
+
+- Brand: **Professional SaaS (indigo)** on neutral slate.
+- Theme: **Dark-first** (light is a first-class secondary via the same CSS-variable tokens).
+
+**Changes by file:**
+
+- **DECISIONS.md:** ADR-045 appended.
+- **README.md:** Current Phase → "Planning, tech stack, and Design System complete — ready for implementation (Milestone 1)"; ADR count → 42 (ADR-001–045); DESIGN-SYSTEM.md added to the documents table.
+- **CLAUDE.md:** Project Status updated; DESIGN-SYSTEM.md added to the Planning Documents table; Locked Decisions intro ADR range → ADR-045; ADR-045 entry added to Locked Design Decisions.
+
+**Issues / Notes:**
+
+- The design system specifies the _system_, not application component code — implementation follows TECH-STACK rules (Server Components, shadcn primitives, Tailwind utilities, tokens from CSS variables).
+- Deferred within the design system: user-facing theme toggle, logo/wordmark (text placeholder for now), compact-density default, a light-mode data-viz contrast re-check, and a print stylesheet for reports.
+- Recorded ADRs: 41 → 42 (highest number 045; 030–032 intentionally unused).
+
+**Planning Phase Status:** Complete. Design System defined. Next step: implementation — Milestone 1 (project scaffold, auth, settings), starting with `schema.prisma`.
+
+---
+
 ## [#012] Architecture Readiness Patch — Pre-Design-System — 2026-06-25
 
 **Commit:** _(Done)_
