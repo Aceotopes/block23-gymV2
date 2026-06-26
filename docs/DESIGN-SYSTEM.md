@@ -122,6 +122,8 @@ Each semantic has a **solid** variant (filled badge/button + foreground), a **te
 
 > Amber never carries white text below large sizes. Use **amber-600** for solid (with white) or amber **text** on the canvas. Do not place white on amber-400/500.
 
+> **Implementation:** the "text/icon on canvas" column is exposed as CSS variables `--success-on` / `--warning-on` / `--danger-on` / `--info-on` / `--primary-on` (`globals.css`, both theme columns; utilities `text-success-on` … via `@theme inline`). The shared `StatusBadge` renders subtle surface (`bg-<sem>-on/15`) + on-canvas text so small badge text stays AA. At-risk uses `--at-risk` (orange) and Neutral uses `--muted`/`--muted-foreground` directly.
+
 ### 3.4 Domain status tokens (color + label + shape — never color alone)
 
 The canonical mapping for every status surfaced across the modules. **Every badge renders its label text; the icon/shape is the color-independent signal (ADR-044, Principle 3).**
@@ -522,7 +524,7 @@ Data-entry workflows — POS checkout, Inventory restock/adjustment, product/pla
 `min-h-dvh` over `100vh`; no horizontal scroll on mobile except the deliberate frozen-column table; viewport meta never disables zoom; fixed bottom nav reserves bottom padding so content is never obscured.
 
 ### 14.4 State in the URL (deep-linking, refresh-safe)
-List **filter, sort, page, active tab, and report period** are encoded in URL search params. This satisfies the spec's "filter state persists within the session" (MODULE-SPECS Module 2) **and** adds shareability, refresh-safety, and correct back-button restoration (Principle: predictable back). Ephemeral cross-component UI that must not survive a reload (the POS cart, an open dialog) stays in Zustand/local state. *(See §19 — this refines TECH-STACK's Zustand-for-filters note and should be confirmed.)*
+List **filter, sort, page, active tab, and report period** are encoded in URL search params. This satisfies the spec's "filter state persists within the session" (MODULE-SPECS Module 2) **and** adds shareability, refresh-safety, and correct back-button restoration (Principle: predictable back). Ephemeral cross-component UI that must not survive a reload (the POS cart, the sidebar collapse, an open dialog) stays in Zustand/local state. **Confirmed and locked by ADR-047** (refines TECH-STACK's State Management Standards; the prior "Zustand for filters" note is superseded). Derived/filtered tables (e.g. the Client List) render on the server from these params.
 
 ---
 
@@ -605,7 +607,7 @@ Mandatory pre-flight for Claude Code / AI sessions generating UI. Read alongside
 
 ## 19. Deferred / Open Questions
 
-- **List-state mechanism (confirm):** §14.4 specifies URL search params for filter/sort/page/tab/period state, which refines TECH-STACK's "Zustand for session-persistent filter state." Both satisfy the spec; URL state additionally gives shareable, refresh-safe, back-restorable views and suits Server Components. **Recommendation:** adopt URL params for list state; keep Zustand for the POS cart only. Confirm and, if accepted, note it in `DECISIONS.md` / `TECH-STACK.md`.
+- ~~**List-state mechanism (confirm):**~~ **Resolved — ADR-047 (2026-06-26).** URL search params hold list filter/sort/page/tab/period state; Zustand is reserved for the POS cart and sidebar collapse. Derived/filtered tables render on the server from the URL. Recorded in `DECISIONS.md` (ADR-047) and `TECH-STACK.md` (State Management Standards).
 - **User-facing theme toggle** (light/dark switch) — tokens are ready; the toggle UI is post-MVP unless trivially added.
 - **Logo / wordmark** for "Block 23 Gym" — not yet supplied; topbar uses a text wordmark placeholder (§8) until provided.
 - **Light-mode data-viz parity pass** — the §3.5 palette is verified for dark; re-check chart colors on the white canvas to AA when light mode is built.

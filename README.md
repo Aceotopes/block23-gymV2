@@ -4,7 +4,7 @@ A web-based management system for Block 23 Gym — handling member registration,
 
 ## Current Phase
 
-**Implementation in progress — Milestone 1 (Foundation & Auth).** Planning, tech stack, and Design System are complete and stable. Project setup is done (Next.js 15 scaffold, Neon PostgreSQL + Prisma 7, 11-entity schema, Better Auth owner login with session + route protection). Remaining in Milestone 1: the app shell and the Settings module. 43 architecture decisions are recorded (ADR-001 through ADR-046; ADR-030–032 intentionally unused — see DECISIONS.md). See `docs/SESSION_HANDOFF.md` for the live status and resume point.
+**Implementation in progress — Milestones 1–2 complete.** Planning, tech stack, and Design System are complete and stable. **Milestone 1 (Foundation & Auth)** — Next.js 15 scaffold, Neon PostgreSQL + Prisma 7 (11-entity schema), Better Auth owner login + session + route protection, the 8-entry app shell, and Settings — is done. **Milestone 2 (Client Management)** — client registration/edit, the Client List (partial-name search + 8 status/type filter chips + show-archived, URL-driven server-rendered tables per ADR-047), the Client Profile, and soft-delete/archive — is built. 44 architecture decisions are recorded (ADR-001 through ADR-047; ADR-030–032 intentionally unused — see DECISIONS.md). See `docs/SESSION_HANDOFF.md` for the live status and resume point.
 
 ## What This System Does
 
@@ -22,7 +22,7 @@ Replaces paper sign-in sheets and Excel sales logs with a centralized digital sy
 | [Design System](docs/DESIGN-SYSTEM.md) | Tokens, theming, typography, layout, component inventory, and patterns (dark-first, indigo) |
 | [Tech Stack](docs/TECH-STACK.md) | Approved technologies, architecture guidelines, accessibility & NFR baselines, development rules |
 | [Roadmap](docs/ROADMAP.md) | 8-milestone delivery sequence |
-| [Decisions](docs/DECISIONS.md) | 43 architecture decision records (ADR-001 – ADR-046; ADR-030–032 unused) |
+| [Decisions](docs/DECISIONS.md) | 44 architecture decision records (ADR-001 – ADR-047; ADR-030–032 unused) |
 | [Development Log](docs/DEVELOPMENT-LOG.md) | Per-commit change history |
 | [Session Handoff](docs/SESSION_HANDOFF.md) | Live implementation status and resume point for the next session |
 

@@ -1,0 +1,402 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import {
+  ArrowLeft,
+  Ban,
+  CalendarClock,
+  ClipboardList,
+  XCircle,
+} from "lucide-react";
+import { prisma } from "@/lib/prisma";
+import { getCurrentGym } from "@/lib/gym";
+import { gymToday, formatDateOnly, formatTimeOnly } from "@/lib/dates";
+import { deriveClient, deriveMembershipStatus } from "@/lib/clients/derive";
+import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { StatusBadge, ClientTypeBadge } from "@/components/status-badge";
+import { EmptyState } from "@/components/empty-state";
+import { ClientRowActions } from "../client-row-actions";
+
+export const metadata = { title: "Client · Block23 Gym" };
+
+function peso(value: { toString(): string }): string {
+  return `₱${Number(value).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function StatTile({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-1 p-4">
+        <p className="text-muted-foreground text-xs">{label}</p>
+        <p className="text-2xl font-semibold tabular-nums">{value}</p>
+        {hint ? <p className="text-muted-foreground text-xs">{hint}</p> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+type TabKey = "membership" | "attendance";
+
+export default async function ClientProfilePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const gym = await getCurrentGym();
+  if (!gym) redirect("/login");
+
+  const { id } = await params;
+  // Guard malformed ids: the PK is a UUID (`@db.Uuid`), so a non-UUID path segment
+  // would throw at the query layer (500) — treat it as a missing client (404).
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+  ) {
+    notFound();
+  }
+  const tab: TabKey =
+    (await searchParams).tab === "attendance" ? "attendance" : "membership";
+
+  const client = await prisma.client.findFirst({
+    where: { id, gymId: gym.id },
+    include: {
+      memberships: {
+        orderBy: { startDate: "desc" },
+        include: {
+          membershipPlan: { select: { name: true } },
+          transactionLineItems: {
+            select: { transaction: { select: { status: true } } },
+          },
+        },
+      },
+      attendances: {
+        orderBy: [{ visitDate: "desc" }, { timeIn: "desc" }],
+        select: { id: true, visitDate: true, timeIn: true, visitType: true },
+      },
+    },
+  });
+  if (!client) notFound();
+
+  const today = gymToday(gym.timezone);
+  const totalVisits = client.attendances.length;
+  const lastVisitDate = client.attendances[0]?.visitDate ?? null;
+  const monthStart = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1),
+  );
+  const monthEnd = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1),
+  );
+  const visitsThisMonth = client.attendances.filter(
+    (a) => a.visitDate >= monthStart && a.visitDate < monthEnd,
+  ).length;
+
+  const derived = deriveClient({
+    memberships: client.memberships,
+    lastVisitDate,
+    totalVisits,
+    today,
+    thresholds: {
+      expirationWarningDays: gym.expirationWarningDays,
+      walkinInactivityThresholdDays: gym.walkinInactivityThresholdDays,
+      memberInactivityWarningDays: gym.memberInactivityWarningDays,
+    },
+  });
+
+  // Context-aware membership action label (US-2.4). The actual Add/Renew flows
+  // arrive in Milestone 3, so the control is present but disabled for now.
+  const hasMembershipHistory = client.memberships.some(
+    (m) => m.cancelledAt === null,
+  );
+  const membershipActionLabel = !hasMembershipHistory
+    ? "Add membership"
+    : derived.expiringSoon ||
+        (!derived.isActiveMembership && derived.clientType === "MEMBER")
+      ? "Renew"
+      : "Renew early";
+
+  return (
+    <>
+      <Link
+        href="/clients"
+        className="text-muted-foreground hover:text-foreground mb-4 inline-flex items-center gap-1.5 text-sm"
+      >
+        <ArrowLeft className="size-4" aria-hidden />
+        Back to clients
+      </Link>
+
+      <PageHeader
+        title={client.fullName}
+        action={
+          <div className="flex items-center gap-2">
+            <Button
+              disabled
+              title="Membership management arrives in Milestone 3"
+            >
+              {membershipActionLabel}
+            </Button>
+            <ClientRowActions
+              showView={false}
+              client={{
+                id: client.id,
+                fullName: client.fullName,
+                contactNumber: client.contactNumber,
+                email: client.email,
+                notes: client.notes,
+                archived: client.deletedAt !== null,
+              }}
+            />
+          </div>
+        }
+      />
+
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <ClientTypeBadge type={derived.clientType} />
+        <StatusBadge status={derived.status} />
+        {client.deletedAt !== null ? (
+          <Badge variant="outline" className="text-muted-foreground">
+            Archived
+          </Badge>
+        ) : null}
+      </div>
+
+      {/* Quick-stats strip (US-2.4 / US-2.10) */}
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile label="Total visits" value={String(totalVisits)} />
+        <StatTile label="Visits this month" value={String(visitsThisMonth)} />
+        {derived.clientType === "MEMBER" ? (
+          <StatTile
+            label="Membership"
+            value={
+              derived.daysUntilExpiry !== null
+                ? `${derived.daysUntilExpiry}d left`
+                : "—"
+            }
+            hint={
+              derived.membershipExpiry
+                ? `Expires ${formatDateOnly(derived.membershipExpiry)}`
+                : "No active membership"
+            }
+          />
+        ) : (
+          <StatTile
+            label="Walk-in visits"
+            value={String(totalVisits)}
+            hint="No membership — conversion opportunity"
+          />
+        )}
+        <StatTile
+          label="Last visit"
+          value={
+            derived.daysSinceLastVisit === null
+              ? "Never"
+              : derived.daysSinceLastVisit === 0
+                ? "Today"
+                : `${derived.daysSinceLastVisit}d ago`
+          }
+          hint={lastVisitDate ? formatDateOnly(lastVisitDate) : undefined}
+        />
+      </div>
+
+      {/* Details */}
+      <Card className="mb-6">
+        <CardContent className="grid gap-x-8 gap-y-3 p-4 sm:grid-cols-2">
+          <Detail label="Contact number" value={client.contactNumber} />
+          <Detail label="Email" value={client.email} />
+          <Detail
+            label="Registered"
+            value={formatDateOnly(client.dateRegistered)}
+          />
+          <Detail label="Notes" value={client.notes} />
+        </CardContent>
+      </Card>
+
+      {/* Tabs (URL-driven — §14.4) */}
+      <div className="mb-4 flex gap-1 border-b">
+        <TabLink
+          id={id}
+          tab="membership"
+          active={tab === "membership"}
+          label="Membership history"
+        />
+        <TabLink
+          id={id}
+          tab="attendance"
+          active={tab === "attendance"}
+          label="Attendance history"
+        />
+      </div>
+
+      {tab === "membership" ? (
+        <MembershipHistory
+          memberships={client.memberships}
+          today={today}
+          expirationWarningDays={gym.expirationWarningDays}
+        />
+      ) : (
+        <AttendanceHistory attendances={client.attendances} />
+      )}
+    </>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div>
+      <p className="text-muted-foreground text-xs">{label}</p>
+      <p className="text-sm">{value?.trim() ? value : "—"}</p>
+    </div>
+  );
+}
+
+function TabLink({
+  id,
+  tab,
+  active,
+  label,
+}: {
+  id: string;
+  tab: TabKey;
+  active: boolean;
+  label: string;
+}) {
+  return (
+    <Link
+      href={`/clients/${id}?tab=${tab}`}
+      aria-current={active ? "page" : undefined}
+      className={
+        active
+          ? "border-primary text-foreground -mb-px border-b-2 px-3 py-2 text-sm font-medium"
+          : "text-muted-foreground hover:text-foreground -mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium"
+      }
+    >
+      {label}
+    </Link>
+  );
+}
+
+type MembershipRow = {
+  id: string;
+  startDate: Date;
+  endDate: Date;
+  cancelledAt: Date | null;
+  pricePaid: { toString(): string };
+  membershipPlan: { name: string } | null;
+  transactionLineItems: { transaction: { status: string } }[];
+};
+
+function MembershipHistory({
+  memberships,
+  today,
+  expirationWarningDays,
+}: {
+  memberships: MembershipRow[];
+  today: Date;
+  expirationWarningDays: number;
+}) {
+  if (memberships.length === 0) {
+    return (
+      <EmptyState
+        icon={CalendarClock}
+        title="No memberships yet"
+        description="Membership purchases and renewals arrive in Milestone 3."
+      />
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {memberships.map((m) => {
+        const status = deriveMembershipStatus(m, today, expirationWarningDays);
+        const voided = m.transactionLineItems.some(
+          (li) => li.transaction.status === "VOID",
+        );
+        return (
+          <Card key={m.id}>
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <div className="space-y-1">
+                <p className="font-medium">
+                  {m.membershipPlan?.name ?? "Custom (ad-hoc)"}
+                </p>
+                <p className="text-muted-foreground text-sm tabular-nums">
+                  {formatDateOnly(m.startDate)} – {formatDateOnly(m.endDate)}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {status === "CANCELLED" ? (
+                  <Badge
+                    variant="outline"
+                    className="text-muted-foreground line-through"
+                  >
+                    <XCircle aria-hidden /> Cancelled
+                  </Badge>
+                ) : (
+                  <StatusBadge status={status} />
+                )}
+                <span
+                  className={
+                    voided
+                      ? "text-muted-foreground font-mono text-sm tabular-nums line-through"
+                      : "font-mono text-sm tabular-nums"
+                  }
+                >
+                  {peso(m.pricePaid)}
+                </span>
+                {voided ? (
+                  <Badge variant="outline" className="text-danger-on">
+                    <Ban aria-hidden /> VOID
+                  </Badge>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+type AttendanceRow = {
+  id: string;
+  visitDate: Date;
+  timeIn: Date;
+  visitType: "MEMBER" | "WALK_IN";
+};
+
+function AttendanceHistory({ attendances }: { attendances: AttendanceRow[] }) {
+  if (attendances.length === 0) {
+    return (
+      <EmptyState
+        icon={ClipboardList}
+        title="No attendance yet"
+        description="Check-ins appear here. Date-range and visit-type filters arrive with the Attendance module (Milestone 4)."
+      />
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {attendances.slice(0, 50).map((a) => (
+        <Card key={a.id}>
+          <CardContent className="flex items-center justify-between gap-3 p-3 px-4">
+            <span className="text-sm tabular-nums">
+              {formatDateOnly(a.visitDate)} · {formatTimeOnly(a.timeIn)}
+            </span>
+            <ClientTypeBadge type={a.visitType} />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}

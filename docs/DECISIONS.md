@@ -740,3 +740,22 @@ These constraints are inputs to the Design System's color and typography token c
 - **A separate Better-Auth-owned user table linked to the domain `User`** — already rejected by ADR-043 (two identity sources, joins, drift). Still rejected.
 
 **Relationship:** Refines ADR-043 (everything else in ADR-043 stands). The `session`/`account`/`verification` tables are the named exception to ADR-001/ADR-025.
+
+---
+
+## ADR-047: List-state lives in the URL; tables are server-rendered
+
+**Date:** 2026-06-26
+**Status:** Accepted (confirms DESIGN-SYSTEM §14.4/§19; refines the State Management Standards in `TECH-STACK.md`)
+
+**Decision:** Filter chip, name search, show-archived, sort column/direction, page, active tab, and report period — the **list view state** — is encoded in **URL search params**, not Zustand. Concretely the Client List uses `q` (name search), `chip` (active filter chip), `archived` (`1` to include archived), `sort` (column id) + `dir` (`asc`/`desc`), and `page`. Zustand is reserved for **ephemeral cross-component UI that must not survive a reload** — the POS cart and the sidebar collapse state. Open dialogs and per-field form state stay in local React/RHF state.
+
+Filtered, derived lists are **rendered on the server** (React Server Components): the derivation of `client_type`/`status`/at-risk (ADR-002/017/019/037/040) and the gym-scoped query (ADR-001/025) already must run server-side, so the table reads its search params, derives + filters + sorts + paginates on the server, and renders rows directly. Sort headers and pagination are links that rewrite the URL; only genuinely interactive pieces (search box, chips, row `⋯` menu, archive confirm) are small client islands. The generic client-side **TanStack Table `DataTable`** named in DESIGN-SYSTEM §16 is **deferred to the first view that needs client-side table interactivity** (e.g. a polled/optimistic view paired with TanStack Query); server-rendered URL-driven tables are the established pattern for derived/filtered lists.
+
+**Why:** URL state is shareable, refresh-safe, and restores correctly on browser back — the design system's "predictable back" principle (§14.2) and the deep-link requirements (Dashboard "View all →" → a pre-filtered Client List, IA §4) depend on it. It also satisfies MODULE-SPECS Module 2's "filter state persists within the session" without any client store. Keeping derivation + filtering on the server avoids shipping every client row (plus gym thresholds and attendance aggregates) to the browser, honors TECH-STACK rules 8/11/12 (prefer Server Components; Zustand only for client UI that must cross component boundaries; don't cache server data in Zustand), and keeps a single source of truth for "what this list is showing."
+
+**Rejected:**
+- **Zustand for filter state** (the prior wording in TECH-STACK's decision tree) — a client store does not survive reload, is not shareable, and does not restore on back; it would also duplicate server-derived state on the client. Reserved now for the POS cart and sidebar only.
+- **Client-side TanStack Table over the full dataset** — would require shipping all derived rows to the client and re-deriving filters there, splitting the source of truth and defeating server-side pagination. Deferred, not banned: it remains the right tool when a view needs live client-side interactivity.
+
+**Relationship:** Confirms DESIGN-SYSTEM §14.4 and resolves the open question in §19. Updates the State Management Standards decision tree in `TECH-STACK.md`. Consumes ADR-002/017/019/037/040 (derived status) and ADR-001/025 (gym-scoped queries).

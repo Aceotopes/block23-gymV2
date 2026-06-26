@@ -45,7 +45,7 @@ Every technology in this stack is well-represented in Claude Code's training dat
 | Forms | React Hook Form | Latest | Form state management | Uncontrolled form inputs, minimal re-renders; integrates with Zod via `@hookform/resolvers` |
 | Validation | Zod | Latest | Schema validation | Shared validation between client-side forms and server-side Server Actions; enum schemas mirror Prisma enums; TypeScript inference built-in |
 | Data Tables | TanStack Table | v8 | Headless table logic | Sorting, filtering, pagination for Client List, Inventory, and all 22 reports; pairs with shadcn/ui DataTable pattern |
-| Client State | Zustand | v5 | Client-side UI state | POS cart state; session-persistent filter state (per MODULE-SPECS.md); minimal API, no provider required |
+| Client State | Zustand | v5 | Client-side UI state | POS cart state; sidebar collapse; minimal API, no provider required. **List filter/sort/page state lives in the URL, not Zustand — ADR-047.** |
 | Server State | TanStack Query | v5 | Client-side data fetching | Background refresh for Check-In Station and Dashboard live panels; cache invalidation after mutations; used only where Server Components cannot serve the need |
 | Charts | Recharts | Latest | Data visualization | React-native composable chart components; Dashboard KPI trends, Attendance Analytics charts; compatible with Tailwind color tokens |
 | File Storage | Cloudflare R2 | — | Product image storage | S3-compatible API (self-hosting swap to MinIO is one env variable); no egress fees; integrated CDN; free tier covers MVP |
@@ -157,12 +157,20 @@ Does the component need local UI state that does not need
 to survive a page navigation (e.g., modal open/closed)?
   → Use useState (local React state)
 
+Is the state a LIST VIEW's filter / search / sort / page / tab / period
+(e.g., the Client List chips + name search, report period)?
+  → Encode it in URL search params (ADR-047) — shareable, refresh-safe,
+    back-restorable; derived/filtered tables render on the server from the URL.
+
 Does the state need to persist across components within a session
-without a server round-trip (e.g., POS cart, active filter)?
+without a server round-trip, but must NOT survive a reload (e.g., POS cart,
+sidebar collapse)?
   → Use Zustand
 ```
 
-**Zustand stores are scoped by concern.** Do not create a single global store. Create separate stores per domain: `useCartStore`, `useFilterStore`. Each store holds only the state it owns.
+**List-view state lives in the URL, not Zustand (ADR-047).** Filter chip, name search, show-archived, sort, page, active tab, and report period are URL search params. Zustand is reserved for ephemeral cross-component UI that must not survive a reload (POS cart, sidebar collapse). This supersedes the earlier "Zustand for session-persistent filter state" note.
+
+**Zustand stores are scoped by concern.** Do not create a single global store. Create separate stores per domain: `useCartStore`, `useSidebarStore`. Each store holds only the state it owns.
 
 **TanStack Query is not a replacement for Server Components.** Do not use TanStack Query to fetch data that a Server Component can fetch directly. TanStack Query is for client-initiated fetches that need background refresh, optimistic updates, or cache invalidation after a mutation from a Client Component.
 
@@ -286,7 +294,7 @@ These rules are binding for all development on this project. Deviations require 
 
 10. **Validate all Server Action inputs with Zod before any database operation.** Never trust data from the client. Parse and validate first; proceed only if validation passes.
 
-11. **Use Zustand only for client UI state that must persist across component boundaries within a session.** Do not use Zustand to cache server data — that is TanStack Query's job. Zustand stores: POS cart, active filter state per list view.
+11. **Use Zustand only for ephemeral client UI state that crosses component boundaries but must NOT survive a reload.** Do not use Zustand to cache server data (that is TanStack Query's job) or to hold list-view filter/sort/page state (that lives in the URL — ADR-047). Zustand stores: POS cart, sidebar collapse.
 
 12. **Use TanStack Query only when Server Components cannot satisfy the need.** Justified uses: background polling (Dashboard live panels, Check-In Station), optimistic updates on rapid mutations, client-triggered refetch after a Server Action in a complex Client Component tree. Do not use TanStack Query as a general data fetching layer.
 

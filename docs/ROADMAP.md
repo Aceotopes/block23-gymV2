@@ -18,15 +18,16 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [x] Walk-in conversion prompt threshold setting — governs the check-in conversion prompt, Attendance Analytics Walk-In Insights, and Frequent Walk-Ins Report (US-1.9) — does NOT govern Dashboard "Frequent walk-ins" panel (ADR-036) — #019
 
 ### Milestone 2 — Client Management
-- [ ] New client registration — name required, contact optional (US-2.1)
-- [ ] Edit client profile (US-2.2)
-- [ ] Client search by name with partial match; combined with status filter chips (US-2.3)
-- [ ] Client profile view: personal info, quick-stats strip, membership history (voided indicator), attendance history (filters), context-aware membership button (US-2.4)
-- [ ] Support pure walk-in clients with no membership (US-2.5)
-- [ ] Soft-delete / archive clients via overflow menu; "Show archived" toggle on Client List (US-2.6)
-- [ ] Status and type filter chips on Client List: All / Active / Upcoming / At risk / Expiring soon / Expired / Walk-in only / Inactive; client type (MEMBER/WALK_IN) badge on list and profile (US-2.9, ADR-037)
-- [ ] Walk-in conversion signals on Client Profile + Dashboard "Frequent walk-ins" feed (US-2.10)
-- [ ] At-risk member "At risk" filter chip on Client List + Dashboard "At-risk members" live feed panel (US-2.11)
+> List-state mechanism resolved first: **ADR-047** (URL search params; server-rendered tables). Status/type/at-risk derived centrally in `lib/clients/derive.ts` (ADR-002/017/019/037/040/041), never stored. — #020
+- [x] New client registration — name required, contact optional; non-blocking fuzzy duplicate warning (US-2.1) — #020
+- [x] Edit client profile (US-2.2) — #020
+- [x] Client search by name with partial match; combined with status filter chips (US-2.3) — #020
+- [x] Client profile view: personal info, quick-stats strip, membership history (Cancelled + VOID badges), attendance history, context-aware membership button (US-2.4) — #020 · membership Add/Renew flows land in M3 (button present, disabled); attendance date-range/visit-type filters land in M4
+- [x] Support pure walk-in clients with no membership (US-2.5) — #020
+- [x] Soft-delete / archive clients via overflow menu; "Show archived" toggle on Client List (US-2.6) — #020
+- [x] Status and type filter chips on Client List: All / Active / Upcoming / At risk / Expiring soon / Expired / Walk-in only / Inactive; client type (MEMBER/WALK_IN) badge on list and profile (US-2.9, ADR-037) — #020
+- [x] Walk-in conversion signals on Client Profile (US-2.10) — #020 · Dashboard "Frequent walk-ins" feed lands in M8 (Dashboard)
+- [x] At-risk member "At risk" filter chip on Client List (US-2.11) — #020 · Dashboard "At-risk members" live feed panel lands in M8
 
 ### Milestone 3 — Membership Management
 - [ ] Create membership with plan selection and price override; blocked if client has an active membership ("Go to Renew" redirect) or an upcoming membership (informational block, no redirect) (US-3.1, ADR-037)

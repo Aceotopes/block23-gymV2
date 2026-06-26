@@ -5,6 +5,34 @@ Newest entries at the top.
 
 ---
 
+## [#020] Milestone 2 — Client Management (US-2.1/2.2/2.3/2.4/2.5/2.6/2.9/2.10/2.11) — 2026-06-26
+
+**Commit:** _(Done)_
+
+**Purpose:** Build the Client Management module — the client registry, the first filtered/searchable list, the Client Profile, and soft-delete/archive. This is the bulk of Milestone 2; membership/attendance *content* on the profile fills in with M3/M4.
+
+**Decision resolved first (blocked the Client List): ADR-047 — list state lives in the URL.** Filter chip, name search, show-archived, sort, page, tab, and report period are URL search params (shareable, refresh-safe, back-restorable); Zustand is reserved for the POS cart and sidebar. Derived/filtered tables render on the server from the URL. The generic client-side TanStack `DataTable` is deferred to the first view that needs client-side table interactivity. Synced into `DECISIONS.md` (ADR-047), `TECH-STACK.md` (State Management Standards decision tree + rules 11 / the Zustand row), and `DESIGN-SYSTEM.md` (§14.4 confirmed, §19 marked resolved).
+
+**Centralized derivation (ADR-002/017/019/037/040/041) — `src/lib/clients/derive.ts`:** the single source of truth for `client_type` (MEMBER iff ≥1 non-cancelled membership), member status (ACTIVE / UPCOMING / EXPIRING_SOON / EXPIRED with ADR-037 precedence), walk-in status (ACTIVE / INACTIVE), the orthogonal at-risk signal (ADR-019 — in-effect membership + absence beyond `member_inactivity_warning_days`, or in-effect with no attendance; upcoming excluded), `deriveMembershipStatus` (per-record, incl. CANCELLED), the 8 filter chips + `matchesChip`. Nothing here stores status or touches the DB/session — callers pass rows + thresholds + `gymToday()`. Cancelled memberships are excluded from every derivation (ADR-041). **18 unit tests** (`derive.test.ts`) cover walk-in/member statuses, at-risk, cancelled exclusion, and chip matching.
+
+**Date handling — `src/lib/dates.ts` (ADR-035):** `gymToday(tz)` (current calendar date in the gym timezone as a UTC-midnight Date — the "today" boundary), `daysBetween`, `formatDateOnly` / `formatTimeOnly` (date/time-only `@db.Date`/`@db.Time` fields are bare calendar/clock values → formatted in UTC, never timezone-shifted).
+
+**Client List (US-2.3/2.9/2.10/2.11) — server-rendered, URL-driven (ADR-047):** `lib/clients/list.ts` runs one gym-scoped `client.findMany` (name search + archived applied in SQL) + an `attendance.groupBy` aggregate, derives every row, then chip-filters / sorts / paginates in memory (single-gym scale; the derived predicates aren't expressible as plain SQL). Per-chip default sort (walk-in-only → visits desc, at-risk → absence desc, else name asc), overridable via sortable Name/Expiry headers (`aria-sort`). Page size 25. UI: server `ClientFilterChips` (8 chips) + `ClientsTable` (sort headers + pagination as `<Link>`s) + client `ClientsToolbar` (debounced search + show-archived) + client `ClientRowActions` (⋯ → View / Edit / Archive·Reactivate). Archived rows greyed; empty state distinguishes "no clients" vs "no match". `search-params.ts` is the one URL parse/serialize helper (importable by server + client; sort guard split into prisma-free `sort.ts` so the client toolbar doesn't bundle Prisma).
+
+**Register / Edit (US-2.1/2.2) + duplicate warning:** `ClientFormDialog` (RHF + zod `client-schema.ts`, shared with the Server Action). `createClient` / `updateClient` / `archiveClient` / `reactivateClient` (`actions.ts`, `"use server"`) — all gym-scoped (`updateMany where {id, gymId}`), all re-validate server-side (TECH-STACK rule 10). Non-blocking fuzzy duplicate check (`lib/clients/duplicate.ts` — normalized case/spacing/diacritics/word-order/nesting) returns candidates; the dialog shows a warning + "Register anyway" (`force`). `date_registered` set to `gymToday()`.
+
+**Client Profile (US-2.4/2.5/2.6/2.10) — `clients/[id]/page.tsx`:** header (type + status badges; **at-risk intentionally NOT shown here per US-2.11**), quick-stats strip (total visits · this-month · member expiry-countdown / walk-in conversion signal · last visit), details card, context-aware membership button (Add / Renew / Renew early — **disabled, the actual flows are M3**), ⋯ menu (reuses `ClientRowActions` with `showView={false}`). URL-driven tabs (§14.4): Membership History (reads real records, derived per-row status, Cancelled + VOID badges) and Attendance History (recent check-ins; **date-range / visit-type filters deferred to the Attendance module, M4**). Malformed (non-UUID) ids → 404 (guarded before the `@db.Uuid` query, which would otherwise 500).
+
+**Shared components built once (DESIGN-SYSTEM §16):** `StatusBadge` / `ClientTypeBadge` / `AtRiskBadge` (§3.4 — label + icon + color, never color alone), `EmptyState`, and shadcn `badge` / `table` / `alert-dialog` (new-york, Radix). Added on-canvas semantic foreground tokens `--success/warning/danger/info/primary-on` to `globals.css` (the values were already specified in DESIGN-SYSTEM §3.3 "text/icon on canvas" — just not yet implemented) so subtle-surface badge text stays AA; noted in §3.3.
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (18/18) · `pnpm build` ✓ (`/clients`, `/clients/[id]` server-rendered). **Runtime smoke (dev, Neon, seeded owner):** unauth `/clients` → 307 `/login`; authed list 200; inserted a walk-in (visited today) + a member (active membership, no attendance) and confirmed by profile-link id that walk-in-only shows only the walk-in, at-risk only the member, active both, expired neither; both profiles render (membership history ₱1,000.00 / expiry Jul 26; attendance 9:30 Jun 26 + conversion signal); malformed & missing-uuid ids → 404. Smoke data removed afterward.
+
+**Doc sync:** DECISIONS (ADR-047), TECH-STACK (State Management), DESIGN-SYSTEM (§3.3, §14.4, §19), ROADMAP (Milestone 2 boxes), SESSION_HANDOFF, memory.
+
+**Notes / deferrals:** Attendance-tab filters → M4; membership Add/Renew/Cancel flows + per-plan pricing → M3; fuzzy duplicate match is intentionally lenient (warn-only). Table is server-rendered URL-driven rather than the client TanStack `DataTable` (ADR-047 rationale) — revisit when a view needs live client-side table interactivity.
+
+---
+
 ## [#019] Milestone 1 — Settings module (US-1.2/1.3/1.4/1.7/1.8/1.9) — Milestone 1 COMPLETE — 2026-06-26
 
 **Commit:** _(Done)_

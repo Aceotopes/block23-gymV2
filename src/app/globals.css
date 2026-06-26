@@ -42,6 +42,15 @@
   --at-risk: #f97316; /* orange — distinct from amber "expiring soon" */
   --at-risk-foreground: #ffffff;
 
+  /* ── On-canvas semantic text (light) — DESIGN-SYSTEM §3.3 "text/icon on canvas"
+     column. Used for subtle-surface status badges so small badge text stays AA on
+     the canvas (the solid --success/--warning/etc. are tuned for white-on-fill). ── */
+  --success-on: #047857;
+  --warning-on: #b45309;
+  --danger-on: #b91c1c;
+  --info-on: #0369a1;
+  --primary-on: #4f46e5; /* indigo-600 */
+
   /* ── Charts (light) — light-mode parity re-check deferred, DESIGN-SYSTEM §19 ── */
   --chart-1: #4f46e5;
   --chart-2: #059669;
@@ -93,6 +102,14 @@
   --at-risk: #f97316;
   --at-risk-foreground: #ffffff;
 
+  /* ── On-canvas semantic text (dark — DEFAULT) — DESIGN-SYSTEM §3.3 "text/icon on
+     canvas" column. Brighter shades so subtle-surface badge text stays AA on slate. ── */
+  --success-on: #34d399; /* emerald-400 */
+  --warning-on: #fbbf24; /* amber-400 */
+  --danger-on: #f87171; /* red-400 */
+  --info-on: #38bdf8; /* sky-400 */
+  --primary-on: #818cf8; /* indigo-400 */
+
   /* ── Charts (dark) — DESIGN-SYSTEM §3.5 categorical palette ── */
   --chart-1: #818cf8; /* indigo-400 — membership / member */
   --chart-2: #34d399; /* emerald-400 — product */
@@ -141,6 +158,12 @@
   --color-info-foreground: var(--info-foreground);
   --color-at-risk: var(--at-risk);
   --color-at-risk-foreground: var(--at-risk-foreground);
+
+  --color-success-on: var(--success-on);
+  --color-warning-on: var(--warning-on);
+  --color-danger-on: var(--danger-on);
+  --color-info-on: var(--info-on);
+  --color-primary-on: var(--primary-on);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
