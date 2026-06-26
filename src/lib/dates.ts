@@ -69,6 +69,13 @@ export function formatDateOnly(d: Date): string {
   }).format(d);
 }
 
+/** Display an ISO `YYYY-MM-DD` string (or null) as a short date, UTC (no shift). */
+export function formatDateOnlyISO(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(`${iso}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? "—" : formatDateOnly(d);
+}
+
 /**
  * Display a `@db.Time` value (e.g. Attendance.time_in). Like date-only fields,
  * times are stored as bare local clock values (ADR-035), so format in UTC.
@@ -79,4 +86,40 @@ export function formatTimeOnly(d: Date): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(d);
+}
+
+/**
+ * The current wall-clock time in the gym's timezone, as a `@db.Time`-ready Date
+ * whose UTC clock equals the gym-local clock (ADR-035 — times are bare clock
+ * values, no offset). Used to stamp `Attendance.time_in` at check-in.
+ */
+export function gymTimeNow(timeZone: string): Date {
+  const hms = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date());
+  // en-GB gives HH:mm:ss (24h). "24:00:00" can appear at midnight — normalize.
+  const safe = hms.startsWith("24") ? `00${hms.slice(2)}` : hms;
+  return new Date(`1970-01-01T${safe}.000Z`);
+}
+
+/**
+ * Parse an `HH:mm` string (from an `<input type="time">`) to a `@db.Time`-ready
+ * UTC Date. Returns null if malformed (incl. out-of-range hour/minute).
+ */
+export function parseTimeOnly(value: string): Date | null {
+  const m = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return new Date(`1970-01-01T${m[1]}:${m[2]}:00.000Z`);
+}
+
+/** Serialize a `@db.Time` value to `HH:mm` (for an `<input type="time">`). */
+export function toTimeInputValue(d: Date): string {
+  return d.toISOString().slice(11, 16);
 }

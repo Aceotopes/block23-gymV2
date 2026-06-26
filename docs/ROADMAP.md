@@ -41,17 +41,17 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 
 > **Deferred to Milestone 5 (Client Payments):** the membership **payment** record (`CLIENT_TRANSACTION` + payment method) — US-5.1 owns it. M3 records the immutable `price_paid` snapshot on the `Membership` (ADR-003). Month→days convention pinned by ADR-048 (30/60/90).
 
-### Milestone 4 — Attendance
+### Milestone 4 — Attendance (core done; Analytics in progress)
 - [ ] Attendance module — three internal views (ADR-023):
-  - **Check-In view (default):** auto-focused search, result cards (status + expiry + today indicator), check-in branching, today's check-ins running list (US-4.8)
-  - **Attendance History view:** all records filterable by date presets (Today · Yesterday · Last 7 Days · Last 30 Days · Custom Date Range) and visit type (US-4.3)
-  - **Attendance Analytics view:** KPI cards (Today/Week/Month check-ins, Member vs Walk-In Ratio), daily trend chart, day-of-week and peak-hour charts, Member Insights, Walk-In Insights, Operational Insights, and Alerts panel (US-4.10)
-- [ ] Record member check-in — expired MEMBER renewal prompt (ADR-018), expiry warning post-check-in, duplicate check-in confirmation (US-4.1)
-- [ ] Record walk-in visit: pre-fee conversion prompt for high-frequency walk-ins, quick-create inline modal (name + optional contact), create lightweight client if not found (US-4.2)
-- [ ] Today's check-ins standalone view in Attendance History (US-4.9)
-- [ ] Attendance records preserved after membership expiry or client soft-delete (US-4.4)
-- [ ] Allow multiple check-ins per client per day — explicit confirmation required for same-day duplicates (US-4.5)
-- [ ] Attendance record correction: same-day `time_in` edit only; required reason note stored in `Attendance.correction_note`; `Attendance.updated_at` set on save; prior-day records read-only (US-4.11, Flow 15)
+  - [x] **Check-In view (default):** auto-focused search, result cards (status + expiry + today indicator), check-in branching, today's check-ins running list (US-4.8)
+  - [x] **Attendance History view:** all records filterable by date presets (Today · Yesterday · Last 7 Days · Last 30 Days · Custom Date Range) and visit type (US-4.3)
+  - [ ] **Attendance Analytics view:** KPI cards (Today/Week/Month check-ins, Member vs Walk-In Ratio), daily trend chart, day-of-week and peak-hour charts, Member Insights, Walk-In Insights, Operational Insights, and Alerts panel (US-4.10) — `#023`
+- [x] Record member check-in — expired MEMBER renewal prompt (ADR-018), expiry warning post-check-in, duplicate check-in confirmation (US-4.1)
+- [x] Record walk-in visit: pre-fee conversion prompt for high-frequency walk-ins, quick-create inline modal (name + optional contact), create lightweight client if not found (US-4.2) — payment record (CLIENT_TRANSACTION + method) is Milestone 5 (US-5.1); M4 records `fee_charged` on the attendance
+- [x] Today's check-ins standalone view in Attendance History (US-4.9)
+- [x] Attendance records preserved after membership expiry or client soft-delete (US-4.4) — structural (attendance never cascades)
+- [x] Allow multiple check-ins per client per day — explicit confirmation required for same-day duplicates (US-4.5)
+- [x] Attendance record correction: same-day `time_in` edit only; required reason note stored in `Attendance.correction_note`; `Attendance.updated_at` set on save; prior-day records read-only (US-4.11, Flow 15)
 
 ### Milestone 5 — Client Payments
 - [ ] Payment method (Cash, GCash, Card, Other) recorded on every membership and walk-in fee transaction (US-5.1)

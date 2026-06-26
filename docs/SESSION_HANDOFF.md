@@ -1,22 +1,29 @@
 # Session Handoff — Block23 Gym Management System
 
 > Canonical handoff document for resuming development across Claude Code sessions.
-> Last updated: **2026-06-27** (after DEV-LOG `#021` — Membership Management; **Milestone 3 committed**).
+> Last updated: **2026-06-27** (after DEV-LOG `#022` — Attendance core; **Milestone 4 in progress**, Analytics = `#023` pending).
 
 ---
 
 ## Project Status
 
 - **Current Phase:** Phase 1 — MVP
-- **Current Milestone:** **Milestone 3 — Membership Management ✅ committed (`#021`).** Next: **Milestone 4 — Attendance.**
+- **Current Milestone:** **Milestone 4 — Attendance: core committed (`#022`); Attendance Analytics (US-4.10) remains as `#023`.**
 - **Overall Progress:**
   - **Planning & design:** 100% complete — 10 planning docs, 48 ADRs (ADR-030–032 intentionally unused), Design System hardened as enforceable SSOT.
-  - **Implementation:** **Milestones 1–2 done (`#015`–`#020`).** **Milestone 3 done (`#021`):** create/renew/cancel membership + canonical date math (ADR-040), ad-hoc custom durations (ADR-015), Membership Plan catalog in Settings (US-3.9), context-aware Client Profile button + history Cancel; month→days pinned by ADR-048. ~3 of 8 milestones complete.
-  - Milestones 4–8: not started. The membership **payment** record (`CLIENT_TRANSACTION` + payment method) is **Milestone 5** (US-5.1) — M3 records the `price_paid` snapshot only. (Dashboard "Frequent walk-ins" / "At-risk members" feed panels for US-2.10/2.11 land in M8.)
+  - **Implementation:** **Milestones 1–3 done (`#015`–`#021`).** **Milestone 4 core done (`#022`):** Check-In Station (search + branches + fee + today's list), Attendance History (URL filters), same-day time correction (US-4.11), Client Profile attendance filters; data/derivation extended (`deriveCheckInBranch`, `activeMembershipId`, attendance helpers). **Remaining in M4: Attendance Analytics (US-4.10) = `#023`.** ~3.5 of 8 milestones complete.
+  - Milestones 5–8: not started. **Payment records (`CLIENT_TRANSACTION` + method) are Milestone 5 (US-5.1)** — M3 stores membership `price_paid`; M4 stores walk-in `fee_charged` on the attendance; neither creates the transaction yet. (Dashboard panels for US-2.10/2.11 land in M8.)
 
 ---
 
 ## Last Completed Work
+
+**DEV-LOG `#022` — Attendance core (Milestone 4, part 1)** (committed):
+
+- Three-view module shell (`?view=` — Check-In / History / Analytics, ADR-023/047). **Check-In Station** (auto-focus search → derived branch cards → dialogs: duplicate-today, expired-member renewal redirect, upcoming-member walk-in, walk-in conversion redirect, fee entry, quick-create) + **Today's Check-Ins** (total/unique, 2nd-visit labels, correction). **Attendance History** (URL date presets + visit-type, table). **Correction** (same-day `time_in`, required reason, sets `updated_at`). **Client Profile** attendance tab filters + correction.
+- Extended `lib/clients/derive.ts` (`deriveCheckInBranch`, `activeMembershipId`); `lib/attendance/{history,today}.ts`; `dates.ts` time helpers; `getSessionContext()` for `created_by`. **+11 tests (49 total).**
+- Actions: `searchClientsForCheckIn`, `checkInClient` (snapshots membership, stamps created_by, records `fee_charged`), `correctAttendanceTime`. Walk-in fee **payment** deferred to M5 (US-5.1).
+- Verified: type-check ✓ · lint ✓ · test 49/49 ✓ · build ✓ · **Neon runtime smoke** (branch derivation + snapshot link, today total/unique + 2nd-visit, correction sets updated_at, last-7 range; removed).
 
 **DEV-LOG `#021` — Membership Management (Milestone 3)** (committed):
 
@@ -95,7 +102,10 @@
       (app)/              authenticated route group — shell layout (getSession)
         layout.tsx        topbar + sidebar + mobile nav + TooltipProvider
         dashboard/        placeholder (full content in M8)
-        attendance, payments, pos, inventory, reports/  placeholders
+        attendance/       page (?view shell) + actions + attendance-nav
+                          + check-in-view + today-checkins + history-view
+                          + history-filters + attendance-correction (Analytics → #023)
+        payments, pos, inventory, reports/  placeholders
         settings/         page + settings-form + timezone-combobox + actions + schema
                           + membership-plans + plan-actions + plan-schema (US-3.9)
         clients/          page (list) + actions + client-schema + search-params
@@ -112,7 +122,8 @@
            command, sonner, dialog, badge, table, alert-dialog, select)
     lib/              auth.ts, auth-client.ts, prisma.ts, gym.ts, nav.ts, dates.ts,
                       utils.ts (+ test); clients/ (derive[+test], list, sort,
-                      duplicate); memberships/ (duration[+test])
+                      duplicate); memberships/ (duration[+test]);
+                      attendance/ (history, today, +test)
     middleware.ts     default-deny route protection
     generated/        prisma client (gitignored, regenerated via `pnpm db:generate`)
   prisma/
@@ -165,15 +176,16 @@ No technical debt in the existing code.
 
 ## Next Recommended Milestone
 
-**Milestone 4 — Attendance** (Milestone 3 is built). Scope (see ROADMAP + USER-STORIES §4, MODULE-SPECS Module 4, USER-FLOWS Flow 3/7/14/15; ADR-018/020/023/036/038):
+**Milestone 4 — Attendance Analytics (`#023`)** — the last remaining piece of M4 (core shipped in `#022`). Scope (US-4.10, MODULE-SPECS Module 4 "Attendance Analytics"; ADR-019/020/023/036):
 
-1. **Attendance module — three internal views (ADR-023):** Check-In (default, auto-focused search, result cards with status/expiry/today indicator, today's running list), Attendance History (date presets + visit-type filter — wire the deferred Client Profile attendance-tab filters here too), and Attendance Analytics (KPI cards, trend/day-of-week/peak-hour charts, Member/Walk-In/Operational insights, alerts).
-2. **Record member check-in** (US-4.1) — expired-MEMBER renewal prompt (ADR-018; ties into the M3 renew flow), post-check-in expiry warning, duplicate same-day confirmation. Snapshot `Attendance.membership_id` = the in-effect membership at check-in.
-3. **Record walk-in visit** (US-4.2) — pre-fee conversion prompt for high-frequency walk-ins (`Gym.walkin_conversion_prompt_visits`), inline quick-create client.
-4. **Walk-in → Member conversion** (Flow 7, ADR-024/038) — walk-in fee and membership are always separate `CLIENT_TRANSACTION`s; updating `visit_type` WALK_IN→MEMBER is the only permitted `visit_type` mutation and does NOT set `correction_note`/`updated_at`.
-5. **Attendance record correction** (US-4.11, Flow 15) — same-day `time_in` edit only; required `correction_note`; sets `updated_at`; prior-day records read-only.
+1. **KPI cards (fixed periods):** Today's / This Week's / This Month's check-ins; Member vs Walk-In ratio (current month).
+2. **Charts (global period selector — Last 7 / Last 30 / Last 3 Months / Custom, URL-driven per ADR-047):** Daily Attendance Trend (line — total + unique), Attendance by Day of Week (bar — avg/weekday), Attendance by Hour (bar). Use **Recharts** (already installed). `time_in` is a `@db.Time` (UTC clock) — bucket by its UTC hour (ADR-035).
+3. **Member Insights:** at-risk count (reuse `deriveClient.atRisk`, links to Client List `?chip=at-risk`), avg visits/member, member utilization rate.
+4. **Walk-In Insights:** frequent walk-ins (≥ `walkin_conversion_prompt_visits`, no membership), conversion candidates (links to `?chip=walk-in-only`), walk-in→member conversion metrics (derived per ADR-020 — MEMBER clients with WALK_IN attendance predating earliest `Membership.created_at`).
+5. **Operational Insights:** peak hours (top 3), peak days (top 3), new vs returning (first-ever attendance within period = new).
+6. **Alerts:** inactive active-members count, frequent-walk-in count, **20%-below-prior-period** attendance decline banner.
 
-> Reuse the M3 derivation (`deriveClient` / `deriveMembershipStatus` / the renew flow) for member status + the renewal prompt — do not duplicate. All queries scope by the session's `gymId` (ADR-001/025). List/tab/filter state per **ADR-047** (URL params). Note: membership/walk-in **payment** capture (payment method on the `CLIENT_TRANSACTION`) is **Milestone 5** — M4 records attendance; if the walk-in fee transaction is needed before M5, coordinate the boundary.
+> Attendance-domain only (no revenue/inventory). No CSV export (that's Reports, M8). Reuse `lib/clients/derive.ts` + `lib/attendance/*`; analytics aggregates include soft-deleted clients' historical rows but exclude them from active-member counts. **After `#023`, M4 is complete → Milestone 5 (Client Payments)**, which adds the `CLIENT_TRANSACTION` + payment-method layer onto membership purchases (M3) and walk-in fees (M4).
 
 **Verify & sync** each step: type-check, lint, test, build; update `DEVELOPMENT-LOG.md`, this file, ROADMAP.
 
@@ -194,4 +206,4 @@ No technical debt in the existing code.
 
 ## Suggested Resume Prompt
 
-> Resume Block23 Gym V2. Read `docs/SESSION_HANDOFF.md` first for current state. **Milestones 1–3 are done** (`#015`–`#021`: scaffold, schema/DB, Better Auth, app shell, Settings; Client Management — ADR-047 list-state-in-URL, centralized derivation, Client List/Profile, archive; Membership Management — create/renew/cancel with canonical date math ADR-040, ad-hoc custom durations ADR-015, Membership Plan catalog in Settings US-3.9, month→days ADR-048, context-aware Client Profile button + history Cancel). The membership **payment** record (`CLIENT_TRANSACTION` + payment method) is **Milestone 5** (US-5.1) — M3 stores the `price_paid` snapshot only. Next is **Milestone 4 — Attendance**: three internal views (Check-In / History / Analytics, ADR-023); member check-in with expired-MEMBER renewal prompt (US-4.1, ADR-018) reusing the M3 renew flow; walk-in visit + high-frequency conversion prompt (US-4.2); walk-in→member conversion (Flow 7, ADR-024/038 — `visit_type` is the only mutable-via-conversion field, no `correction_note`/`updated_at`); same-day `time_in` correction (US-4.11, Flow 15). **Reuse `lib/clients/derive.ts`** — do not duplicate derivation. Snapshots are immutable (`price_paid`, ADR-003); scope all queries by the session `gymId`; list/tab/filter state per ADR-047. Follow the design-first workflow, keep docs synchronized, update `DEVELOPMENT-LOG.md`, and run the full verification gate (type-check, lint, test, build) before calling anything done.
+> Resume Block23 Gym V2. Read `docs/SESSION_HANDOFF.md` first for current state. **Milestones 1–3 are done and Milestone 4 core is done** (`#015`–`#022`: scaffold, schema/DB, Better Auth, app shell, Settings; Client Management — ADR-047 list-state-in-URL, centralized derivation, List/Profile, archive; Membership Management — create/renew/cancel, canonical date math ADR-040, ad-hoc durations ADR-015, Plan catalog US-3.9, month→days ADR-048; Attendance core `#022` — Check-In Station with branch flows, Today's list, History with URL filters, same-day `time_in` correction US-4.11, Client Profile attendance filters). **Payment records (`CLIENT_TRANSACTION` + method) are Milestone 5 (US-5.1)** — M3 stores membership `price_paid`, M4 stores walk-in `fee_charged` on the attendance; neither creates the transaction yet. Next is **`#023` — Attendance Analytics (US-4.10)**, the last piece of M4: KPI cards, a period-selected Recharts dashboard (daily trend, day-of-week, by-hour), Member/Walk-In/Operational insight panels, and an Alerts panel (incl. the 20%-decline banner). Reuse `lib/clients/derive.ts` (`atRisk`, conversion per ADR-020) + `lib/attendance/*`; `time_in` buckets by UTC hour (ADR-035); attendance-domain only, no CSV export (Reports/M8). After `#023`, M4 is complete → Milestone 5. **Do not duplicate derivation.** Scope queries by session `gymId`; list/tab/period state per ADR-047. Follow the design-first workflow, keep docs synchronized, update `DEVELOPMENT-LOG.md`, and run the full verification gate (type-check, lint, test, build) before calling anything done.

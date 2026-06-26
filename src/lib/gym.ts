@@ -11,6 +11,19 @@ export async function getSessionGymId(): Promise<string | null> {
   return gymId ?? null;
 }
 
+/** The authenticated user's id + gym id (for writes that stamp `created_by`). */
+export async function getSessionContext(): Promise<{
+  userId: string;
+  gymId: string;
+} | null> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  const user = session?.user as
+    | { id?: string; gymId?: string }
+    | undefined;
+  if (!user?.id || !user.gymId) return null;
+  return { userId: user.id, gymId: user.gymId };
+}
+
 export async function getCurrentGym() {
   const gymId = await getSessionGymId();
   if (!gymId) return null;

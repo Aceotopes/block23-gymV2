@@ -9,7 +9,12 @@ import {
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getCurrentGym } from "@/lib/gym";
-import { gymToday, formatDateOnly, formatTimeOnly } from "@/lib/dates";
+import {
+  gymToday,
+  formatDateOnly,
+  formatTimeOnly,
+  toTimeInputValue,
+} from "@/lib/dates";
 import {
   deriveClient,
   deriveMembershipStatus,
@@ -21,9 +26,20 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge, ClientTypeBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
+import {
+  presetRange,
+  isVisitTypeFilter,
+  type VisitTypeFilter,
+} from "@/lib/attendance/history";
 import { ClientRowActions } from "../client-row-actions";
 import { MembershipActions } from "./membership-actions-ui";
 import { MembershipRowActions } from "./membership-row-actions";
+import { AttendanceCorrection } from "../../attendance/attendance-correction";
+import {
+  ProfileAttendanceFilters,
+  isProfileRange,
+  type ProfileRange,
+} from "./profile-attendance-filters";
 
 export const metadata = { title: "Client · Block23 Gym" };
 
@@ -61,7 +77,7 @@ export default async function ClientProfilePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; dp?: string; vt?: string }>;
 }) {
   const gym = await getCurrentGym();
   if (!gym) redirect("/login");
@@ -74,8 +90,12 @@ export default async function ClientProfilePage({
   ) {
     notFound();
   }
-  const tab: TabKey =
-    (await searchParams).tab === "attendance" ? "attendance" : "membership";
+  const sp = await searchParams;
+  const tab: TabKey = sp.tab === "attendance" ? "attendance" : "membership";
+  const attRange: ProfileRange = isProfileRange(sp.dp) ? sp.dp : "all";
+  const attVisitType: VisitTypeFilter = isVisitTypeFilter(sp.vt)
+    ? sp.vt
+    : "all";
 
   const [client, activePlans] = await Promise.all([
     prisma.client.findFirst({
@@ -92,7 +112,13 @@ export default async function ClientProfilePage({
         },
         attendances: {
           orderBy: [{ visitDate: "desc" }, { timeIn: "desc" }],
-          select: { id: true, visitDate: true, timeIn: true, visitType: true },
+          select: {
+            id: true,
+            visitDate: true,
+            timeIn: true,
+            visitType: true,
+            updatedAt: true,
+          },
         },
       },
     }),
@@ -138,6 +164,17 @@ export default async function ClientProfilePage({
     gym.expirationWarningDays,
   );
   const renewAnchorEnd = latestRelevantEnd(client.memberships, today);
+
+  // Per-client attendance tab filtering (US-4.3) — in-memory over the loaded records.
+  const attBounds = attRange === "all" ? null : presetRange(attRange, today);
+  const filteredAttendances = client.attendances.filter((a) => {
+    if (attVisitType !== "all" && a.visitType !== attVisitType) return false;
+    if (attBounds) {
+      if (a.visitDate.getTime() < attBounds.from.getTime()) return false;
+      if (a.visitDate.getTime() > attBounds.to.getTime()) return false;
+    }
+    return true;
+  });
 
   return (
     <>
@@ -265,7 +302,14 @@ export default async function ClientProfilePage({
           expirationWarningDays={gym.expirationWarningDays}
         />
       ) : (
-        <AttendanceHistory attendances={client.attendances} />
+        <AttendanceHistory
+          clientId={client.id}
+          clientName={client.fullName}
+          attendances={filteredAttendances}
+          today={today}
+          range={attRange}
+          visitType={attVisitType}
+        />
       )}
     </>
   );
@@ -400,30 +444,71 @@ type AttendanceRow = {
   visitDate: Date;
   timeIn: Date;
   visitType: "MEMBER" | "WALK_IN";
+  updatedAt: Date | null;
 };
 
-function AttendanceHistory({ attendances }: { attendances: AttendanceRow[] }) {
-  if (attendances.length === 0) {
-    return (
-      <EmptyState
-        icon={ClipboardList}
-        title="No attendance yet"
-        description="Check-ins appear here. Date-range and visit-type filters arrive with the Attendance module (Milestone 4)."
-      />
-    );
-  }
+function AttendanceHistory({
+  clientId,
+  clientName,
+  attendances,
+  today,
+  range,
+  visitType,
+}: {
+  clientId: string;
+  clientName: string;
+  attendances: AttendanceRow[];
+  today: Date;
+  range: ProfileRange;
+  visitType: VisitTypeFilter;
+}) {
   return (
-    <div className="space-y-2">
-      {attendances.slice(0, 50).map((a) => (
-        <Card key={a.id}>
-          <CardContent className="flex items-center justify-between gap-3 p-3 px-4">
-            <span className="text-sm tabular-nums">
-              {formatDateOnly(a.visitDate)} · {formatTimeOnly(a.timeIn)}
-            </span>
-            <ClientTypeBadge type={a.visitType} />
-          </CardContent>
-        </Card>
-      ))}
+    <div>
+      <ProfileAttendanceFilters
+        clientId={clientId}
+        range={range}
+        visitType={visitType}
+      />
+      {attendances.length === 0 ? (
+        <EmptyState
+          icon={ClipboardList}
+          title="No matching check-ins"
+          description="Check-ins appear here. Adjust the range or visit-type filter above."
+        />
+      ) : (
+        <div className="space-y-2">
+          {attendances.slice(0, 100).map((a) => {
+            const isToday = a.visitDate.getTime() === today.getTime();
+            return (
+              <Card key={a.id}>
+                <CardContent className="flex items-center justify-between gap-3 p-3 px-4">
+                  <span className="text-sm tabular-nums">
+                    {formatDateOnly(a.visitDate)} · {formatTimeOnly(a.timeIn)}
+                    {a.updatedAt ? (
+                      <span
+                        className="text-muted-foreground ml-2 text-xs"
+                        title="Check-in time was corrected"
+                      >
+                        edited
+                      </span>
+                    ) : null}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <ClientTypeBadge type={a.visitType} />
+                    {isToday ? (
+                      <AttendanceCorrection
+                        attendanceId={a.id}
+                        clientName={clientName}
+                        currentTime={toTimeInputValue(a.timeIn)}
+                      />
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

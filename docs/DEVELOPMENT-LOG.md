@@ -5,6 +5,32 @@ Newest entries at the top.
 
 ---
 
+## [#022] Milestone 4 (part 1) — Attendance core: Check-In, History, Correction (US-4.1/4.2/4.3/4.4/4.5/4.8/4.9/4.11) — 2026-06-27
+
+**Commit:** _(Done)_
+
+**Purpose:** Build the operational heart of the Attendance module (ADR-023) — the Check-In Station, Today's Check-Ins, Attendance History, and same-day time correction — plus the deferred per-client attendance filters on the Client Profile. Attendance Analytics (US-4.10) follows in `#023`.
+
+**Scope boundary (M4 vs M5), same pattern as M3:** Per ROADMAP, **US-5.1 (Milestone 5) owns the walk-in fee `CLIENT_TRANSACTION` + payment method**. So a walk-in check-in records the `Attendance` with `fee_charged` (the denormalized display amount, defaulted from `Gym.default_walkin_fee`, overridable) and **defers the payment record to M5**. The expired-member renewal prompt (ADR-018) and the walk-in conversion prompt route the owner to the existing M3 Client Profile membership flows (`/clients/[id]`) — no rebuild.
+
+**Data layer:**
+- `dates.ts`: `gymTimeNow` (current wall-clock in the gym tz → `@db.Time`), `parseTimeOnly` / `toTimeInputValue` (HH:mm ↔ `@db.Time`), `formatDateOnlyISO`. All honor ADR-035 (bare clock/calendar values, UTC-stored, no offset).
+- `lib/clients/derive.ts` (extended, not duplicated): `deriveCheckInBranch` (active-member / upcoming-member / expired-member / walk-in — Flow 14, ADR-018) and `activeMembershipId` (the in-effect membership to snapshot at check-in).
+- `lib/attendance/history.ts` (date presets Today/Yesterday/Last 7/Last 30/Custom + visit-type filter + `presetRange`) and `lib/attendance/today.ts` (`summarizeToday` — total vs unique counts US-4.5, reverse-chronological, `ordinalVisit` "2nd visit" labels). **+11 tests (49 total).**
+- `lib/gym.ts`: `getSessionContext()` → `{ userId, gymId }` so writes can stamp `Attendance.created_by` (ADR-021).
+
+**Server Actions (`attendance/actions.ts`, gym-scoped):** `searchClientsForCheckIn` (live name search → derived branch + the data each branch needs: active membership id, expiry/expired/upcoming dates, total visits, checked-in-today time, default fee; archived clients excluded), `checkInClient` (validates client + gym-scoped in-effect membership for MEMBER visits, stamps `visit_date`=gymToday, `time_in`=gymTimeNow, `created_by`=session user, `fee_charged` for walk-ins), `correctAttendanceTime` (same-calendar-day guard, required reason, sets `updated_at` — US-4.11/Flow 15). Quick-create reuses the M2 `createClient` (fuzzy duplicate + force).
+
+**UI:** `attendance/page.tsx` with a `?view=` sub-nav (Check-In default / History / Analytics, ADR-023/047). **Check-In view** (`check-in-view.tsx`, client) — auto-focused debounced search, result cards (type badge, status, expiry, "in today" indicator), branch dialogs (duplicate-today confirm, expired-member renewal decision, upcoming-member walk-in notice, walk-in conversion prompt, walk-in fee entry, new-walk-in quick-create), post-check-in expiry warning toast with Renew action, returns to focused search. **Today's Check-Ins** (`today-checkins.tsx`) — total/unique counts, 2nd-visit labels, edited indicator, inline correction. **History view** (`history-view.tsx` + `history-filters.tsx`) — URL-driven date presets + visit-type filter, table, same-day correction. **Correction** (`attendance-correction.tsx`) — shared HH:mm edit dialog. **Client Profile** attendance tab now has the deferred range + visit-type filters (`profile-attendance-filters.tsx`) and same-day correction.
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (49/49) · `pnpm build` ✓ (`/attendance` 15.8 kB). **Runtime smoke (Neon):** member branch = active-member with the correct `activeMembershipId` snapshot; walk-in branch = walk-in; today summary total 3 / unique 2 with the member's 2nd visit flagged; same-day correction updated `time_in` + set `updated_at`; last-7-days history range returned all 3 records. Smoke data removed.
+
+**Doc sync:** DEVELOPMENT-LOG (this entry); ROADMAP (M4 core boxes); SESSION_HANDOFF; memory. (No new ADR — built on ADR-018/020/021/022/023/035/038/047.)
+
+**Notes / deferrals:** **Attendance Analytics (US-4.10) → `#023`** (the Analytics sub-nav tab is a placeholder). Walk-in fee **payment**/`Transaction` → M5 (US-5.1). US-4.9's standalone today list is served by the always-default Check-In view's running list (counts + labels) plus the History view's Today preset. Backdated/retroactive attendance entry and record deletion remain out of scope (correction-only, MVP).
+
+---
+
 ## [#021] Milestone 3 — Membership Management (US-3.1/3.2/3.3/3.4/3.9/3.10) — 2026-06-27
 
 **Commit:** _(Done)_

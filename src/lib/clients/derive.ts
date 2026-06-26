@@ -280,6 +280,47 @@ export function computeRenewalDates(
   return { startDate, endDate: addDays(startDate, durationDays) };
 }
 
+// ── Check-in branch (Milestone 4 — US-4.1, Flow 14, ADR-018) ────────────────
+
+/**
+ * Which check-in branch a client falls into (Flow 14):
+ *  - `active-member`   — has an in-effect membership → single "Check In" (MEMBER)
+ *  - `upcoming-member` — MEMBER-type, only an upcoming membership → checks in as a
+ *    walk-in today (membership hasn't started; edge case, MODULE-SPECS Module 4)
+ *  - `expired-member`  — MEMBER-type, no in-effect/upcoming → renewal decision
+ *    prompt (ADR-018: "Check in as walk-in" or "Renew"), never silent routing
+ *  - `walk-in`         — WALK_IN-type → conversion-prompt check, then fee
+ */
+export type CheckInBranch =
+  | "active-member"
+  | "upcoming-member"
+  | "expired-member"
+  | "walk-in";
+
+export function deriveCheckInBranch(d: DerivedClient): CheckInBranch {
+  if (d.isActiveMembership) return "active-member";
+  if (d.clientType === "MEMBER") {
+    return d.hasUpcomingMembership ? "upcoming-member" : "expired-member";
+  }
+  return "walk-in";
+}
+
+/**
+ * The id of the in-effect membership to snapshot onto an Attendance record at
+ * check-in (the furthest-ending in-effect, non-cancelled membership), or null.
+ */
+export function activeMembershipId<
+  T extends MembershipForDerivation & { id: string },
+>(memberships: T[], today: Date): string | null {
+  const inEffect = memberships.filter(
+    (m) => m.cancelledAt === null && isInEffect(m, today),
+  );
+  if (inEffect.length === 0) return null;
+  return inEffect.reduce((a, b) =>
+    b.endDate.getTime() > a.endDate.getTime() ? b : a,
+  ).id;
+}
+
 // ── Filter chips (US-2.9/2.10/2.11, ADR-037) ────────────────────────────────
 export const CLIENT_FILTER_CHIPS = [
   "all",
