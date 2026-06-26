@@ -5,6 +5,36 @@ Newest entries at the top.
 
 ---
 
+## [#021] Milestone 3 — Membership Management (US-3.1/3.2/3.3/3.4/3.9/3.10) — 2026-06-27
+
+**Commit:** _(Done)_
+
+**Purpose:** Build the Membership Management module — create / renew / cancel a membership, ad-hoc custom durations, and the Membership Plan catalog in Settings. Wires the (previously disabled) context-aware membership button + Membership History Cancel on the Client Profile. Completes Milestone 3.
+
+**Scope boundary (M3 vs M5):** Per ROADMAP, **US-5.1 (Milestone 5 — Client Payments) owns the payment `Transaction` + payment-method capture**. So M3 creates the `Membership` record with its immutable `price_paid` snapshot (ADR-003) only; the `CLIENT_TRANSACTION`/payment-method step of Flow 5/6 is deferred to M5 (same way M2 deferred these flows). The Membership History **VOID** badge already keys off a transaction relationship, so it lights up once M5 lands. No doc contradiction — MODULE-SPECS describes the complete end-state flow; ROADMAP owns the per-milestone slice.
+
+**New decision — ADR-048 (month → fixed days):** A plan's "1 / 2 / 3 months" maps to a fixed `duration_days` of **30 / 60 / 90** (gym-billing convention; the schema + ADR-040 math are day-based, so months need a concrete day count). "Custom days" and the inline ad-hoc duration carry the entered count. Mapping in `src/lib/memberships/duration.ts`. Rejected calendar-month addition (end-of-month ambiguity; inexpressible as the single `duration_days` int).
+
+**Centralized derivation extended — `src/lib/clients/derive.ts` (do-not-duplicate, per ADR-002/037/040/041):**
+- `deriveMembershipAction` → `add` / `renew` / `renew-early` / `upcoming-only` — the context-aware Client Profile button (US-3.2). `upcoming-only` is the disabled/informational state when the only membership hasn't begun (ADR-037).
+- `deriveMembershipBlock` → `active` (with end date → "Go to Renew") / `upcoming` (informational, no redirect) / null — the create-blocking guard (US-3.1, ADR-037). Active takes precedence; cancelled never counts.
+- `latestRelevantEnd` + `computeRenewalDates` — the canonical renewal math (ADR-040): `start = max(today, latest_end + 1)`, `end = start + duration_days`; anchor = greatest `end_date` among non-cancelled memberships with `end_date >= today`. Pure: the server action and the dialog's live preview compute identical dates.
+- `dates.ts`: added `addDays`, `parseDateOnly`, `toDateInputValue` (date-only `@db.Date` math/serialization, ADR-035). **20 new unit tests** (38 total) cover the action/block/renewal logic + the duration mapping.
+
+**Membership Plan catalog in Settings (US-3.9, Flow 13):** `plan-schema.ts` (zod, shared client+server), `plan-actions.ts` (`createPlan`/`updatePlan`/`retirePlan`/`reactivatePlan` — gym-scoped, server-revalidated; **last-active-plan retirement is blocked** "At least one active plan is required"), and `membership-plans.tsx` (list with name · duration · price · Inactive badge; Add/Edit dialog with a duration-type `Select` + conditional custom-days; row `⋯` → Retire/Reactivate). Editing a plan's price never rewrites past snapshots (ADR-003). Rendered below the gym-settings form on `/settings`. shadcn `select` added (unified `radix-ui` package — no new top-level dep).
+
+**Membership create / renew / cancel (US-3.1/3.2/3.3/3.10, Flow 5/6/18) — `clients/[id]/`:** `membership-schema.ts` (create has a start date — defaults today, future-datable; renew computes it), `membership-actions.ts` (`createMembership` re-checks the block server-side + enforces `start_date >= today`; `renewMembership` computes the renewal period + links `renewed_from_membership_id`, never mutating the prior record; `cancelMembership` soft-sets `cancelled_at` + required reason, gym-scoped, independent of payment void). `membership-actions-ui.tsx` is the context-aware button + Add/Renew dialog (plan `Select` incl. "Custom duration (ad-hoc)" → `membership_plan_id` null, price default from plan but overridable as a snapshot, live period preview; an active-block surfaces an inline warning with a "Renew instead" switch). `membership-row-actions.tsx` is the history-row `⋯` → Cancel (reason-required dialog, non-cancelled rows only).
+
+**Client Profile wiring (`clients/[id]/page.tsx`):** replaced the disabled Milestone-3 placeholder button with `<MembershipActions>` (fed the derived action, active plans, renewal anchor, gym today); fetches active plans alongside the client in one `Promise.all`; Membership History rows now carry the Cancel action; empty state copy updated (no longer "arrives in Milestone 3").
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (38/38) · `pnpm build` ✓ (`/clients/[id]`, `/settings` server-rendered). **Runtime smoke (Neon, seeded gym):** a temporary script created a plan + members and confirmed — create → derived `renew-early`/`ACTIVE` + active-block carrying the end date; renew chained onto `m1.end + 1` (2026-07-28) with `renewed_from` linked and the prior record untouched; soft-cancel excluded the record (live count 1 → action still `renew-early`); ad-hoc custom 45-day membership persisted with `membership_plan_id = null`. All smoke data removed afterward.
+
+**Doc sync:** DECISIONS (ADR-048); CLAUDE.md (Project Status → M1–3 done, ADR range → ADR-048); DEVELOPMENT-LOG (this entry); ROADMAP (Milestone 3 boxes); SESSION_HANDOFF; memory.
+
+**Notes / deferrals:** Membership **payment**/`Transaction` + payment-method → M5 (US-5.1). **Backdated** memberships are out of scope (start ≥ today; cancel + recreate for corrections). The Add/Renew dialog uses the create schema as a superset resolver for both modes (start date always has a valid default; the server re-validates each path) to avoid swapping the RHF resolver on a mode change. Expiring-soon membership list (US-3.6) is surfaced via the existing Client List chips + (later) Dashboard/Reports — no separate screen (ADR-042).
+
+---
+
 ## [#020] Milestone 2 — Client Management (US-2.1/2.2/2.3/2.4/2.5/2.6/2.9/2.10/2.11) — 2026-06-26
 
 **Commit:** _(Done)_

@@ -127,7 +127,7 @@ IDs are DB-generated UUIDs (`advanced.database.generateId = false` + Prisma `@de
 | id | UUID/PK | |
 | gym_id | FK → Gym | |
 | name | string | e.g. "1 Month", "Custom 45-Day" |
-| duration_days | int | |
+| duration_days | int | the month-based plan types map to fixed counts — 1/2/3 months = **30/60/90 days** (ADR-048); "Custom days" stores the entered count. `end_date = start_date + duration_days` (ADR-040). |
 | default_price | decimal | |
 | is_active | bool | allows retiring old plans without deleting history |
 | created_at / updated_at | timestamp | |

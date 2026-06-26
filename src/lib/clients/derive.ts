@@ -1,4 +1,4 @@
-import { daysBetween } from "@/lib/dates";
+import { daysBetween, addDays } from "@/lib/dates";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Centralized client derivation (ADR-002/017/019/037/040). client_type, status,
@@ -175,6 +175,109 @@ export function deriveMembershipStatus(
   return daysBetween(today, m.endDate) <= expirationWarningDays
     ? "EXPIRING_SOON"
     : "ACTIVE";
+}
+
+// ── Membership lifecycle actions (Milestone 3 — US-3.1/3.2, ADR-037/040) ─────
+
+/**
+ * Context-aware membership action for the Client Profile button (US-3.2):
+ *  - `add`           — no non-cancelled membership history → "Add membership"
+ *  - `renew`         — expired OR expiring-soon → "Renew"
+ *  - `renew-early`   — active and not near expiry → "Renew early"
+ *  - `upcoming-only` — the only membership is upcoming (not yet begun); neither
+ *                      Renew nor Renew early applies — a disabled/informational
+ *                      state until it becomes active (ADR-037).
+ */
+export type MembershipAction = "add" | "renew" | "renew-early" | "upcoming-only";
+
+export function deriveMembershipAction(
+  memberships: MembershipForDerivation[],
+  today: Date,
+  expirationWarningDays: number,
+): MembershipAction {
+  const active = memberships.filter(
+    (m) => m.cancelledAt === null && isInEffect(m, today),
+  );
+  const upcoming = memberships.filter(
+    (m) => m.cancelledAt === null && m.startDate.getTime() > today.getTime(),
+  );
+  const anyHistory = memberships.some((m) => m.cancelledAt === null);
+
+  if (!anyHistory) return "add";
+
+  if (active.length > 0) {
+    // Active: "Renew" if within the expiring-soon window, else "Renew early".
+    const end = maxEndDate(active)!;
+    return daysBetween(today, end) <= expirationWarningDays
+      ? "renew"
+      : "renew-early";
+  }
+
+  // No active membership. Upcoming-only → informational; otherwise expired → renew.
+  if (upcoming.length > 0) return "upcoming-only";
+  return "renew";
+}
+
+/**
+ * Whether creating a NEW membership is blocked (US-3.1, ADR-037). At most one
+ * in-effect membership per client; an upcoming membership also blocks creation.
+ * Active takes precedence (offers a "Go to Renew" redirect); upcoming is an
+ * informational block with no redirect. Cancelled memberships never count.
+ */
+export type MembershipBlock =
+  | { kind: "active"; endDate: Date }
+  | { kind: "upcoming"; startDate: Date }
+  | null;
+
+export function deriveMembershipBlock(
+  memberships: MembershipForDerivation[],
+  today: Date,
+): MembershipBlock {
+  const live = memberships.filter((m) => m.cancelledAt === null);
+  const active = live.filter((m) => isInEffect(m, today));
+  if (active.length > 0) {
+    return { kind: "active", endDate: maxEndDate(active)! };
+  }
+  const upcoming = live.filter((m) => m.startDate.getTime() > today.getTime());
+  if (upcoming.length > 0) {
+    const soonest = upcoming.reduce((a, b) =>
+      b.startDate.getTime() < a.startDate.getTime() ? b : a,
+    );
+    return { kind: "upcoming", startDate: soonest.startDate };
+  }
+  return null;
+}
+
+/**
+ * The anchor end date for renewal math (ADR-040): the greatest `end_date` among
+ * the client's non-cancelled memberships with `end_date >= today`. Null when the
+ * client is fully expired (no membership reaches today).
+ */
+export function latestRelevantEnd(
+  memberships: MembershipForDerivation[],
+  today: Date,
+): Date | null {
+  const relevant = memberships.filter(
+    (m) => m.cancelledAt === null && m.endDate.getTime() >= today.getTime(),
+  );
+  return maxEndDate(relevant);
+}
+
+/**
+ * Canonical renewal date math (ADR-040): new `start_date = max(today, anchor + 1)`,
+ * new `end_date = start_date + duration_days`. `anchorEnd` is `latestRelevantEnd`
+ * (null when fully expired → start today). Pure: callers pass the anchor so both
+ * the server action and the client-side preview compute identical dates.
+ */
+export function computeRenewalDates(
+  anchorEnd: Date | null,
+  durationDays: number,
+  today: Date,
+): { startDate: Date; endDate: Date } {
+  const chained = anchorEnd ? addDays(anchorEnd, 1) : today;
+  const startDate =
+    chained.getTime() > today.getTime() ? chained : today;
+  return { startDate, endDate: addDays(startDate, durationDays) };
 }
 
 // ── Filter chips (US-2.9/2.10/2.11, ADR-037) ────────────────────────────────

@@ -29,15 +29,17 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [x] Walk-in conversion signals on Client Profile (US-2.10) — #020 · Dashboard "Frequent walk-ins" feed lands in M8 (Dashboard)
 - [x] At-risk member "At risk" filter chip on Client List (US-2.11) — #020 · Dashboard "At-risk members" live feed panel lands in M8
 
-### Milestone 3 — Membership Management
-- [ ] Create membership with plan selection and price override; blocked if client has an active membership ("Go to Renew" redirect) or an upcoming membership (informational block, no redirect) (US-3.1, ADR-037)
-- [ ] Renew membership with context-aware button labels — canonical renewal date math: chain onto latest end_date + 1 if active/upcoming, start today if fully expired; new record may be Upcoming (US-3.2, ADR-040)
-- [ ] Custom plan duration — inline "Duration (days)" option creates an ad-hoc membership (`membership_plan_id` null); reusable custom packages saved as catalog plans (US-3.3, ADR-015)
-- [ ] Full membership history per client — with VOID (payment) and Cancelled (membership) badges (US-3.4)
-- [ ] Cancel an erroneously created membership (soft cancel via `cancelled_at`, reason required) — excluded from all derivations, retained in history with a "Cancelled" badge; independent of payment void (US-3.10, Flow 18, ADR-041)
-- [ ] Expired memberships remain visible; client still allowed as walk-in (US-3.5)
-- [ ] Expiring-soon membership list (US-3.6)
-- [ ] Membership plan catalog management in Settings: create, edit, retire plans (US-3.9)
+### Milestone 3 — Membership Management ✅
+- [x] Create membership with plan selection and price override; blocked if client has an active membership ("Go to Renew" redirect) or an upcoming membership (informational block, no redirect) (US-3.1, ADR-037)
+- [x] Renew membership with context-aware button labels — canonical renewal date math: chain onto latest end_date + 1 if active/upcoming, start today if fully expired; new record may be Upcoming (US-3.2, ADR-040)
+- [x] Custom plan duration — inline "Duration (days)" option creates an ad-hoc membership (`membership_plan_id` null); reusable custom packages saved as catalog plans (US-3.3, ADR-015)
+- [x] Full membership history per client — with VOID (payment) and Cancelled (membership) badges (US-3.4) — Cancelled badge live; VOID badge wired to the payment relationship (lights up with M5)
+- [x] Cancel an erroneously created membership (soft cancel via `cancelled_at`, reason required) — excluded from all derivations, retained in history with a "Cancelled" badge; independent of payment void (US-3.10, Flow 18, ADR-041)
+- [x] Expired memberships remain visible (Membership History; never hidden/deleted) (US-3.5) — the "still allowed as walk-in" half is enforced at check-in (Milestone 4)
+- [x] Expiring-soon membership surfaced via the Client List "Expiring soon" chip (US-3.6) — archival/exportable list is Reports (Milestone 8)
+- [x] Membership plan catalog management in Settings: create, edit, retire plans (US-3.9)
+
+> **Deferred to Milestone 5 (Client Payments):** the membership **payment** record (`CLIENT_TRANSACTION` + payment method) — US-5.1 owns it. M3 records the immutable `price_paid` snapshot on the `Membership` (ADR-003). Month→days convention pinned by ADR-048 (30/60/90).
 
 ### Milestone 4 — Attendance
 - [ ] Attendance module — three internal views (ADR-023):

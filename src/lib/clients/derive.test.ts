@@ -3,6 +3,10 @@ import {
   deriveClient,
   matchesChip,
   deriveMembershipStatus,
+  deriveMembershipAction,
+  deriveMembershipBlock,
+  latestRelevantEnd,
+  computeRenewalDates,
   type MembershipForDerivation,
 } from "./derive";
 
@@ -184,5 +188,117 @@ describe("deriveMembershipStatus", () => {
         7,
       ),
     ).toBe("EXPIRING_SOON");
+  });
+});
+
+const expired: MembershipForDerivation = {
+  startDate: d("2026-01-01"),
+  endDate: d("2026-02-01"),
+  cancelledAt: null,
+};
+const upcoming: MembershipForDerivation = {
+  startDate: d("2026-07-01"),
+  endDate: d("2026-08-01"),
+  cancelledAt: null,
+};
+const expiringSoon: MembershipForDerivation = {
+  startDate: d("2026-06-01"),
+  endDate: d("2026-06-30"), // 4 days out (≤7)
+  cancelledAt: null,
+};
+
+describe("deriveMembershipAction (US-3.2, ADR-037)", () => {
+  it("no history → add", () => {
+    expect(deriveMembershipAction([], today, 7)).toBe("add");
+  });
+
+  it("only cancelled history → add", () => {
+    expect(
+      deriveMembershipAction([{ ...active, cancelledAt: d("2026-06-10") }], today, 7),
+    ).toBe("add");
+  });
+
+  it("active and not near expiry → renew-early", () => {
+    expect(deriveMembershipAction([active], today, 7)).toBe("renew-early");
+  });
+
+  it("active within the expiring-soon window → renew", () => {
+    expect(deriveMembershipAction([expiringSoon], today, 7)).toBe("renew");
+  });
+
+  it("expired → renew", () => {
+    expect(deriveMembershipAction([expired], today, 7)).toBe("renew");
+  });
+
+  it("upcoming-only → upcoming-only (informational)", () => {
+    expect(deriveMembershipAction([upcoming], today, 7)).toBe("upcoming-only");
+  });
+
+  it("active + upcoming (early renewal) → renew-early (active precedence)", () => {
+    expect(deriveMembershipAction([active, upcoming], today, 7)).toBe(
+      "renew-early",
+    );
+  });
+});
+
+describe("deriveMembershipBlock (US-3.1, ADR-037)", () => {
+  it("no live memberships → not blocked", () => {
+    expect(deriveMembershipBlock([], today)).toBeNull();
+    expect(deriveMembershipBlock([expired], today)).toBeNull();
+  });
+
+  it("active membership blocks with end date (Go to Renew)", () => {
+    const b = deriveMembershipBlock([active], today);
+    expect(b).toEqual({ kind: "active", endDate: active.endDate });
+  });
+
+  it("upcoming membership blocks informationally with start date", () => {
+    const b = deriveMembershipBlock([upcoming], today);
+    expect(b).toEqual({ kind: "upcoming", startDate: upcoming.startDate });
+  });
+
+  it("active takes precedence over upcoming", () => {
+    const b = deriveMembershipBlock([upcoming, active], today);
+    expect(b?.kind).toBe("active");
+  });
+
+  it("cancelled active membership does not block", () => {
+    const b = deriveMembershipBlock(
+      [{ ...active, cancelledAt: d("2026-06-10") }],
+      today,
+    );
+    expect(b).toBeNull();
+  });
+});
+
+describe("computeRenewalDates + latestRelevantEnd (ADR-040)", () => {
+  it("fully expired → starts today", () => {
+    const anchor = latestRelevantEnd([expired], today);
+    expect(anchor).toBeNull();
+    const r = computeRenewalDates(anchor, 30, today);
+    expect(r.startDate).toEqual(today);
+    expect(r.endDate).toEqual(d("2026-07-26"));
+  });
+
+  it("active → chains onto latest end + 1 day (new record upcoming)", () => {
+    const anchor = latestRelevantEnd([active], today); // 2026-07-26
+    const r = computeRenewalDates(anchor, 30, today);
+    expect(r.startDate).toEqual(d("2026-07-27"));
+    expect(r.endDate).toEqual(d("2026-08-26"));
+  });
+
+  it("stacked early renewal chains onto the furthest-future end", () => {
+    const anchor = latestRelevantEnd([active, upcoming], today); // 2026-08-01
+    const r = computeRenewalDates(anchor, 60, today);
+    expect(r.startDate).toEqual(d("2026-08-02"));
+    expect(r.endDate).toEqual(d("2026-10-01"));
+  });
+
+  it("ignores cancelled memberships when finding the anchor", () => {
+    const anchor = latestRelevantEnd(
+      [{ ...active, cancelledAt: d("2026-06-10") }],
+      today,
+    );
+    expect(anchor).toBeNull();
   });
 });

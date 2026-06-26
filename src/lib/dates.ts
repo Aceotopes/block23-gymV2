@@ -35,6 +35,27 @@ export function daysBetween(from: Date, to: Date): number {
   );
 }
 
+/** Add `n` calendar days to a date-only value, returning a UTC-midnight Date. */
+export function addDays(d: Date, n: number): Date {
+  return new Date(dateOnlyUTC(d).getTime() + n * MS_PER_DAY);
+}
+
+/**
+ * Parse a `YYYY-MM-DD` string (from an `<input type="date">`) to a UTC-midnight
+ * Date suitable for a `@db.Date` column. Returns null if malformed. No timezone
+ * conversion — the value is a bare calendar date (ADR-035).
+ */
+export function parseDateOnly(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const d = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Serialize a UTC-midnight date-only value as `YYYY-MM-DD` (for date inputs). */
+export function toDateInputValue(d: Date): string {
+  return dateOnlyUTC(d).toISOString().slice(0, 10);
+}
+
 /**
  * Display a date-only value (`@db.Date`). Formatted in UTC — the stored value is
  * a bare calendar date, so converting through a timezone would shift the day.

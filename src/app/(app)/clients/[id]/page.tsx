@@ -10,14 +10,20 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getCurrentGym } from "@/lib/gym";
 import { gymToday, formatDateOnly, formatTimeOnly } from "@/lib/dates";
-import { deriveClient, deriveMembershipStatus } from "@/lib/clients/derive";
+import {
+  deriveClient,
+  deriveMembershipStatus,
+  deriveMembershipAction,
+  latestRelevantEnd,
+} from "@/lib/clients/derive";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge, ClientTypeBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { ClientRowActions } from "../client-row-actions";
+import { MembershipActions } from "./membership-actions-ui";
+import { MembershipRowActions } from "./membership-row-actions";
 
 export const metadata = { title: "Client · Block23 Gym" };
 
@@ -71,24 +77,32 @@ export default async function ClientProfilePage({
   const tab: TabKey =
     (await searchParams).tab === "attendance" ? "attendance" : "membership";
 
-  const client = await prisma.client.findFirst({
-    where: { id, gymId: gym.id },
-    include: {
-      memberships: {
-        orderBy: { startDate: "desc" },
-        include: {
-          membershipPlan: { select: { name: true } },
-          transactionLineItems: {
-            select: { transaction: { select: { status: true } } },
+  const [client, activePlans] = await Promise.all([
+    prisma.client.findFirst({
+      where: { id, gymId: gym.id },
+      include: {
+        memberships: {
+          orderBy: { startDate: "desc" },
+          include: {
+            membershipPlan: { select: { name: true } },
+            transactionLineItems: {
+              select: { transaction: { select: { status: true } } },
+            },
           },
         },
+        attendances: {
+          orderBy: [{ visitDate: "desc" }, { timeIn: "desc" }],
+          select: { id: true, visitDate: true, timeIn: true, visitType: true },
+        },
       },
-      attendances: {
-        orderBy: [{ visitDate: "desc" }, { timeIn: "desc" }],
-        select: { id: true, visitDate: true, timeIn: true, visitType: true },
-      },
-    },
-  });
+    }),
+    // Active plans for the Add/Renew selector (US-3.9 — is_active = true, ADR-015).
+    prisma.membershipPlan.findMany({
+      where: { gymId: gym.id, isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true, durationDays: true, defaultPrice: true },
+    }),
+  ]);
   if (!client) notFound();
 
   const today = gymToday(gym.timezone);
@@ -116,17 +130,14 @@ export default async function ClientProfilePage({
     },
   });
 
-  // Context-aware membership action label (US-2.4). The actual Add/Renew flows
-  // arrive in Milestone 3, so the control is present but disabled for now.
-  const hasMembershipHistory = client.memberships.some(
-    (m) => m.cancelledAt === null,
+  // Context-aware membership action (US-3.2, ADR-037): add / renew / renew-early /
+  // upcoming-only — centralized so the button, block guard, and renewal math agree.
+  const membershipAction = deriveMembershipAction(
+    client.memberships,
+    today,
+    gym.expirationWarningDays,
   );
-  const membershipActionLabel = !hasMembershipHistory
-    ? "Add membership"
-    : derived.expiringSoon ||
-        (!derived.isActiveMembership && derived.clientType === "MEMBER")
-      ? "Renew"
-      : "Renew early";
+  const renewAnchorEnd = latestRelevantEnd(client.memberships, today);
 
   return (
     <>
@@ -142,12 +153,18 @@ export default async function ClientProfilePage({
         title={client.fullName}
         action={
           <div className="flex items-center gap-2">
-            <Button
-              disabled
-              title="Membership management arrives in Milestone 3"
-            >
-              {membershipActionLabel}
-            </Button>
+            <MembershipActions
+              clientId={client.id}
+              action={membershipAction}
+              activePlans={activePlans.map((p) => ({
+                id: p.id,
+                name: p.name,
+                durationDays: p.durationDays,
+                defaultPrice: Number(p.defaultPrice),
+              }))}
+              renewAnchorEnd={renewAnchorEnd}
+              today={today}
+            />
             <ClientRowActions
               showView={false}
               client={{
@@ -242,6 +259,7 @@ export default async function ClientProfilePage({
 
       {tab === "membership" ? (
         <MembershipHistory
+          clientId={client.id}
           memberships={client.memberships}
           today={today}
           expirationWarningDays={gym.expirationWarningDays}
@@ -299,10 +317,12 @@ type MembershipRow = {
 };
 
 function MembershipHistory({
+  clientId,
   memberships,
   today,
   expirationWarningDays,
 }: {
+  clientId: string;
   memberships: MembershipRow[];
   today: Date;
   expirationWarningDays: number;
@@ -312,7 +332,7 @@ function MembershipHistory({
       <EmptyState
         icon={CalendarClock}
         title="No memberships yet"
-        description="Membership purchases and renewals arrive in Milestone 3."
+        description="Use “Add membership” above to record this client's first plan."
       />
     );
   }
@@ -358,6 +378,13 @@ function MembershipHistory({
                   <Badge variant="outline" className="text-danger-on">
                     <Ban aria-hidden /> VOID
                   </Badge>
+                ) : null}
+                {status !== "CANCELLED" ? (
+                  <MembershipRowActions
+                    clientId={clientId}
+                    membershipId={m.id}
+                    label={m.membershipPlan?.name ?? "Custom (ad-hoc)"}
+                  />
                 ) : null}
               </div>
             </CardContent>

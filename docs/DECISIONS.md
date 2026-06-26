@@ -759,3 +759,20 @@ Filtered, derived lists are **rendered on the server** (React Server Components)
 - **Client-side TanStack Table over the full dataset** — would require shipping all derived rows to the client and re-deriving filters there, splitting the source of truth and defeating server-side pagination. Deferred, not banned: it remains the right tool when a view needs live client-side interactivity.
 
 **Relationship:** Confirms DESIGN-SYSTEM §14.4 and resolves the open question in §19. Updates the State Management Standards decision tree in `TECH-STACK.md`. Consumes ADR-002/017/019/037/040 (derived status) and ADR-001/025 (gym-scoped queries).
+
+---
+
+## ADR-048: Month-based plan durations map to fixed day counts (30 / 60 / 90)
+
+**Date:** 2026-06-27
+**Status:** Accepted
+
+**Decision:** A `MembershipPlan.duration_type` of "1 month" / "2 months" / "3 months" maps to a fixed `duration_days` of **30 / 60 / 90** respectively; "Custom days" stores the owner-entered day count. The Add/Renew modal's inline ad-hoc "Custom duration" (membership_plan_id = null, ADR-015) uses the same entered day count. This mapping lives in `src/lib/memberships/duration.ts`.
+
+**Why:** The domain stores `duration_days` (int) on both `MembershipPlan` and `Membership`, and the canonical renewal math (ADR-040) is day-based: `end_date = start_date + duration_days`. The "1/2/3 months" labels (US-3.9, MODULE-SPECS Module 3/9) therefore require a concrete day count, not a calendar-month rule. A fixed 30-day month is the standard gym-billing convention, is timezone-independent, and keeps `end_date` derivation a pure addition consistent with ADR-040 — no calendar-arithmetic edge cases (e.g. Jan 31 + 1 month).
+
+**Rejected:**
+- **Calendar-month addition** (e.g. start + 1 calendar month) — would make `Membership.end_date` depend on month length and introduce end-of-month ambiguity (Jan 31 → Feb 28/29?), and is inexpressible as the single `duration_days` integer the schema and ADR-040 already commit to.
+- **A configurable days-per-month setting** — premature; no requirement asks for it, and it would complicate plan creation. An owner who wants a non-30-day "month" can create a Custom-days plan.
+
+**Relationship:** Implements US-3.9 / US-3.3 on top of ADR-040 (renewal math) and ADR-015 (custom durations / ad-hoc null plan). Editing a plan's duration does not alter existing memberships' stored `end_date` (those are derived at creation from the then-current duration; snapshot integrity per ADR-003).

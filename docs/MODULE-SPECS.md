@@ -162,7 +162,7 @@ Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Ru
 
 **Membership Plan Catalog (managed in Settings → Membership Plans):**
 - The `MembershipPlan` table is the authoritative source for plan options in the Add/Renew modal. (ADR-015)
-- Plans have: `name`, `duration_type` (1 month / 2 months / 3 months / Custom days), `default_price`, `is_active`.
+- Plans have: `name`, `duration_type` (1 month / 2 months / 3 months / Custom days), `default_price`, `is_active`. Month types map to fixed `duration_days` of 30 / 60 / 90 (ADR-048); "Custom days" stores the entered count.
 - See Module 9 (Settings) for plan management UI specification.
 
 **Create Membership:**

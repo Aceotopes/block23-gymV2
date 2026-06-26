@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Implementation in progress — Milestone 1 (Foundation & Auth).** Planning, the tech stack, and the design language are stable. Project setup is complete: Next.js 15 scaffold + design tokens, Neon PostgreSQL with Prisma 7 (11-entity schema, migrations), and Better Auth owner login (username + password, server-managed sessions, default-deny route protection). Remaining in Milestone 1: the app shell (8-entry nav) and the Settings module. **`docs/SESSION_HANDOFF.md` is the live status + resume point — read it first.** See `docs/TECH-STACK.md` for the approved stack and development rules, `docs/DESIGN-SYSTEM.md` for tokens/components/patterns, and `docs/INFORMATION-ARCHITECTURE.md` for the navigation/screen map.
+**Implementation in progress — Milestones 1–3 complete; next is Milestone 4 (Attendance).** Planning, the tech stack, and the design language are stable. Done: Next.js 15 scaffold + design tokens; Neon PostgreSQL with Prisma 7 (11-entity schema, migrations); Better Auth owner login (username + password, server-managed sessions, default-deny route protection); the 8-entry app shell; the Settings module; Client Management (centralized derivation, list/profile/archive, ADR-047 list-state-in-URL); and Membership Management (create/renew/cancel with canonical date math, ad-hoc custom durations, and the Membership Plan catalog in Settings — US-3.1/3.2/3.3/3.9/3.10, ADR-040/041/048). The membership **payment** record (CLIENT_TRANSACTION + payment method) is delivered in Milestone 5 (US-5.1). **`docs/SESSION_HANDOFF.md` is the live status + resume point — read it first.** See `docs/TECH-STACK.md` for the approved stack and development rules, `docs/DESIGN-SYSTEM.md` for tokens/components/patterns, and `docs/INFORMATION-ARCHITECTURE.md` for the navigation/screen map.
 
 ## Planning Workflow
 
@@ -68,7 +68,7 @@ Changes in one document almost always require updates in others. Use this map.
 
 ## Locked Design Decisions
 
-These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-047; ADR-030–032 intentionally unused) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
+These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-048; ADR-030–032 intentionally unused) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
 
 **gym_id on every entity (ADR-001, ADR-025):** Multi-tenancy foundation. Every entity — including child/detail entities (`Membership`, `TransactionLineItem`, `InventoryTransaction`) — carries a `gym_id` FK. Enables database-level Row-Level Security without join-chain subqueries.
 
