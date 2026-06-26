@@ -90,7 +90,9 @@ All report views, membership history, attendance history, and settings pages are
 
 ### Backend Standards
 
-**Prisma is the only database access mechanism.** No raw `pg` queries, no other query builders. If a query cannot be expressed cleanly in Prisma's query API, use `prisma.$queryRaw` with Prisma's `sql` template tag — this keeps parameterization safe and results typed. Do not install `pg`, `postgres`, or `knex` alongside Prisma.
+**Prisma is the only database access mechanism.** No raw `pg` queries, no other query builders. If a query cannot be expressed cleanly in Prisma's query API, use `prisma.$queryRaw` with Prisma's `sql` template tag — this keeps parameterization safe and results typed. Do not install `pg`, `postgres`, or `knex` *as a query mechanism* alongside Prisma. **Exception (Prisma 7):** Prisma 7 connects through a driver adapter, so `@prisma/adapter-pg` (which depends on `pg`) is installed as **Prisma's required driver** — never as a query interface. All application queries still go exclusively through the Prisma client. (Driver-adapter alternative: `@prisma/adapter-neon` for serverless/edge — a one-file swap in `src/lib/prisma.ts`.)
+
+**Prisma 7 connection model.** The `schema.prisma` `datasource` block declares only `provider`. Connection URLs live in `prisma.config.ts`: the CLI and migrations use the **direct/unpooled** connection (`DATABASE_URL_UNPOOLED`); the runtime client is constructed with a driver adapter pointed at the **pooled** connection (`DATABASE_URL`) in `src/lib/prisma.ts`.
 
 **All Server Actions validate input with Zod before touching Prisma.** The Zod schema is the contract between the client and the server. Validate first, query second — never the reverse.
 

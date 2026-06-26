@@ -1,7 +1,15 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Block23 Gym — Prisma schema
+// Single source of truth for the domain model is docs/DOMAIN-MODEL.md.
+// Conventions:
+//   - PascalCase models / camelCase fields in Prisma; snake_case columns + tables
+//     via @map / @@map (keeps DB-level RLS policies readable — ADR-001/ADR-025).
+//   - UUID v7 PKs (@db.Uuid) for time-ordered index locality.
+//   - Money & quantities: Decimal(12,2). All DateTime stored UTC (ADR-035);
+//     calendar dates use @db.Date, clock times use @db.Time (no TZ conversion).
+//   - Derived fields (Client.status, Membership.status, client_type, at-risk) are
+//     NOT columns — computed in the app layer (ADR-002 / ADR-017 / ADR-040).
+//   - Better Auth session/account/verification tables are added at the auth step
+//     (ADR-043); this schema is the auth-agnostic domain model.
 
 generator client {
   provider = "prisma-client"
@@ -9,5 +17,351 @@ generator client {
 }
 
 datasource db {
+  // Prisma 7: connection URLs live in prisma.config.ts (CLI/migrations) and are
+  // passed to the runtime client via its constructor (src/lib/prisma.ts).
   provider = "postgresql"
+}
+
+// ─── Enums (defined once; Zod enums derive from these — TECH-STACK §3) ────────
+
+enum Role {
+  OWNER
+  STAFF // reserved (post-MVP, US-1.5)
+  MANAGER // reserved (post-MVP)
+}
+
+enum ProductType {
+  STANDARD_PRODUCT
+  SERVING_BASED_PRODUCT
+}
+
+enum VisitType {
+  MEMBER
+  WALK_IN
+}
+
+enum InventoryTransactionType {
+  PURCHASE
+  SALE
+  ADJUSTMENT
+}
+
+enum AdjustmentReasonCategory {
+  DAMAGE
+  EXPIRY
+  THEFT
+  COUNT_CORRECTION
+  NATURAL_WASTAGE
+  PROMOTION
+  OTHER
+  FORCED_SALE // system-assigned on Force Sale overrides; not owner-selectable (ADR-034)
+}
+
+enum TransactionType {
+  CLIENT_TRANSACTION
+  POS_SALE
+}
+
+enum TransactionStatus {
+  COMPLETED
+  VOID
+}
+
+enum PaymentMethod {
+  CASH
+  GCASH
+  CARD
+  OTHER
+}
+
+enum VoidReasonCategory {
+  DUPLICATE_ENTRY
+  WRONG_AMOUNT
+  WRONG_PRODUCT
+  CLIENT_CANCELLED
+  SYSTEM_ERROR
+  OTHER
+}
+
+enum ItemType {
+  MEMBERSHIP
+  WALK_IN_FEE
+  PRODUCT
+}
+
+// ─── Gym (tenant root) ────────────────────────────────────────────────────────
+
+model Gym {
+  id                            String   @id @default(uuid(7)) @db.Uuid
+  name                          String
+  address                       String
+  contactInfo                   String   @map("contact_info")
+  defaultWalkinFee              Decimal  @map("default_walkin_fee") @db.Decimal(12, 2)
+  expirationWarningDays         Int      @map("expiration_warning_days")
+  walkinInactivityThresholdDays Int      @default(7) @map("walkin_inactivity_threshold_days")
+  memberInactivityWarningDays   Int      @default(14) @map("member_inactivity_warning_days")
+  walkinConversionPromptVisits  Int      @default(5) @map("walkin_conversion_prompt_visits")
+  timezone                      String // IANA identifier, e.g. "Asia/Manila" (ADR-035)
+  createdAt                     DateTime @default(now()) @map("created_at")
+  updatedAt                     DateTime @updatedAt @map("updated_at")
+
+  users                 User[]
+  clients               Client[]
+  membershipPlans       MembershipPlan[]
+  memberships           Membership[]
+  attendances           Attendance[]
+  productCategories     ProductCategory[]
+  products              Product[]
+  inventoryTransactions InventoryTransaction[]
+  transactions          Transaction[]
+  transactionLineItems  TransactionLineItem[]
+
+  @@map("gym")
+}
+
+// ─── User (owner account; future staff) ───────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  gymId        String   @map("gym_id") @db.Uuid
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role     @default(OWNER)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  gym                 Gym           @relation(fields: [gymId], references: [id])
+  attendancesCreated  Attendance[]  @relation("AttendanceCreatedBy")
+  transactionsCreated Transaction[] @relation("TransactionCreatedBy")
+
+  @@index([gymId])
+  @@map("user")
+}
+
+// ─── Client ───────────────────────────────────────────────────────────────────
+
+model Client {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  gymId          String    @map("gym_id") @db.Uuid
+  fullName       String    @map("full_name")
+  contactNumber  String?   @map("contact_number")
+  email          String?
+  notes          String?
+  dateRegistered DateTime  @map("date_registered") @db.Date
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at") // soft delete (ADR-005)
+
+  gym          Gym           @relation(fields: [gymId], references: [id])
+  memberships  Membership[]
+  attendances  Attendance[]
+  transactions Transaction[]
+
+  @@index([gymId])
+  @@index([gymId, deletedAt])
+  @@map("client")
+}
+
+// ─── MembershipPlan (catalog) ─────────────────────────────────────────────────
+
+model MembershipPlan {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  gymId        String   @map("gym_id") @db.Uuid
+  name         String
+  durationDays Int      @map("duration_days")
+  defaultPrice Decimal  @map("default_price") @db.Decimal(12, 2)
+  isActive     Boolean  @default(true) @map("is_active") // retirement flag, not soft delete
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  gym         Gym          @relation(fields: [gymId], references: [id])
+  memberships Membership[]
+
+  @@index([gymId])
+  @@map("membership_plan")
+}
+
+// ─── Membership (purchased period) ────────────────────────────────────────────
+
+model Membership {
+  id                      String    @id @default(uuid(7)) @db.Uuid
+  gymId                   String    @map("gym_id") @db.Uuid
+  clientId                String    @map("client_id") @db.Uuid
+  membershipPlanId        String?   @map("membership_plan_id") @db.Uuid // null = ad-hoc custom (ADR-015)
+  startDate               DateTime  @map("start_date") @db.Date
+  endDate                 DateTime  @map("end_date") @db.Date
+  pricePaid               Decimal   @map("price_paid") @db.Decimal(12, 2) // snapshot (ADR-003)
+  renewedFromMembershipId String?   @map("renewed_from_membership_id") @db.Uuid
+  cancelledAt             DateTime? @map("cancelled_at") // soft cancel (ADR-041)
+  cancellationReason      String?   @map("cancellation_reason")
+  createdAt               DateTime  @default(now()) @map("created_at")
+
+  gym            Gym             @relation(fields: [gymId], references: [id])
+  client         Client          @relation(fields: [clientId], references: [id])
+  membershipPlan MembershipPlan? @relation(fields: [membershipPlanId], references: [id])
+  renewedFrom    Membership?     @relation("MembershipRenewal", fields: [renewedFromMembershipId], references: [id])
+  renewals       Membership[]    @relation("MembershipRenewal")
+
+  attendances          Attendance[]
+  transactionLineItems TransactionLineItem[]
+
+  @@index([gymId])
+  @@index([clientId])
+  @@index([clientId, endDate])
+  @@map("membership")
+}
+
+// ─── Attendance ───────────────────────────────────────────────────────────────
+
+model Attendance {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  gymId          String    @map("gym_id") @db.Uuid
+  clientId       String    @map("client_id") @db.Uuid
+  visitDate      DateTime  @map("visit_date") @db.Date
+  timeIn         DateTime  @map("time_in") @db.Time
+  timeOut        DateTime? @map("time_out") @db.Time // reserved; no MVP fee logic
+  visitType      VisitType @map("visit_type") // mutable via Flow 7 only (ADR-038)
+  membershipId   String?   @map("membership_id") @db.Uuid // snapshot of active membership at check-in
+  feeCharged     Decimal?  @map("fee_charged") @db.Decimal(12, 2) // denormalized display only
+  createdById    String    @map("created_by") @db.Uuid
+  correctionNote String?   @map("correction_note") // Flow 15 only
+  createdAt      DateTime  @default(now()) @map("created_at")
+  // NOT @updatedAt: set manually by Flow 15 correction; null marks an uncorrected record (ADR-038)
+  updatedAt      DateTime? @map("updated_at")
+
+  gym        Gym         @relation(fields: [gymId], references: [id])
+  client     Client      @relation(fields: [clientId], references: [id])
+  membership Membership? @relation(fields: [membershipId], references: [id])
+  createdBy  User        @relation("AttendanceCreatedBy", fields: [createdById], references: [id])
+
+  @@index([gymId])
+  @@index([clientId])
+  @@index([gymId, visitDate])
+  @@map("attendance")
+}
+
+// ─── ProductCategory ──────────────────────────────────────────────────────────
+
+model ProductCategory {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  gymId     String   @map("gym_id") @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  gym      Gym       @relation(fields: [gymId], references: [id])
+  products Product[]
+
+  @@index([gymId])
+  @@map("product_category")
+}
+
+// ─── Product ──────────────────────────────────────────────────────────────────
+
+model Product {
+  id                    String      @id @default(uuid(7)) @db.Uuid
+  gymId                 String      @map("gym_id") @db.Uuid
+  categoryId            String      @map("category_id") @db.Uuid
+  name                  String
+  productType           ProductType @map("product_type")
+  sellingPrice          Decimal     @map("selling_price") @db.Decimal(12, 2)
+  costPrice             Decimal?    @map("cost_price") @db.Decimal(12, 2)
+  imageUrl              String?     @map("image_url")
+  currentStock          Decimal     @default(0) @map("current_stock") @db.Decimal(12, 2) // cached; recomputable from ledger (ADR-004)
+  servingsPerContainer  Int?        @map("servings_per_container") // SERVING_BASED only
+  containerSellingPrice Decimal?    @map("container_selling_price") @db.Decimal(12, 2) // SERVING_BASED only (ADR-027)
+  lowStockThreshold     Decimal     @map("low_stock_threshold") @db.Decimal(12, 2)
+  reorderPoint          Int?        @map("reorder_point")
+  deletedAt             DateTime?   @map("deleted_at") // soft delete (ADR-005)
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+
+  gym                   Gym                    @relation(fields: [gymId], references: [id])
+  category              ProductCategory        @relation(fields: [categoryId], references: [id])
+  inventoryTransactions InventoryTransaction[]
+  transactionLineItems  TransactionLineItem[]
+
+  @@index([gymId])
+  @@index([categoryId])
+  @@index([gymId, deletedAt])
+  @@map("product")
+}
+
+// ─── InventoryTransaction (stock ledger) ──────────────────────────────────────
+
+model InventoryTransaction {
+  id                             String                    @id @default(uuid(7)) @db.Uuid
+  gymId                          String                    @map("gym_id") @db.Uuid
+  productId                      String                    @map("product_id") @db.Uuid
+  type                           InventoryTransactionType
+  quantityDelta                  Decimal                   @map("quantity_delta") @db.Decimal(12, 2)
+  resultingStock                 Decimal                   @map("resulting_stock") @db.Decimal(12, 2)
+  referenceTransactionLineItemId String?                   @map("reference_transaction_line_item_id") @db.Uuid
+  adjustmentReasonCategory       AdjustmentReasonCategory? @map("adjustment_reason_category") // required when type=ADJUSTMENT (app-enforced)
+  totalRestockCost               Decimal?                  @map("total_restock_cost") @db.Decimal(12, 2) // PURCHASE only
+  note                           String?
+  createdAt                      DateTime                  @default(now()) @map("created_at")
+
+  gym               Gym                  @relation(fields: [gymId], references: [id])
+  product           Product              @relation(fields: [productId], references: [id])
+  referenceLineItem TransactionLineItem? @relation(fields: [referenceTransactionLineItemId], references: [id])
+
+  @@index([gymId])
+  @@index([productId])
+  @@index([referenceTransactionLineItemId])
+  @@map("inventory_transaction")
+}
+
+// ─── Transaction (unified revenue ledger) ─────────────────────────────────────
+
+model Transaction {
+  id                 String              @id @default(uuid(7)) @db.Uuid
+  gymId              String              @map("gym_id") @db.Uuid
+  transactionType    TransactionType     @map("transaction_type")
+  clientId           String?             @map("client_id") @db.Uuid // required for CLIENT_TRANSACTION; null for POS_SALE
+  transactionDate    DateTime            @map("transaction_date") // business time (UTC; displayed in Gym.timezone)
+  totalAmount        Decimal             @map("total_amount") @db.Decimal(12, 2)
+  paymentMethod      PaymentMethod       @map("payment_method")
+  status             TransactionStatus   @default(COMPLETED)
+  voidReasonCategory VoidReasonCategory? @map("void_reason_category") // required when status=VOID (app-enforced)
+  voidReasonNote     String?             @map("void_reason_note")
+  createdById        String              @map("created_by") @db.Uuid
+  createdAt          DateTime            @default(now()) @map("created_at")
+
+  gym       Gym                   @relation(fields: [gymId], references: [id])
+  client    Client?               @relation(fields: [clientId], references: [id])
+  createdBy User                  @relation("TransactionCreatedBy", fields: [createdById], references: [id])
+  lineItems TransactionLineItem[]
+
+  @@index([gymId])
+  @@index([clientId])
+  @@index([gymId, transactionDate])
+  @@map("transaction")
+}
+
+// ─── TransactionLineItem ──────────────────────────────────────────────────────
+
+model TransactionLineItem {
+  id                    String   @id @default(uuid(7)) @db.Uuid
+  gymId                 String   @map("gym_id") @db.Uuid
+  transactionId         String   @map("transaction_id") @db.Uuid
+  itemType              ItemType @map("item_type") // must match parent transaction_type (app-enforced)
+  referenceMembershipId String?  @map("reference_membership_id") @db.Uuid
+  referenceProductId    String?  @map("reference_product_id") @db.Uuid
+  description           String
+  quantity              Decimal  @db.Decimal(12, 2)
+  unitPrice             Decimal  @map("unit_price") @db.Decimal(12, 2) // price snapshot (ADR-003)
+  costPriceSnapshot     Decimal? @map("cost_price_snapshot") @db.Decimal(12, 2) // cost snapshot (ADR-026)
+  subtotal              Decimal  @db.Decimal(12, 2)
+  feeOverrideNote       String?  @map("fee_override_note") // WALK_IN_FEE override only
+
+  gym                 Gym                    @relation(fields: [gymId], references: [id])
+  transaction         Transaction            @relation(fields: [transactionId], references: [id])
+  referenceMembership Membership?            @relation(fields: [referenceMembershipId], references: [id])
+  referenceProduct    Product?               @relation(fields: [referenceProductId], references: [id])
+  inventoryMovements  InventoryTransaction[]
+
+  @@index([gymId])
+  @@index([transactionId])
+  @@map("transaction_line_item")
 }

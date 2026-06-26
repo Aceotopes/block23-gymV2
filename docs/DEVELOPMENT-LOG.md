@@ -5,6 +5,37 @@ Newest entries at the top.
 
 ---
 
+## [#016] Milestone 1 — Domain schema, first migration, Prisma client singleton — 2026-06-26
+
+**Commit:** _(Done)_
+
+**Purpose:** Author the full domain schema (the step deferred at the end of `#015`), provision against the now-live Neon database, run the first migration, and stand up the runtime Prisma client. This is the data foundation every later milestone builds on.
+
+**What was done:**
+
+- **`prisma/schema.prisma` — 11 domain entities** authored faithfully to `docs/DOMAIN-MODEL.md`: `Gym`, `User`, `Client`, `MembershipPlan`, `Membership`, `Attendance`, `ProductCategory`, `Product`, `InventoryTransaction`, `Transaction`, `TransactionLineItem`, plus 10 enums (`Role`, `ProductType`, `VisitType`, `InventoryTransactionType`, `AdjustmentReasonCategory`, `TransactionType`, `TransactionStatus`, `PaymentMethod`, `VoidReasonCategory`, `ItemType`). ADRs honored: `gym_id` on every entity incl. children (ADR-001/025); derived status fields **not** stored (ADR-002/017/040 — no `status` columns on Client/Membership); price/cost snapshots (`price_paid`, `unit_price`, `cost_price_snapshot`) (ADR-003/026); soft delete via `deleted_at` on Client/Product (ADR-005); `MembershipPlan.is_active` retirement flag (not soft delete); unified `Transaction` + enums (ADR-006); structured audit-category enums incl. system-only `FORCED_SALE` (ADR-028/034); membership self-FK `renewed_from_membership_id` + soft cancel `cancelled_at`/`cancellation_reason` (ADR-040/041); nullable `membership_plan_id` for ad-hoc custom (ADR-015). UTC `DateTime`, `@db.Date` for calendar dates, `@db.Time` for clock times (ADR-035). **`Attendance.updatedAt` is a plain nullable field (not `@updatedAt`)** — it is the sole marker of a Flow 15 correction and must stay null otherwise (ADR-038).
+- **Naming convention:** PascalCase models / camelCase fields in Prisma, mapped to snake_case columns + tables via `@map`/`@@map` (keeps DB-level RLS policies readable for the SaaS path). UUID v7 PKs (`@default(uuid(7)) @db.Uuid`) for index locality. Money/quantities `Decimal(12,2)`. Indexes on `gym_id`, FKs, and key query columns (`(gym_id, deleted_at)`, `(client_id, end_date)`, `(gym_id, visit_date)`, `(gym_id, transaction_date)`).
+- **First migration** `20260626060051_init` created and applied to **Neon** (Singapore, `ap-southeast-1`) — 11 tables + 10 enum types. Verified: `prisma validate` ✓, table/enum counts ✓, and a live runtime round-trip (`prisma.gym.count()`) ✓.
+- **Prisma client singleton** `src/lib/prisma.ts` — globalThis-cached for dev hot-reload (TECH-STACK Backend Standards). Uses the **pooled** `DATABASE_URL` at runtime.
+- **Database connection wiring (Prisma 7 model):** schema `datasource` declares only `provider`; connection URLs live in `prisma.config.ts` (CLI/migrations use the **direct** `DATABASE_URL_UNPOOLED`) and are passed to the runtime client constructor (pooled `DATABASE_URL`). `.env` now holds the real Neon pooled + unpooled strings.
+
+**Tooling-drift decision (owner-informed; forced by the locked "Prisma latest" choice — mirrors the `#015` Next/shadcn pins):**
+
+- **Prisma 7 requires a driver adapter** — the built-in URL-string engine connection is gone. Added **`@prisma/adapter-pg`** + **`pg`** (and `@types/pg`); the runtime client connects via `new PrismaPg({ connectionString })` against the Neon pooler. `pg` here is **Prisma's own required driver**, not a second query mechanism — it does not violate the TECH-STACK "no `pg`/`postgres`/`knex`" rule (which targets alternative query builders). The serverless-optimized `@prisma/adapter-neon` is a one-file swap if edge/serverless tuning is ever wanted. **No new ADR** (consistent with how `#015` handled version-forced tooling drift); documented in TECH-STACK.
+
+**Doc sync:**
+
+- **TECH-STACK.md:** Backend Standards "no `pg`" rule annotated with the Prisma-7 driver-adapter exception; Database Standards note added on the Prisma 7 connection model (schema = provider only; URLs in `prisma.config.ts`; runtime adapter with pooled URL, CLI with direct URL).
+- **SESSION_HANDOFF.md:** updated — schema + DB + client singleton complete; Neon blocker resolved; next step = Better Auth (US-1.1).
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (2/2) · `pnpm build` ✓ (Next 15.5.19, 5 static routes, 113 kB First Load JS) · `prisma migrate` applied to Neon ✓ · runtime round-trip ✓.
+
+**Notes:** `src/generated/prisma` remains gitignored (regenerated via `prisma generate`). `prisma/migrations/` **is** committed (permanent history, TECH-STACK). A `pg` SSL deprecation notice prints on connect (`sslmode=require` → `verify-full` in a future pg major) — informational, harmless for Neon now; revisit at the `pg` v9 upgrade.
+
+**Next step:** Better Auth integration against the `User` table (ADR-043) — owner login US-1.1 — then the app shell and Settings module.
+
+---
+
 ## [#015] Milestone 1 — Project setup & scaffold (first application code) — 2026-06-26
 
 **Commit:** _(Done)_
