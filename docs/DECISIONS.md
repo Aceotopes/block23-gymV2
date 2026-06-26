@@ -717,3 +717,26 @@ These constraints are inputs to the Design System's color and typography token c
 **Relationship:** Implements ADR-044 (accessibility baseline) at the token level and ADR-033 (desktop-first). Consumes ADR-042's information architecture for the app shell. Detailed in `DESIGN-SYSTEM.md`.
 
 **Confirmation (2026-06-25):** Re-interrogated with the owner against the energetic gym-app norm and the realistic alternatives (athletic/friendly vibe; orange/emerald/sky accent; light-first/auto theme; warmer/technical typography). The owner reaffirmed all four pillars — operational-instrument vibe, indigo accent, dark-first, Geist Sans + Mono. Decisive factor on accent: orange, emerald, and sky each collide with an existing domain status hue (At-risk orange, Active/Success emerald, Info/Upcoming sky — `DESIGN-SYSTEM.md` §3.4), so indigo is the only collision-free primary. ADR-045 is therefore a deliberately retained decision, not an inherited default. Recorded in `DESIGN-SYSTEM.md` §2.1. No token changes.
+
+---
+
+## ADR-046: Better Auth credential storage — adopt the native schema
+
+**Date:** 2026-06-26
+**Status:** Accepted (supersedes the `password_hash`-on-`User` clause of ADR-043)
+
+**Decision:** Implement Better Auth (1.6) against its **native schema**, refining the implementation detail ADR-043 got wrong:
+
+- The domain `User` table **is** the Better Auth user model (unchanged from ADR-043: one canonical user, no parallel table). It carries Better Auth's core fields — `name`, `email` (unique), `emailVerified`, `image` — plus `username`/`displayUsername` from the **username plugin** (login is by username, US-1.1), plus `gymId` and `role` as **additional fields** exposed on the session (`{ userId, gymId, role }`).
+- **Credential password hashes live in the Better-Auth-owned `account` table** (`account.password`, `providerId = "credential"`, `accountId = user.id`) — **not** on `User`. The `User.password_hash` column is removed.
+- Better Auth owns three infrastructure tables: **`session`, `account`, `verification`**. These are the **documented exception to `gym_id`-on-every-entity (ADR-001/025)**: they are framework-managed auth infra, not tenant/domain data — tenancy is carried by the related `User.gymId`.
+- IDs on the auth tables are DB-generated UUIDs (`advanced.database.generateId = false` + Prisma `@default(uuid(7))`), keeping UUID PKs consistent with the domain FKs that reference `User.id`.
+- Public sign-up is disabled (`emailAndPassword.disableSignUp`); the owner is provisioned by the seed (`prisma/seed.ts`), which hashes via Better Auth's own hasher and writes the matching credential `account` row.
+
+**Why:** ADR-043 assumed "the credentials provider manages `password_hash`" on `User`. Better Auth's actual architecture stores credential hashes in a separate `account` table and requires `name`/`email`/`emailVerified` on the user. Forcing the hash onto `User` would mean a custom adapter fighting the framework — more code, more fragility, and loss of Better Auth's credential handling. Adopting the native schema keeps the framework on its happy path while preserving ADR-043's real intent: a single canonical user record with `gymId`/`role` and a `{ userId, gymId, role }` session.
+
+**Rejected:**
+- **Keep `password_hash` on `User` via a custom credential adapter** — brittle, fights Better Auth, abandons its tested credential flow for no domain benefit.
+- **A separate Better-Auth-owned user table linked to the domain `User`** — already rejected by ADR-043 (two identity sources, joins, drift). Still rejected.
+
+**Relationship:** Refines ADR-043 (everything else in ADR-043 stands). The `session`/`account`/`verification` tables are the named exception to ADR-001/ADR-025.

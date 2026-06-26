@@ -58,14 +58,34 @@ erDiagram
 
 ### `User` *(Owner account, future: staff accounts)*
 
+The canonical user record **and** the Better Auth user model (ADR-043, ADR-046). One user table, no parallel auth table. `name`/`email`/`email_verified`/`image` are Better Auth core fields; `username`/`display_username` come from the username plugin (login is by username — US-1.1); `gym_id`/`role` are Better Auth **additional fields** exposed on the session (`{ userId, gymId, role }`).
+
 | Field | Type | Notes |
 |---|---|---|
 | id | UUID/PK | |
-| gym_id | FK → Gym | |
-| username | string | |
-| password_hash | string | never store plaintext |
-| role | enum | MVP: `OWNER` only. Future: `STAFF`, `MANAGER` |
+| gym_id | FK → Gym | additional field; multi-tenant scope |
+| name | string | Better Auth core field |
+| email | string, unique | Better Auth core field (login is by username; email enables future password reset, US-1.6) |
+| email_verified | bool | Better Auth core field |
+| image | string, nullable | Better Auth core field |
+| username | string, unique, nullable | username plugin — the login identifier |
+| display_username | string, nullable | username plugin — display form |
+| role | enum | additional field. MVP: `OWNER` only. Future: `STAFF`, `MANAGER` |
 | created_at / updated_at | timestamp | |
+
+**Credential password hashes are NOT stored here (ADR-046).** They live in the Better-Auth-owned `account` table (`account.password`, `provider_id = "credential"`). There is no `password_hash` column on `User`.
+
+---
+
+### Better Auth–owned tables: `Session`, `Account`, `Verification` *(auth infrastructure)*
+
+Managed by Better Auth (ADR-043, ADR-046). Field names follow Better Auth 1.6's expected schema. These are the **documented exception to `gym_id`-on-every-entity (ADR-001, ADR-025)** — they are framework auth infrastructure, not tenant/domain data; tenancy is carried by the related `User.gym_id`.
+
+- **`Session`** — `id`, `user_id` (FK → User, cascade), `token` (unique), `expires_at`, `ip_address?`, `user_agent?`, `created_at`, `updated_at`.
+- **`Account`** — `id`, `user_id` (FK → User, cascade), `account_id`, `provider_id`, OAuth token fields (nullable, unused at MVP), **`password`** (credential hash for username/email + password), `created_at`, `updated_at`.
+- **`Verification`** — `id`, `identifier`, `value`, `expires_at`, `created_at`, `updated_at` (reserved; no MVP flow uses it yet).
+
+IDs are DB-generated UUIDs (`advanced.database.generateId = false` + Prisma `@default(uuid(7))`), consistent with the domain UUID PKs.
 
 ---
 

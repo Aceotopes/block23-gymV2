@@ -5,6 +5,39 @@ Newest entries at the top.
 
 ---
 
+## [#017] Milestone 1 — Better Auth: owner login, session, route protection (US-1.1) — 2026-06-26
+
+**Commit:** _(Done)_
+
+**Purpose:** Implement authentication — owner login by username + password, server-managed sessions, and default-deny route protection (US-1.1, Flow 1). First protected area (a placeholder Dashboard) and the owner seed.
+
+**Key decision — ADR-046 (owner-approved):** Better Auth's real architecture differs from what ADR-043 assumed. I read Better Auth 1.6.20's core schema in `node_modules` and confirmed: credential hashes live in a separate **`account`** table (not on `User`), and the user model requires `name`/`email`/`email_verified`. Surfaced the conflict, did a Change Impact Analysis, and the owner chose **adopt the native schema + new ADR-046** (over forcing `password_hash` onto `User`) and **seed a real owner email**. ADR-046 supersedes only the `password_hash`-on-`User` clause of ADR-043; the rest of ADR-043 (one canonical user, `gym_id`/`role` additional fields, `{ userId, gymId, role }` session) stands.
+
+**Schema (migration `20260626151816_add_better_auth`):**
+
+- **`User` reworked:** dropped `password_hash`; added Better Auth core fields `name`, `email` (unique), `email_verified`, `image`, and username-plugin `username` (unique) / `display_username`. `gym_id`/`role` retained as additional fields.
+- **Added `Session`, `Account`, `Verification`** (Better Auth-owned). `account.password` holds the credential hash. These are the **documented exception to `gym_id`-everywhere** (ADR-001/025) — auth infra; tenancy via `User.gym_id`. UUID PKs via `@default(uuid(7))` + `advanced.database.generateId = false` (keeps ids consistent with domain FKs to `User.id`).
+- Migration generated with `prisma migrate diff --from-config-datasource --to-schema` and applied via `migrate deploy` (Prisma 7's `migrate dev` is interactive-only and refuses non-interactive runs once a warning is present). An empty stray migration folder from a first wrong-flags attempt was removed from disk and `_prisma_migrations`.
+
+**Auth wiring:**
+
+- `src/lib/auth.ts` — `betterAuth` with `prismaAdapter`, `emailAndPassword` (sign-up disabled), `username()` plugin, `gymId`/`role` additional fields (server-managed, not client input), `generateId = false`.
+- `src/lib/auth-client.ts` — React client + `usernameClient`. `src/app/api/auth/[...all]/route.ts` — `toNextJsHandler`.
+- `src/middleware.ts` — optimistic edge cookie check (`getSessionCookie`): redirects unauthenticated → `/login`, authenticated-on-`/login` → `/dashboard`; allow-lists `/api/auth` + static. `BETTER_AUTH_SECRET`/`BETTER_AUTH_URL` added to `.env`.
+- `src/app/login/` — login page + client form (react-hook-form + zod), **generic error** ("Invalid username or password" — no username-existence leak, US-1.1).
+- `src/app/dashboard/` — layout does the **authoritative** server-side `auth.api.getSession` check (redirects if absent) + logout; placeholder dashboard page. Root `/` redirects to `/dashboard`. (Full 8-entry nav shell is the next step.)
+- `prisma/seed.ts` (+ `db:seed` script, `tsx` devDep, `prisma.config` seed) — idempotently creates the gym + owner; hashes via Better Auth's own hasher and writes the matching credential `account` row. Env-parameterized (`SEED_OWNER_*`, `SEED_GYM_*`).
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (2/2) · `pnpm build` ✓ (routes: `/login` static, `/dashboard` dynamic, `/api/auth/[...all]`, middleware 70.7 kB). **Live auth round-trip on Neon:** seeded owner → `auth.api.signInUsername` returns `role=OWNER` + `gymId` in the session; wrong password rejected `UNAUTHORIZED`. Placeholder seed data then removed so the owner seeds with their real email/password.
+
+**Doc sync:** ADR-046 (DECISIONS.md); DOMAIN-MODEL.md (`User` reworked + Session/Account/Verification section); TECH-STACK.md (Auth Standards); CLAUDE.md (ADR range → ADR-046, Better Auth quick-ref); SESSION_HANDOFF + ROADMAP (US-1.1 ticked) + memory.
+
+**Owner action before first login:** run `pnpm db:seed` with `SEED_OWNER_EMAIL` / `SEED_OWNER_USERNAME` / `SEED_OWNER_PASSWORD` (and optionally `SEED_GYM_NAME` / `SEED_GYM_TIMEZONE`) set to real values. The seed is idempotent (skips if any user exists).
+
+**Notes:** `tsx` added (devDep) to run the TS seed against the ESM-generated Prisma client; `esbuild` added to the pnpm build allowlist (`pnpm-workspace.yaml`) for tsx. Better Auth's `verification` table is unused at MVP (reserved for future email flows, US-1.6 P2).
+
+---
+
 ## [#016] Milestone 1 — Domain schema, first migration, Prisma client singleton — 2026-06-26
 
 **Commit:** _(Done)_

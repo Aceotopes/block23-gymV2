@@ -3,6 +3,7 @@
 # optimization, and the ESLint native resolver all require their post-install builds).
 allowBuilds:
   '@prisma/engines': true
+  esbuild: true
   prisma: true
   sharp: true
   unrs-resolver: true

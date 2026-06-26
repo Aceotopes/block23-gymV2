@@ -68,7 +68,7 @@ Changes in one document almost always require updates in others. Use this map.
 
 ## Locked Design Decisions
 
-These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-045; ADR-030–032 intentionally unused) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
+These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-046; ADR-030–032 intentionally unused) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
 
 **gym_id on every entity (ADR-001, ADR-025):** Multi-tenancy foundation. Every entity — including child/detail entities (`Membership`, `TransactionLineItem`, `InventoryTransaction`) — carries a `gym_id` FK. Enables database-level Row-Level Security without join-chain subqueries.
 
@@ -114,7 +114,7 @@ These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-045; ADR-030–032 
 
 **Information architecture (ADR-042):** Eight top-level nav entries: Dashboard · Clients · Attendance · Client Payments · POS · Inventory · Reports · Settings. Membership has NO standalone nav entry — it is distributed (Client Profile, Settings, Dashboard, Reports). See `INFORMATION-ARCHITECTURE.md`.
 
-**Better Auth uses the domain `User` table (ADR-043):** `gym_id` and `role` are Better Auth additional fields; the credentials provider manages `password_hash`. No parallel user table. Session = `{ userId, gymId, role }`.
+**Better Auth uses the domain `User` table (ADR-043, ADR-046):** `gym_id` and `role` are Better Auth additional fields; `User` also carries Better Auth core fields (`name`, `email`, `email_verified`, `image`) + username-plugin `username`/`display_username`. Credential password hashes live in the Better-Auth-owned `account` table — **not** on `User` (ADR-046 supersedes the `password_hash`-on-`User` clause). Better Auth owns `session`/`account`/`verification` (the documented exception to `gym_id`-everywhere; tenancy via `User.gym_id`). No parallel user table. Login by username; public sign-up disabled (owner seeded). Session = `{ userId, gymId, role }`.
 
 **Accessibility baseline (ADR-044):** Target WCAG 2.1 AA — keyboard operability, visible focus, contrast ≥ 4.5:1 (text) / 3:1 (large/UI), status never color-alone, labelled fields, `prefers-reduced-motion`. Detailed in `TECH-STACK.md` → Accessibility Standards.
 

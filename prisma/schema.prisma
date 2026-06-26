@@ -120,22 +120,88 @@ model Gym {
 }
 
 // ─── User (owner account; future staff) ───────────────────────────────────────
+// Canonical user record AND the Better Auth user model (ADR-043/ADR-046).
+// Credential password hashes live in the Account table (Better Auth), NOT here.
+// name/email/emailVerified/image are Better Auth core fields; username (login id)
+// is added by the username plugin; gymId/role are Better Auth additional fields.
 
 model User {
-  id           String   @id @default(uuid(7)) @db.Uuid
-  gymId        String   @map("gym_id") @db.Uuid
-  username     String   @unique
-  passwordHash String   @map("password_hash")
-  role         Role     @default(OWNER)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(uuid(7)) @db.Uuid
+  gymId           String   @map("gym_id") @db.Uuid
+  name            String
+  email           String   @unique
+  emailVerified   Boolean  @default(false) @map("email_verified")
+  image           String?
+  username        String?  @unique
+  displayUsername String?  @map("display_username")
+  role            Role     @default(OWNER)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   gym                 Gym           @relation(fields: [gymId], references: [id])
+  sessions            Session[]
+  accounts            Account[]
   attendancesCreated  Attendance[]  @relation("AttendanceCreatedBy")
   transactionsCreated Transaction[] @relation("TransactionCreatedBy")
 
   @@index([gymId])
   @@map("user")
+}
+
+// ─── Better Auth–owned tables (Session / Account / Verification) ──────────────
+// Auth infrastructure managed by Better Auth (ADR-043/ADR-046). These are the
+// documented exception to "gym_id on every entity" (ADR-001/025): they are not
+// tenant/domain data — tenancy is carried by the related User.gymId. Field names
+// match Better Auth 1.6's expected schema; IDs are DB-generated uuids
+// (advanced.database.generateId = false in src/lib/auth.ts).
+
+model Session {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  userId                String    @map("user_id") @db.Uuid
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?
+  password              String? // credential hash for email/username + password
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([identifier])
+  @@map("verification")
 }
 
 // ─── Client ───────────────────────────────────────────────────────────────────
