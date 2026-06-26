@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Planning, tech stack, and Design System complete — ready for implementation (Milestone 1).** Planning documents, the tech stack, and the design language are stable. No application code exists yet. See `docs/TECH-STACK.md` for the approved stack and development rules, `docs/DESIGN-SYSTEM.md` for tokens/components/patterns, and `docs/INFORMATION-ARCHITECTURE.md` for the navigation/screen map.
+**Implementation in progress — Milestone 1 (Foundation & Auth).** Planning, the tech stack, and the design language are stable. Project setup is complete: Next.js 15 scaffold + design tokens, Neon PostgreSQL with Prisma 7 (11-entity schema, migrations), and Better Auth owner login (username + password, server-managed sessions, default-deny route protection). Remaining in Milestone 1: the app shell (8-entry nav) and the Settings module. **`docs/SESSION_HANDOFF.md` is the live status + resume point — read it first.** See `docs/TECH-STACK.md` for the approved stack and development rules, `docs/DESIGN-SYSTEM.md` for tokens/components/patterns, and `docs/INFORMATION-ARCHITECTURE.md` for the navigation/screen map.
 
 ## Planning Workflow
 

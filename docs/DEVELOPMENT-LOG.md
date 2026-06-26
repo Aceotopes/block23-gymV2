@@ -5,6 +5,28 @@ Newest entries at the top.
 
 ---
 
+## [#018] Milestone 1 — Authenticated app shell (8-entry navigation) — 2026-06-26
+
+**Commit:** _(Done)_
+
+**Purpose:** Build the app shell — the authenticated layout and 8-entry navigation every signed-in screen lives inside (INFORMATION-ARCHITECTURE.md, DESIGN-SYSTEM §5.4/§12). Replaces the placeholder dashboard header.
+
+**What was built:**
+
+- **Route group `src/app/(app)/`** with a shared, session-checked layout (`(app)/layout.tsx` — authoritative `auth.api.getSession`, redirect to `/login` if absent; wraps everything in `TooltipProvider`). Moved the dashboard into it; added placeholder pages for the other seven areas (clients, attendance, payments, pos, inventory, reports, settings) — each a `PageHeader` + its delivery milestone. Route group parentheses keep URLs clean (`/dashboard`, `/clients`, …).
+- **Topbar** (`components/app-shell/topbar.tsx`) — 56px, sticky `z-20`; gym wordmark left, **user menu** right (`user-menu.tsx`: dropdown with name/email/role + **Log out**, kept out of the nav per §12).
+- **Sidebar** (`app-sidebar.tsx`) — desktop (`md+`), 8 entries (icon + label), active state = indigo left-accent bar + `--sidebar-accent` fill + `--sidebar-primary` text. **Collapsible** 240px ⇄ 64px icon rail (tooltips on the rail) via a small Zustand store (`sidebar-store.ts`).
+- **Mobile bottom nav** (`mobile-nav.tsx`) — `< md`; the 4 highest-frequency entries (Dashboard · Clients · Attendance · POS) + a **More** sheet for the rest (§12). No mixed nav patterns.
+- **Shared components:** `lib/nav.ts` (single nav-items source of truth + `isNavItemActive`), `components/page-header.tsx` (h1 + optional single primary action, §5.4). shadcn additions: `dropdown-menu`, `sheet`, `tooltip`.
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (2/2) · `pnpm build` ✓ (all 8 nav routes compile, dynamic/server-rendered; `/login` static; middleware 70.7 kB). **Runtime smoke (dev):** `/login` 200; unauthenticated `/dashboard` → 307 `/login`; sign-in 200; authenticated `/dashboard` + `/settings` 200 with all 8 nav entries rendered.
+
+**Doc sync:** SESSION_HANDOFF (app shell done, next = Settings); ROADMAP/README/CLAUDE.md status (project setup marked complete; ADR range → ADR-046) — these status corrections, previously left uncommitted, are folded into this commit. Memory updated.
+
+**Notes:** Sidebar collapse state is not persisted across reloads at MVP (can add `zustand/persist` later). The Dashboard page re-reads `getSession` for its greeting (in addition to the layout's check) — acceptable; Better Auth cookie-caches sessions. Full Dashboard content arrives in Milestone 8.
+
+---
+
 ## [#017] Milestone 1 — Better Auth: owner login, session, route protection (US-1.1) — 2026-06-26
 
 **Commit:** _(Done)_

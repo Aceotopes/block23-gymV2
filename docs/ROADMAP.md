@@ -8,7 +8,7 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 ---
 
 ### Milestone 1 — Foundation & Auth
-- [ ] Project setup (repo, database, backend, frontend scaffold)
+- [x] Project setup (repo, database, backend, frontend scaffold) — #015 (repo + Next.js scaffold + design tokens), #016 (Neon DB + Prisma 7 + 11-entity schema/migrations), #017 (Prisma client + Better Auth backend)
 - [x] Owner login with hashed credentials and session management (US-1.1) — Better Auth (username + password), default-deny route protection, owner seed (#017, ADR-046)
 - [ ] Gym settings: name, address, contact info, and timezone (IANA identifier — governs all date/time display and "today" comparisons, ADR-035) (US-1.2)
 - [ ] Default walk-in fee configuration (US-1.3) — membership pricing is managed per plan; no gym-level default membership fee (ADR-039)
