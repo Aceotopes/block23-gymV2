@@ -1,24 +1,30 @@
 # Session Handoff — Block23 Gym Management System
 
 > Canonical handoff document for resuming development across Claude Code sessions.
-> Last updated: **2026-06-26** (after DEV-LOG `#018` — authenticated app shell; commit pending).
+> Last updated: **2026-06-26** (after DEV-LOG `#019` — Settings module; **Milestone 1 complete**; commit pending).
 
 ---
 
 ## Project Status
 
 - **Current Phase:** Phase 1 — MVP
-- **Current Milestone:** **Milestone 1 — Foundation & Auth** (in progress)
+- **Current Milestone:** **Milestone 1 — Foundation & Auth ✅ COMPLETE.** Next: **Milestone 2 — Client Management.**
 - **Overall Progress:**
   - **Planning & design:** 100% complete — 10 planning docs, 46 ADRs (ADR-030–032 intentionally unused), Design System hardened as enforceable SSOT.
-  - **Implementation:** ~75% of Milestone 1. Scaffold (`#015`) + schema/DB/client (`#016`) + Better Auth login/session/protection (`#017`, US-1.1) + app shell (`#018`) landed. **Next: Settings module — the last unit of Milestone 1.**
+  - **Implementation:** **Milestone 1 done (`#015`–`#019`):** scaffold, schema/DB/client, Better Auth login/session/protection (US-1.1), app shell, Settings (US-1.2/1.3/1.4/1.7/1.8/1.9). 1 of 8 milestones complete.
   - Milestones 2–8: not started.
 
 ---
 
 ## Last Completed Work
 
-**DEV-LOG `#018` — Authenticated app shell (8-entry navigation)** (commit pending):
+**DEV-LOG `#019` — Settings module (Milestone 1 COMPLETE)** (commit pending):
+
+- Gym Information (name/address/contact + searchable IANA timezone combobox — US-1.2), Pricing (default walk-in fee — US-1.3), System Preferences (4 thresholds, ≥1 validation — US-1.4/1.7/1.8/1.9). Membership Plans deferred to M3.
+- `lib/gym.ts` (session-scoped gym helpers), shared Zod schema, `updateGymSettings` Server Action (re-validates server-side), RHF form with `sonner` toasts, `<Toaster/>` in the app layout. shadcn: form, popover, command, sonner.
+- Verified: type-check ✓ · lint ✓ · test 2/2 ✓ · build ✓ · runtime smoke (`/settings` 200 with seeded values + all sections).
+
+**DEV-LOG `#018` — Authenticated app shell (8-entry navigation)** (committed `d70cc4d`):
 
 - Route group `src/app/(app)/` with a session-checked layout (authoritative `getSession`); dashboard moved in; placeholder pages for the other 7 nav areas.
 - Topbar (wordmark + user menu with logout), collapsible desktop sidebar (8 entries, indigo active accent, 240px ⇄ 64px rail), mobile bottom nav + More sheet (DESIGN-SYSTEM §5.4/§12). Shared `lib/nav.ts` + `PageHeader`. shadcn: dropdown-menu, sheet, tooltip.
@@ -75,10 +81,11 @@
         clients, attendance, payments, pos, inventory, reports, settings/  placeholders
       api/auth/[...all]/  Better Auth handler
       layout.tsx, globals.css (tokens)
+      (app)/settings/   page + settings-form + timezone-combobox + actions + schema
     components/
       app-shell/        topbar, app-sidebar, mobile-nav, user-menu, sidebar-store
-      page-header.tsx, logout-button.tsx; ui/ (button, card, input, label, dropdown-menu, sheet, tooltip)
-    lib/              auth.ts, auth-client.ts, prisma.ts, nav.ts, utils.ts (+ test)
+      page-header.tsx, logout-button.tsx; ui/ (button, card, input, label, dropdown-menu, sheet, tooltip, form, popover, command, sonner, dialog)
+    lib/              auth.ts, auth-client.ts, prisma.ts, gym.ts, nav.ts, utils.ts (+ test)
     middleware.ts     default-deny route protection
     generated/        prisma client (gitignored, regenerated via `pnpm db:generate`)
   prisma/
@@ -101,17 +108,16 @@ Fully implemented and verified:
 - **Domain schema** — 11 entities + 10 enums, migrated live to Neon (`#016`).
 - **Prisma client singleton** (`src/lib/prisma.ts`) — connects to Neon via `@prisma/adapter-pg`, verified round-trip.
 - **Authentication (US-1.1)** — owner login by username + password, server-managed sessions, default-deny route protection, owner seed; live sign-in verified (`#017`).
-- **App shell (`#018`)** — authenticated layout, 8-entry sidebar (collapsible) + topbar user menu + mobile bottom nav, per DESIGN-SYSTEM §5.4/§12; all 8 routes exist (dashboard real-but-placeholder, other 7 stubbed).
+- **App shell (`#018`)** — authenticated layout, 8-entry sidebar (collapsible) + topbar user menu + mobile bottom nav, per DESIGN-SYSTEM §5.4/§12; all 8 routes exist.
+- **Settings module (`#019`, US-1.2/1.3/1.4/1.7/1.8/1.9)** — Gym Information (incl. IANA timezone combobox), Pricing (walk-in fee), System Preferences (4 thresholds), via Server Action + Zod on the single `Gym` row. **Milestone 1 complete.**
 
-No further **product** features (clients, memberships, etc.) are implemented yet.
+No **Milestone 2+** product features (clients, memberships, attendance, POS, etc.) are implemented yet.
 
 ---
 
 ## Work In Progress
 
-Nothing is partially coded mid-stream — the `#018` changes are complete and verified (commit pending owner approval). One unit of Milestone 1 remains:
-
-- **Gym settings + threshold settings screens** (US-1.2/1.3/1.4/1.7/1.8/1.9) — the `/settings` page is currently a placeholder.
+Nothing is partially coded mid-stream — **Milestone 1 is complete** (`#019` changes verified, commit pending owner approval). Ready to start **Milestone 2 — Client Management**.
 
 ---
 
@@ -120,7 +126,7 @@ Nothing is partially coded mid-stream — the `#018` changes are complete and ve
 1. ~~Neon database not provisioned~~ ✅ **Resolved** (`#016`) — Neon project live (Singapore), `.env` holds real pooled + unpooled strings, `init` migration applied.
 2. **Prisma 7 needs a driver adapter** (resolved, noted for awareness): the runtime client uses `@prisma/adapter-pg` (depends on `pg`). This is Prisma's required driver, **not** a second query mechanism (TECH-STACK Backend Standards updated). `@prisma/adapter-neon` is the serverless/edge alternative — a one-file swap in `src/lib/prisma.ts`.
 3. **`pg` SSL deprecation notice** prints on connect (`sslmode=require` will mean `verify-full` in a future `pg` major). Informational, harmless for Neon today; revisit at the `pg` v9 upgrade.
-4. **Open design decision (pre-Milestone 2):** list-state mechanism — URL search params vs. Zustand for filter/sort/page/tab/period state (DESIGN-SYSTEM §14.4/§19, TECH-STACK open decisions). If URL params → needs a new ADR + TECH-STACK State Management update. Not blocking Milestone 1.
+4. **⚠️ Decide before Milestone 2's Client List:** list-state mechanism — URL search params vs. Zustand for filter/sort/page/tab/period state (DESIGN-SYSTEM §14.4/§19, TECH-STACK open decisions). DESIGN-SYSTEM recommends URL params. If adopted → new ADR + TECH-STACK State Management update. Now due (first list view is the Client List).
 5. **Playwright (E2E) deferred** to post-Milestone-3 per TECH-STACK — not installed.
 6. **Sample owner is seeded — change before real use.** A sample owner exists for login/testing: username `owner` / password `ChangeMe!123` (gym "Block23 Gym", Asia/Manila). To swap in real values while there's no real data: set `SEED_OWNER_EMAIL`/`SEED_OWNER_USERNAME`/`SEED_OWNER_PASSWORD` (optionally `SEED_GYM_NAME`/`SEED_GYM_TIMEZONE`) in `.env`, then `pnpm prisma migrate reset --force` (wipes + re-migrates + reseeds). The plain `pnpm db:seed` is idempotent and skips while a user exists.
 
@@ -130,13 +136,19 @@ No technical debt in the existing code.
 
 ## Next Recommended Milestone
 
-**Milestone 1 — Foundation & Auth** (continue). Schema, DB, client, auth, and the app shell are done (`#016`–`#018`). One unit remains:
+**Milestone 2 — Client Management** (Milestone 1 is complete). Scope (see ROADMAP + USER-STORIES §2):
 
-1. ~~Domain schema · Prisma client · first migration~~ ✅ (`#016`) · ~~Better Auth login/session/protection (US-1.1)~~ ✅ (`#017`) · ~~App shell (8-entry nav)~~ ✅ (`#018`).
-2. **Settings module** (the `/settings` page exists as a placeholder) — Gym profile (name, address, contact, **timezone** IANA, ADR-035) **US-1.2**; default walk-in fee **US-1.3** (no gym-level membership fee, ADR-039); and threshold settings: expiring-soon **US-1.4**, walk-in inactivity **US-1.7**, member inactivity **US-1.8**, walk-in conversion prompt **US-1.9**. Mutations via **Server Actions + Zod** (TECH-STACK); read/write the single `Gym` row scoped by the session's `gymId`. Use shadcn form patterns (likely add `form`, `sonner`/toast). Suggested IA: Settings sub-sections per INFORMATION-ARCHITECTURE §2.8 (Gym Information · Pricing · System Preferences · Membership Plans — the last is US-3.9, deferrable to Milestone 3). **After this, Milestone 1 is complete** — tick the remaining ROADMAP boxes.
-4. **Verify & sync** — type-check, lint, test, production build; update `DEVELOPMENT-LOG.md`, this file, and tick `ROADMAP.md` Milestone 1 boxes. After this, Milestone 1 is complete.
+1. **Client registration & edit** (US-2.1/2.2) — name required, contact optional; Server Action + Zod; `date_registered`; soft-delete-aware.
+2. **Client List** (US-2.3/2.9) — search by partial name + 8 status/type filter chips (All · Active · Upcoming · At risk · Expiring soon · Expired · Walk-in only · Inactive) + "Show archived" toggle. TanStack Table. Derive `client_type`/`status`/at-risk at query time (ADR-002/017/019/037/040) — **not stored**.
+3. **Client Profile** (US-2.4) — header (type/status badges, quick-stats, context-aware membership button, overflow menu) + Membership/Attendance tabs (the membership/attendance content fills in M3/M4).
+4. **Soft-delete / archive** via overflow menu (US-2.6, ADR-005 `deleted_at`).
+5. Pure walk-in clients with no membership (US-2.5); walk-in conversion + at-risk signals appear on Profile/Dashboard (US-2.10/2.11 — Dashboard panels land in M8).
 
-> All Settings screens read/write the single `Gym` row. Get the active gym via the session's `gymId` (every query scopes by `gym_id` — ADR-001/025).
+> **⚠️ Resolve first (blocks the Client List):** the **list-state mechanism** — URL search params vs. Zustand for filter/sort/page state (DESIGN-SYSTEM §14.4/§19; TECH-STACK open decision). DESIGN-SYSTEM recommends URL params (shareable, back-button restores filters). If adopted → new ADR + TECH-STACK State Management update before building the Client List.
+>
+> All queries scope by the session's `gymId` (ADR-001/025). Status/type/at-risk are **derived** — centralize the derivation so every surface (list chips, profile, future dashboard) agrees.
+
+**Verify & sync** each step: type-check, lint, test, build; update `DEVELOPMENT-LOG.md`, this file, ROADMAP.
 
 ---
 
@@ -155,4 +167,4 @@ No technical debt in the existing code.
 
 ## Suggested Resume Prompt
 
-> Resume Block23 Gym V2. Read `docs/SESSION_HANDOFF.md` first for current state. We are finishing **Milestone 1 — Foundation & Auth**: schema/DB/client (`#016`), Better Auth login/session/protection (US-1.1, `#017`), and the authenticated app shell (`#018`) are done. The **last unit is the Settings module** (US-1.2/1.3/1.4/1.7/1.8/1.9 — gym profile incl. IANA timezone, default walk-in fee, and the four threshold settings), built on the existing `/settings` placeholder via **Server Actions + Zod**, reading/writing the single `Gym` row scoped by the session's `gymId`. Follow the design-first workflow, keep docs synchronized, update `DEVELOPMENT-LOG.md`, run the full verification gate (type-check, lint, test, build), then tick the remaining ROADMAP Milestone 1 boxes — that completes Milestone 1.
+> Resume Block23 Gym V2. Read `docs/SESSION_HANDOFF.md` first for current state. **Milestone 1 (Foundation & Auth) is complete** (`#015`–`#019`: scaffold, schema/DB/client, Better Auth login/US-1.1, app shell, Settings). Next is **Milestone 2 — Client Management**: client registration/edit (US-2.1/2.2), the Client List with partial-name search + 8 status/type filter chips + show-archived (US-2.3/2.9), the Client Profile (US-2.4), and soft-delete/archive (US-2.6). **First resolve the list-state mechanism** (URL params vs Zustand — DESIGN-SYSTEM §14.4/§19; likely a new ADR) since the Client List is the first filtered list. Derive `client_type`/`status`/at-risk at query time (never store — ADR-002/017/019/037/040), centralized so every surface agrees; scope all queries by the session `gymId`. Follow the design-first workflow, keep docs synchronized, update `DEVELOPMENT-LOG.md`, and run the full verification gate (type-check, lint, test, build) before calling anything done.

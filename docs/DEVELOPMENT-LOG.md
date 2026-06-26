@@ -5,6 +5,34 @@ Newest entries at the top.
 
 ---
 
+## [#019] Milestone 1 — Settings module (US-1.2/1.3/1.4/1.7/1.8/1.9) — Milestone 1 COMPLETE — 2026-06-26
+
+**Commit:** _(Done)_
+
+**Purpose:** Build the Settings module — gym configuration and the operational thresholds the rest of the system reads. This is the **last unit of Milestone 1 (Foundation & Auth), which is now complete.**
+
+**What was built (all on the single `Gym` row, scoped by session `gymId`):**
+
+- **Gym Information (US-1.2):** name, address, contact info, **timezone** — a searchable IANA combobox (`timezone-combobox.tsx`, ~400 zones from `Intl.supportedValuesOf`, validated server-side). Timezone governs all date/time display and "today" math (ADR-035).
+- **Pricing (US-1.3):** default walk-in fee only (no gym-level membership fee — ADR-039). Copy notes it affects future transactions only (snapshots never rewritten — ADR-003).
+- **System Preferences (US-1.4/1.7/1.8/1.9):** expiring-soon, walk-in inactivity, at-risk member, and walk-in conversion thresholds. All validated **≥ 1** (zero/negative blocked, per the stories).
+- **Membership Plans** (US-3.9) intentionally **deferred to Milestone 3** (not in M1 scope).
+
+**Architecture:**
+
+- `src/lib/gym.ts` — `getSessionGymId()` / `getCurrentGym()` (resolve the tenant gym from the session; every gym-scoped query keys off `gym_id` — ADR-001/025).
+- `settings-schema.ts` — one Zod schema shared by the client form and the Server Action. `updateGymSettings` (`actions.ts`, `"use server"`) **re-validates server-side** before `prisma.gym.update` (TECH-STACK: never trust the UI), then `revalidatePath`.
+- `settings-form.tsx` — React Hook Form + zodResolver, three Card sections, one Save; `sonner` toast on success. Numeric fields stay numeric in form state (NaN on empty) so the schema's input/output types match the RHF resolver (no `z.coerce`).
+- `(app)/layout.tsx` now mounts `<Toaster />`. shadcn additions: `form`, `popover`, `command`, `sonner` (+ `dialog` as a command dep). Fixed shadcn's `sonner.tsx` to drop the `next-themes` dependency (we're dark-first via a class) — hardcoded `theme="dark"`.
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (2/2) · `pnpm build` ✓ (`/settings` renders the form). **Runtime smoke (dev):** sign-in 200; `/settings` 200 showing all three sections + seeded values (`Asia/Manila`, fee, thresholds) + Save. Write path is a type-checked validate-then-update.
+
+**Doc sync:** ROADMAP — all Milestone 1 boxes ticked (**M1 complete**); SESSION_HANDOFF (M1 done, next = Milestone 2 Client Management); memory.
+
+**Notes:** zod v4 error param is `{ error: ... }` (not `{ message }`) for base-type messages. Settings save uses one form/one action across all three sections (simplest cohesive write of one row); per-section saves can be split later if desired.
+
+---
+
 ## [#018] Milestone 1 — Authenticated app shell (8-entry navigation) — 2026-06-26
 
 **Commit:** _(Done)_

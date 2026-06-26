@@ -10,12 +10,12 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 ### Milestone 1 — Foundation & Auth
 - [x] Project setup (repo, database, backend, frontend scaffold) — #015 (repo + Next.js scaffold + design tokens), #016 (Neon DB + Prisma 7 + 11-entity schema/migrations), #017 (Prisma client + Better Auth backend)
 - [x] Owner login with hashed credentials and session management (US-1.1) — Better Auth (username + password), default-deny route protection, owner seed (#017, ADR-046)
-- [ ] Gym settings: name, address, contact info, and timezone (IANA identifier — governs all date/time display and "today" comparisons, ADR-035) (US-1.2)
-- [ ] Default walk-in fee configuration (US-1.3) — membership pricing is managed per plan; no gym-level default membership fee (ADR-039)
-- [ ] Expiring-soon warning threshold setting (US-1.4)
-- [ ] Walk-in inactivity threshold setting — drives the "Inactive" client status (US-1.7)
-- [ ] Member inactivity warning threshold setting — drives the "At risk" MEMBER client signal (US-1.8)
-- [ ] Walk-in conversion prompt threshold setting — governs the check-in conversion prompt, Attendance Analytics Walk-In Insights, and Frequent Walk-Ins Report (US-1.9) — does NOT govern Dashboard "Frequent walk-ins" panel (ADR-036)
+- [x] Gym settings: name, address, contact info, and timezone (IANA identifier — governs all date/time display and "today" comparisons, ADR-035) (US-1.2) — #019 (Settings → Gym Information; searchable IANA combobox)
+- [x] Default walk-in fee configuration (US-1.3) — membership pricing is managed per plan; no gym-level default membership fee (ADR-039) — #019 (Settings → Pricing)
+- [x] Expiring-soon warning threshold setting (US-1.4) — #019 (Settings → System Preferences)
+- [x] Walk-in inactivity threshold setting — drives the "Inactive" client status (US-1.7) — #019
+- [x] Member inactivity warning threshold setting — drives the "At risk" MEMBER client signal (US-1.8) — #019
+- [x] Walk-in conversion prompt threshold setting — governs the check-in conversion prompt, Attendance Analytics Walk-In Insights, and Frequent Walk-Ins Report (US-1.9) — does NOT govern Dashboard "Frequent walk-ins" panel (ADR-036) — #019
 
 ### Milestone 2 — Client Management
 - [ ] New client registration — name required, contact optional (US-2.1)

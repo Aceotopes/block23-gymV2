@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 import { Topbar } from "@/components/app-shell/topbar";
 import { AppSidebar } from "@/components/app-shell/app-sidebar";
 import { MobileNav } from "@/components/app-shell/mobile-nav";
@@ -32,6 +33,7 @@ export default async function AppLayout({
           </main>
         </div>
         <MobileNav />
+        <Toaster />
       </div>
     </TooltipProvider>
   );
