@@ -10,11 +10,17 @@ import {
   type DatePreset,
   type VisitTypeFilter,
 } from "@/lib/attendance/history";
+import {
+  isAnalyticsPeriod,
+  analyticsRange,
+  type AnalyticsPeriod,
+} from "@/lib/attendance/analytics";
 import { PageHeader } from "@/components/page-header";
 import { AttendanceNav, type AttendanceViewKey } from "./attendance-nav";
 import { CheckInView } from "./check-in-view";
 import { TodayCheckIns } from "./today-checkins";
 import { HistoryView, type HistoryRow } from "./history-view";
+import { AnalyticsView } from "./analytics-view";
 
 export const metadata = { title: "Attendance · Block23 Gym" };
 
@@ -52,9 +58,7 @@ export default async function AttendancePage({
       ) : view === "history" ? (
         <HistoryContent gymId={gym.id} today={today} sp={sp} />
       ) : (
-        <p className="text-muted-foreground text-sm">
-          Attendance Analytics arrives next.
-        </p>
+        <AnalyticsContent gymId={gym.id} today={today} sp={sp} gym={gym} />
       )}
     </>
   );
@@ -158,6 +162,48 @@ async function HistoryContent({
       visitType={visitType}
       from={sp.from ?? toDateInputValue(from)}
       to={sp.to ?? toDateInputValue(to)}
+    />
+  );
+}
+
+async function AnalyticsContent({
+  gymId,
+  today,
+  sp,
+  gym,
+}: {
+  gymId: string;
+  today: Date;
+  sp: Record<string, string | undefined>;
+  gym: {
+    expirationWarningDays: number;
+    walkinInactivityThresholdDays: number;
+    memberInactivityWarningDays: number;
+    walkinConversionPromptVisits: number;
+  };
+}) {
+  const period: AnalyticsPeriod = isAnalyticsPeriod(sp.period)
+    ? sp.period
+    : "last30";
+  const customFrom = sp.from ? parseDateOnly(sp.from) : null;
+  const customTo = sp.to ? parseDateOnly(sp.to) : null;
+  const { from, to } = analyticsRange(period, today, customFrom, customTo);
+
+  return (
+    <AnalyticsView
+      gymId={gymId}
+      today={today}
+      period={period}
+      customFrom={customFrom}
+      customTo={customTo}
+      fromStr={sp.from ?? toDateInputValue(from)}
+      toStr={sp.to ?? toDateInputValue(to)}
+      thresholds={{
+        expirationWarningDays: gym.expirationWarningDays,
+        walkinInactivityThresholdDays: gym.walkinInactivityThresholdDays,
+        memberInactivityWarningDays: gym.memberInactivityWarningDays,
+      }}
+      conversionThreshold={gym.walkinConversionPromptVisits}
     />
   );
 }

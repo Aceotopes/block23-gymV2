@@ -5,6 +5,31 @@ Newest entries at the top.
 
 ---
 
+## [#023] Milestone 4 (part 2) — Attendance Analytics (US-4.10) — Milestone 4 COMPLETE — 2026-06-27
+
+**Commit:** _(Done)_
+
+**Purpose:** Build the third Attendance view (ADR-023) — read-only engagement analytics — completing Milestone 4. Attendance-domain only (no revenue/inventory); no CSV export (that's Reports, M8).
+
+**Pure aggregations — `lib/attendance/analytics.ts` (testable, no DB):** analytics period presets (Last 7 / Last 30 / Last 3 Months / Custom) + `analyticsRange` / `rangeDays`; `dailyTrend` (per-day total + unique, gap-filled), `byHour` (24 buckets on the `@db.Time` UTC hour, ADR-035), `byDayOfWeek` (per-weekday average over the weekday's occurrences in range), `peakHours` / `peakDays` (top 3), `newVsReturning` (first-ever check-in inside the period = New), `hourLabel`. **+7 tests (56 total).**
+
+**View — `analytics-view.tsx` (server) + `analytics-charts.tsx` (client Recharts) + `analytics-period.tsx` (client, URL period selector, ADR-047):**
+- **KPI cards:** Today / This Week (Mon-based) / This Month check-ins; Member-vs-Walk-In ratio (MTD).
+- **Charts (global period selector):** Daily Attendance Trend (line — total + unique), Average Check-ins by Day of Week (bar), Check-ins by Hour (bar). Recharts (already in the stack), colored from the design tokens (`--chart-*`).
+- **Member Insights:** at-risk count (reuses `deriveClient.atRisk`, links to `/clients?chip=at-risk`), avg visits/member (period), member utilization rate (unique visiting members ÷ active members).
+- **Walk-In Insights:** frequent walk-ins (≥ `walkin_conversion_prompt_visits`), conversion candidates (links to `/clients?chip=walk-in-only`), conversions (period + lifetime + rate) using the ADR-020 derived definition (a MEMBER who ever had a WALK_IN visit).
+- **Operational Insights:** peak hours, peak days, new vs returning.
+- **Alerts:** inactive-member and frequent-walk-in counts + a **≥20%-below-prior-equivalent-period** decline banner.
+- All counts derive through the shared `lib/clients/derive.ts` so signals match the Client List + (future) Dashboard. Historical rows from soft-deleted clients are included in trends but excluded from active-member counts (the all-clients query is `deletedAt: null`; trend/charts query all attendance).
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (56/56) · `pnpm build` ✓ (`/attendance` 126 kB — Recharts). **Runtime smoke (Neon):** the view's `groupBy` aggregations (`_count`/`_min`/`_max` together, and the WALK_IN-only groupBy) executed correctly (2 client rows, c1=2 visits, 1 walk-in client); `dailyTrend` returned 7 gap-filled days with today 2/2, peak hour 8, 7 day-of-week buckets. Smoke data removed.
+
+**Doc sync:** DEVELOPMENT-LOG (this entry); ROADMAP (M4 ✅ complete); SESSION_HANDOFF; memory. (No new ADR — built on ADR-019/020/023/035/036/047.)
+
+**Notes:** Conversion rate is defined as lifetime converted members ÷ clients who ever had a walk-in visit (ADR-020 is derive-only and leaves the exact rate denominator open; this is the chosen, documented interpretation). The 20%-decline threshold is hardcoded for MVP (MODULE-SPECS Module 4 deferral). **Next: Milestone 5 — Client Payments** (the `CLIENT_TRANSACTION` + payment-method layer onto M3 membership purchases and M4 walk-in fees, US-5.1).
+
+---
+
 ## [#022] Milestone 4 (part 1) — Attendance core: Check-In, History, Correction (US-4.1/4.2/4.3/4.4/4.5/4.8/4.9/4.11) — 2026-06-27
 
 **Commit:** _(Done)_
