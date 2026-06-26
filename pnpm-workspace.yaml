@@ -1,0 +1,8 @@
+# Single-package repo (not a true monorepo). This file exists so pnpm 11 honors the
+# native build-script allowlist below. Approved per TECH-STACK (Prisma engine, image
+# optimization, and the ESLint native resolver all require their post-install builds).
+allowBuilds:
+  '@prisma/engines': true
+  prisma: true
+  sharp: true
+  unrs-resolver: true

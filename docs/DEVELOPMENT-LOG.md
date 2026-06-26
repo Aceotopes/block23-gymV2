@@ -5,6 +5,39 @@ Newest entries at the top.
 
 ---
 
+## [#015] Milestone 1 — Project setup & scaffold (first application code) — 2026-06-26
+
+**Commit:** _(Done)_
+
+**Purpose:** Initialize the application codebase — the first code in the repo. Scaffold Next.js + the locked stack, wire the design tokens, and stand up tooling, verified building. No product features yet (owner auth + Settings are the next Milestone-1 steps).
+
+**Tooling-drift decisions (owner-confirmed; both honor the locked stack):**
+
+- **Next.js pinned to 15.x.** `create-next-app@latest` now defaults to **Next 16** with 16-shaped configs; TECH-STACK locks 15.x. Regenerated a coherent Next 15 scaffold via `create-next-app@15` (→ next 15.5.19). Honors the lock and the stack's training-density rationale.
+- **shadcn-on-Radix retained.** shadcn v4 now defaults to **Base UI** + preset themes; TECH-STACK + DESIGN-SYSTEM §11 specify **Radix / new-york / slate**. Pinned the classic `shadcn@2` CLI for init + component adds; removed the Base UI (`@base-ui/react`) and stray `shadcn` CLI deps the v4 preset had added.
+
+**What was set up:**
+
+- **Framework:** Next.js 15.5.19 (App Router, Turbopack dev/build), React 19.1, TypeScript strict, `src/` dir, `@/*` alias, pnpm 11.1.2 (`packageManager` pinned).
+- **Approved dependencies (TECH-STACK):** `@prisma/client` + `prisma` (v7), `better-auth`, `zod` (v4), `react-hook-form` + `@hookform/resolvers`, `@tanstack/react-table`, `@tanstack/react-query`, `zustand`, `recharts`, `lucide-react`; shadcn companions (`radix-ui`, `class-variance-authority`, `clsx`, `tailwind-merge`, `tw-animate-css`); dev: `prettier` + `prettier-plugin-tailwindcss`, `vitest`, `dotenv` (required by Prisma 7's `prisma.config.ts`). Playwright remains deferred (post-Milestone-3) per TECH-STACK.
+- **Design tokens (`src/app/globals.css`):** authored from DESIGN-SYSTEM §3 — core slate/indigo tokens, semantic feedback (`--success/--warning/--info/--at-risk`), the §3.5 chart palette, radius scale, and `@theme inline` mapping. `:root` = light values, `.dark` = dark values, `<html class="dark">` default = dark-first. Geist Sans + Geist Mono via `next/font/google` (no extra dep).
+- **shadcn/ui:** `components.json` (new-york, slate, lucide, RSC, `@/` aliases), `cn` util (`src/lib/utils.ts`), and the Radix `Button` (validates the add pipeline).
+- **Prisma 7:** `prisma init` (postgresql); `prisma.config.ts` (dotenv, `DATABASE_URL`); generator `prisma-client` → `src/generated/prisma` (gitignored); `db:generate/migrate/deploy/studio` scripts.
+- **Tooling:** `.prettierrc.json` + `.prettierignore` (docs/markdown excluded from formatting), `vitest.config.ts` (`@/` alias) + a `cn` smoke test, `pnpm-workspace.yaml` `allowBuilds` (Prisma engine, sharp, unrs-resolver), package.json scripts (`type-check`, `format`, `test`, `db:*`).
+- **Env & placeholder:** `.env.example` with the documented variable set (Neon `DATABASE_URL`/`_UNPOOLED`, `BETTER_AUTH_*`, `R2_*`); a minimal dark-first home page exercising the tokens + Button.
+
+**Doc sync:**
+
+- **DESIGN-SYSTEM.md §3.1 + §16:** updated the theming-model wording to the implemented convention — `:root` (light) + `.dark` (dark) with a default `.dark` class for dark-first. **No token value changed**; dark-first result is identical. Supersedes the earlier literal "`:root` = dark / `.light` = override."
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (2/2) · `pnpm build` ✓ (Next 15.5.19, static prerender, ~113 kB First Load JS).
+
+**Deferred to the next step (Schema):** full `prisma/schema.prisma` domain models (11 entities), `prisma generate`, the Prisma client singleton (`src/lib/prisma.ts`), and the first migration. **Requires the owner** to provision a Neon Postgres project and set `DATABASE_URL` / `DATABASE_URL_UNPOOLED` before `prisma migrate` can run.
+
+**Notes:** Not committed yet (awaiting owner). `.env`, `node_modules`, `.next`, and `src/generated` are gitignored. dotenv was added solely because Prisma 7's config file imports it — a tool necessity, not a new architectural choice.
+
+---
+
 ## [#014] Design System hardening — enforceable SSOT + owner-confirmed language — 2026-06-25
 
 **Commit:** _(Done)_

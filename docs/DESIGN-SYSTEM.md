@@ -66,13 +66,16 @@ These are pass/fail acceptance targets for any screen built against this system.
 
 ### 3.1 Theming model
 
-**Dark is the default theme.** Tokens are CSS variables on `:root` (dark) with a `.light` override block. shadcn/ui reads these variables; Tailwind v4 exposes them via `@theme inline`.
+**Dark is the default theme.** Tokens are CSS variables read by shadcn/ui and exposed to Tailwind v4 via `@theme inline`. The *values* are normative (§3.2); the selector arrangement follows the shadcn/Tailwind convention so `dark:` variants and a future `next-themes` toggle work:
 
 ```
-:root            → dark theme (default)
-.light           → light theme override
+:root            → light token values (shadcn convention)
+.dark            → dark token values
+<html class="dark"> → applied by default ⇒ the app is DARK-FIRST
 @theme inline    → maps tokens to Tailwind utilities (bg-background, text-foreground, …)
 ```
+
+> **Dark-first is achieved by defaulting the document to the `.dark` class**, not by inverting the selectors. A user-facing light toggle (deferred, §19) simply removes that class. This is the implemented arrangement (`src/app/globals.css`, `src/app/layout.tsx`); it supersedes the earlier "`:root` = dark / `.light` = override" wording with no change to any token value or to the dark-first result.
 
 - **Base color:** `slate` (`components.json` → `baseColor: "slate"`).
 - **shadcn style:** `new-york`.
@@ -540,7 +543,7 @@ List **filter, sort, page, active tab, and report period** are encoded in URL se
 
 ## 16. Tailwind & Implementation Notes (aligns with TECH-STACK)
 
-- **Tailwind v4 CSS-first:** tokens live in `globals.css` as CSS variables on `:root` (dark) and `.light`; exposed to utilities via `@theme inline`. No color hardcoding in `tailwind.config` that bypasses the variables.
+- **Tailwind v4 CSS-first:** tokens live in `globals.css` as CSS variables on `:root` (light values) and `.dark` (dark values), with `<html class="dark">` applied by default for dark-first (§3.1); exposed to utilities via `@theme inline`. No color hardcoding in `tailwind.config` that bypasses the variables.
 - **shadcn `components.json`:** `style: new-york`, `baseColor: slate`, `cssVariables: true`, `iconLibrary: lucide`.
 - **No raw hex in components** — use semantic utilities (`bg-primary`, `text-destructive`, `border-border`) so theme swaps work. Raw hex appears only in the token definitions and the chart palette module.
 - **Fonts via `next/font`** (Geist Sans + Geist Mono); apply `tabular-nums` on numeric/table contexts.

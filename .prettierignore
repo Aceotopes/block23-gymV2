@@ -1,0 +1,15 @@
+# Build output & deps
+.next
+node_modules
+pnpm-lock.yaml
+next-env.d.ts
+
+# Generated
+src/generated
+prisma/migrations
+
+# Planning docs & assets — not code-formatted (avoid churn on the SSOT docs)
+docs
+CLAUDE.md
+README.md
+*.html

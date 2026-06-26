@@ -39,6 +39,8 @@ $RECYCLE.BIN/
 
 # ─── Node / JavaScript / TypeScript ─────────────────────────────────────────
 node_modules/
+# Prisma-generated client (regenerated via `pnpm db:generate`)
+/src/generated/
 dist/
 build/
 .next/
@@ -81,3 +83,5 @@ coverage/
 .nyc_output/
 htmlcov/
 .coverage
+
+/src/generated/prisma
