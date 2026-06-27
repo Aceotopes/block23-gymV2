@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getCurrentGym } from "@/lib/gym";
+import { getCurrentGym, getSessionContext } from "@/lib/gym";
 import {
   gymToday,
   addDays,
@@ -15,6 +15,8 @@ import {
   computeRenewalDates,
   type MembershipForDerivation,
 } from "@/lib/clients/derive";
+import type { PaymentMethod } from "@/lib/payments/method";
+import type { Prisma } from "@/generated/prisma/client";
 import {
   createMembershipSchema,
   renewMembershipSchema,
@@ -25,9 +27,10 @@ import {
 
 // Membership lifecycle mutations (Milestone 3 — US-3.1/3.2/3.3/3.10). All scoped by
 // the session's gymId (ADR-001/025) and re-validated server-side (TECH-STACK rule
-// 10). `price_paid` is an immutable snapshot (ADR-003). NOTE: the payment record
-// (CLIENT_TRANSACTION + payment method) for a membership is delivered in Milestone 5
-// (US-5.1) — M3 creates the Membership with its price snapshot only.
+// 10). `price_paid` is an immutable snapshot (ADR-003). Milestone 5 (US-5.1): each
+// create/renew now also records a CLIENT_TRANSACTION + a single MEMBERSHIP line item
+// (price snapshot, payment method) atomically with the Membership — walk-in and
+// membership are always separate transactions (ADR-024), never mixed (ADR-012).
 
 export type MembershipBlockInfo = { kind: "active" | "upcoming"; message: string };
 
@@ -56,6 +59,49 @@ async function resolvePlan(
   return { planId: plan.id, durationDays: plan.durationDays };
 }
 
+/**
+ * Record the CLIENT_TRANSACTION + single MEMBERSHIP line item for a membership
+ * purchase/renewal (US-5.1). Runs inside the caller's interactive transaction so the
+ * payment and the membership commit together. `unit_price`/`subtotal` snapshot the
+ * paid price (ADR-003); `referenceMembershipId` links the line item to the membership.
+ */
+async function recordMembershipPayment(
+  tx: Prisma.TransactionClient,
+  args: {
+    gymId: string;
+    clientId: string;
+    createdById: string;
+    membershipId: string;
+    price: number;
+    paymentMethod: PaymentMethod;
+    description: string;
+  },
+): Promise<void> {
+  const transaction = await tx.transaction.create({
+    data: {
+      gymId: args.gymId,
+      transactionType: "CLIENT_TRANSACTION",
+      clientId: args.clientId,
+      transactionDate: new Date(),
+      totalAmount: args.price,
+      paymentMethod: args.paymentMethod,
+      createdById: args.createdById,
+    },
+  });
+  await tx.transactionLineItem.create({
+    data: {
+      gymId: args.gymId,
+      transactionId: transaction.id,
+      itemType: "MEMBERSHIP",
+      referenceMembershipId: args.membershipId,
+      description: args.description,
+      quantity: 1,
+      unitPrice: args.price,
+      subtotal: args.price,
+    },
+  });
+}
+
 async function loadClientMemberships(
   clientId: string,
   gymId: string,
@@ -71,10 +117,25 @@ async function loadClientMemberships(
   return client ? client.memberships : null;
 }
 
+/** Resolve a chosen plan's display name (for the transaction line-item description). */
+async function planName(
+  gymId: string,
+  planId: string | null,
+): Promise<string> {
+  if (planId === null) return "Custom (ad-hoc)";
+  const plan = await prisma.membershipPlan.findFirst({
+    where: { id: planId, gymId },
+    select: { name: true },
+  });
+  return plan?.name ?? "Custom (ad-hoc)";
+}
+
 export async function createMembership(
   clientId: string,
   input: CreateMembershipValues,
 ): Promise<CreateMembershipResult> {
+  const ctx = await getSessionContext();
+  if (!ctx) return { ok: false, error: "Not authenticated." };
   const gym = await getCurrentGym();
   if (!gym) return { ok: false, error: "Not authenticated." };
 
@@ -121,20 +182,33 @@ export async function createMembership(
     return { ok: false, error: "Start date can't be in the past." };
   }
 
-  await prisma.membership.create({
-    data: {
+  const name = await planName(gym.id, resolved.planId);
+  await prisma.$transaction(async (tx) => {
+    const membership = await tx.membership.create({
+      data: {
+        gymId: gym.id,
+        clientId,
+        membershipPlanId: resolved.planId,
+        startDate,
+        endDate: addDays(startDate, resolved.durationDays),
+        pricePaid: v.price,
+        renewedFromMembershipId: null,
+      },
+    });
+    await recordMembershipPayment(tx, {
       gymId: gym.id,
       clientId,
-      membershipPlanId: resolved.planId,
-      startDate,
-      endDate: addDays(startDate, resolved.durationDays),
-      pricePaid: v.price,
-      renewedFromMembershipId: null,
-    },
+      createdById: ctx.userId,
+      membershipId: membership.id,
+      price: v.price,
+      paymentMethod: v.paymentMethod,
+      description: `Membership — ${name}`,
+    });
   });
 
   revalidatePath("/clients");
   revalidatePath(`/clients/${clientId}`);
+  revalidatePath("/payments");
   return { ok: true };
 }
 
@@ -142,6 +216,8 @@ export async function renewMembership(
   clientId: string,
   input: RenewMembershipValues,
 ): Promise<MembershipResult> {
+  const ctx = await getSessionContext();
+  if (!ctx) return { ok: false, error: "Not authenticated." };
   const gym = await getCurrentGym();
   if (!gym) return { ok: false, error: "Not authenticated." };
 
@@ -189,20 +265,33 @@ export async function renewMembership(
     b.endDate.getTime() > a.endDate.getTime() ? b : a,
   );
 
-  await prisma.membership.create({
-    data: {
+  const name = await planName(gym.id, resolved.planId);
+  await prisma.$transaction(async (tx) => {
+    const membership = await tx.membership.create({
+      data: {
+        gymId: gym.id,
+        clientId,
+        membershipPlanId: resolved.planId,
+        startDate,
+        endDate,
+        pricePaid: v.price,
+        renewedFromMembershipId: previous.id,
+      },
+    });
+    await recordMembershipPayment(tx, {
       gymId: gym.id,
       clientId,
-      membershipPlanId: resolved.planId,
-      startDate,
-      endDate,
-      pricePaid: v.price,
-      renewedFromMembershipId: previous.id,
-    },
+      createdById: ctx.userId,
+      membershipId: membership.id,
+      price: v.price,
+      paymentMethod: v.paymentMethod,
+      description: `Membership renewal — ${name}`,
+    });
   });
 
   revalidatePath("/clients");
   revalidatePath(`/clients/${clientId}`);
+  revalidatePath("/payments");
   return { ok: true };
 }
 

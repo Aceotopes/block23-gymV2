@@ -123,3 +123,52 @@ export function parseTimeOnly(value: string): Date | null {
 export function toTimeInputValue(d: Date): string {
   return d.toISOString().slice(11, 16);
 }
+
+/**
+ * Display a UTC instant (e.g. `transaction_date`) as a date + time in the gym's
+ * timezone (ADR-035 — instants convert through `Gym.timezone` for display).
+ */
+export function formatDateTimeInTz(d: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(d);
+}
+
+/** Re-read `date` as if its wall-clock fields were UTC, as seen in `timeZone`. */
+function partsAsUtc(timeZone: string, date: Date): Date {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const p: Record<string, string> = {};
+  for (const part of dtf.formatToParts(date)) p[part.type] = part.value;
+  return new Date(
+    Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second),
+  );
+}
+
+/**
+ * The UTC instant of local midnight (00:00:00) for calendar day `day` in `timeZone`.
+ * `day` is a UTC-midnight date-only value (e.g. from `gymToday`/`parseDateOnly`).
+ *
+ * Unlike `@db.Date` fields, `transaction_date` is a UTC instant (ADR-035), so
+ * bounding it to a gym-local calendar day requires the timezone offset. Build a
+ * half-open range with `gymDayStartUtc(tz, day)` and `gymDayStartUtc(tz, addDays(day, 1))`
+ * — querying the next day's start (rather than start + 24h) stays correct across DST.
+ */
+export function gymDayStartUtc(timeZone: string, day: Date): Date {
+  const naiveUtc = new Date(`${toDateInputValue(day)}T00:00:00.000Z`);
+  const offset = partsAsUtc(timeZone, naiveUtc).getTime() - naiveUtc.getTime();
+  return new Date(naiveUtc.getTime() - offset);
+}

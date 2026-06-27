@@ -39,7 +39,7 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [x] Expiring-soon membership surfaced via the Client List "Expiring soon" chip (US-3.6) — archival/exportable list is Reports (Milestone 8)
 - [x] Membership plan catalog management in Settings: create, edit, retire plans (US-3.9)
 
-> **Deferred to Milestone 5 (Client Payments):** the membership **payment** record (`CLIENT_TRANSACTION` + payment method) — US-5.1 owns it. M3 records the immutable `price_paid` snapshot on the `Membership` (ADR-003). Month→days convention pinned by ADR-048 (30/60/90).
+> **Membership payment record** (`CLIENT_TRANSACTION` + payment method) **delivered in Milestone 5** (`#024`, US-5.1) — create/renew now write the transaction + `MEMBERSHIP` line item atomically with the `Membership`. M3 records the immutable `price_paid` snapshot on the `Membership` (ADR-003). Month→days convention pinned by ADR-048 (30/60/90).
 
 ### Milestone 4 — Attendance ✅
 - [x] Attendance module — three internal views (ADR-023):
@@ -47,17 +47,17 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
   - [x] **Attendance History view:** all records filterable by date presets (Today · Yesterday · Last 7 Days · Last 30 Days · Custom Date Range) and visit type (US-4.3)
   - [x] **Attendance Analytics view:** KPI cards (Today/Week/Month check-ins, Member vs Walk-In Ratio), daily trend chart, day-of-week and peak-hour charts, Member Insights, Walk-In Insights, Operational Insights, and Alerts panel (US-4.10)
 - [x] Record member check-in — expired MEMBER renewal prompt (ADR-018), expiry warning post-check-in, duplicate check-in confirmation (US-4.1)
-- [x] Record walk-in visit: pre-fee conversion prompt for high-frequency walk-ins, quick-create inline modal (name + optional contact), create lightweight client if not found (US-4.2) — payment record (CLIENT_TRANSACTION + method) is Milestone 5 (US-5.1); M4 records `fee_charged` on the attendance
+- [x] Record walk-in visit: pre-fee conversion prompt for high-frequency walk-ins, quick-create inline modal (name + optional contact), create lightweight client if not found (US-4.2) — walk-in fee payment record (CLIENT_TRANSACTION + method + `WALK_IN_FEE` line item) delivered in Milestone 5 (`#024`, US-5.1); M4 records `fee_charged` on the attendance
 - [x] Today's check-ins standalone view in Attendance History (US-4.9)
 - [x] Attendance records preserved after membership expiry or client soft-delete (US-4.4) — structural (attendance never cascades)
 - [x] Allow multiple check-ins per client per day — explicit confirmation required for same-day duplicates (US-4.5)
 - [x] Attendance record correction: same-day `time_in` edit only; required reason note stored in `Attendance.correction_note`; `Attendance.updated_at` set on save; prior-day records read-only (US-4.11, Flow 15)
 
-### Milestone 5 — Client Payments
-- [ ] Payment method (Cash, GCash, Card, Other) recorded on every membership and walk-in fee transaction (US-5.1)
-- [ ] Chronological client payment history filterable by date, client, and payment method (US-5.2)
-- [ ] Void client payment with required void_reason_category and optional detail note — record preserved, excluded from revenue totals (US-5.3)
-- [ ] End-of-day collections summary: today's revenue totals by payment method (Cash / GCash / Card / Other) spanning CLIENT_TRANSACTION and POS_SALE, with date selector for prior days (US-5.4)
+### Milestone 5 — Client Payments ✅ complete (`#024`)
+- [x] Payment method (Cash, GCash, Card, Other) recorded on every membership and walk-in fee transaction (US-5.1) — retrofitted the M3 membership create/renew and M4 walk-in check-in to create a `CLIENT_TRANSACTION` + line item atomically (membership = `MEMBERSHIP` @ price snapshot; walk-in = `WALK_IN_FEE` @ fee, `fee_override_note` when ≠ default); separate transactions (ADR-024), never mixed (ADR-012)
+- [x] Chronological client payment history filterable by date, client, and payment method (US-5.2) — URL state (ADR-047), client name search
+- [x] Void client payment with required void_reason_category and optional detail note — record preserved, excluded from revenue totals (US-5.3) — additive (Flow 11); never cancels the membership (ADR-041) or deletes the attendance
+- [x] End-of-day collections summary: today's revenue totals by payment method (Cash / GCash / Card / Other) spanning CLIENT_TRANSACTION and POS_SALE, with date selector for prior days (US-5.4) — spans both transaction types by query (POS_SALE auto-included at M6)
 
 ### Milestone 6 — POS & Product Sales
 - [ ] Product catalog: create, edit, soft-delete (archive) products via `deleted_at` — archived products excluded from POS grid and active-stock reports but retained for historical records (US-6.1 – US-6.3, US-6.15, ADR-005)

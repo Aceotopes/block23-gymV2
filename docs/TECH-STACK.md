@@ -54,7 +54,7 @@ Every technology in this stack is well-represented in Claude Code's training dat
 | Infra (future) | Hetzner Cloud VPS | — | Self-hosted compute | Cost-efficient European cloud; CX22 (2 vCPU, 4GB) sufficient for single-gym SaaS at ~$5–6/month |
 | Package manager | pnpm | Latest | Dependency management | 2–3× faster installs than npm; content-addressable store minimizes disk usage; native workspace support for future monorepo; supported by Vercel and Coolify natively |
 | Testing | Vitest | Latest | Unit and integration tests | ESM-native, TypeScript-native, 5–10× faster than Jest; no Babel transform required for Next.js App Router; co-located test files |
-| E2E testing | Playwright | Latest | End-to-end regression tests | Deferred to post-Milestone-3; added once core flows (check-in, membership, POS) are stable and worth protecting from regression |
+| E2E testing | Playwright | Latest | End-to-end regression tests | Still deferred (membership + check-in shipped in M3/M4; POS lands in M6). Revisit once POS is in so check-in/membership/POS flows can be covered together |
 | Linting | ESLint (eslint-config-next) | Latest | Static code analysis | Ships with Next.js; includes eslint-plugin-react-hooks and eslint-plugin-next which catch App Router-specific bugs |
 | Formatting | Prettier + prettier-plugin-tailwindcss | Latest | Code formatting | Prettier handles all formatting; tailwindcss plugin auto-sorts Tailwind class order — eliminates a class of noisy diffs |
 | DB pooling | Neon built-in pooler | (Neon service) | Serverless connection pooling | Free, zero additional service, already part of Neon setup; `DATABASE_URL` (pooled) for the app, `DATABASE_URL_UNPOOLED` (direct) for migrations |

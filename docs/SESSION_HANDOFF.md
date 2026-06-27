@@ -1,22 +1,31 @@
 # Session Handoff — Block23 Gym Management System
 
 > Canonical handoff document for resuming development across Claude Code sessions.
-> Last updated: **2026-06-27** (after DEV-LOG `#023` — Attendance Analytics; **Milestone 4 COMPLETE**).
+> Last updated: **2026-06-27** (after DEV-LOG `#024` — Client Payments; **Milestone 5 COMPLETE**).
 
 ---
 
 ## Project Status
 
 - **Current Phase:** Phase 1 — MVP
-- **Current Milestone:** **Milestone 4 — Attendance ✅ complete (`#022` core + `#023` Analytics).** Next: **Milestone 5 — Client Payments.**
+- **Current Milestone:** **Milestone 5 — Client Payments ✅ complete (`#024`).** Next: **Milestone 6 — POS & Product Sales.**
 - **Overall Progress:**
   - **Planning & design:** 100% complete — 10 planning docs, 48 ADRs (ADR-030–032 intentionally unused), Design System hardened as enforceable SSOT.
-  - **Implementation:** **Milestones 1–4 done (`#015`–`#023`).** M4: Check-In Station (search + branches + fee + today's list), Attendance History (URL filters), same-day correction (US-4.11), Client Profile attendance filters, and **Attendance Analytics** (US-4.10 — KPI cards, period-selected Recharts trend/day-of-week/by-hour, Member/Walk-In/Operational insight panels, Alerts incl. 20%-decline). 4 of 8 milestones complete.
-  - Milestones 5–8: not started. **Payment records (`CLIENT_TRANSACTION` + method) are Milestone 5 (US-5.1)** — M3 stores membership `price_paid`; M4 stores walk-in `fee_charged` on the attendance; neither creates the transaction yet. (Dashboard panels for US-2.10/2.11 land in M8.)
+  - **Implementation:** **Milestones 1–5 done (`#015`–`#024`).** M5: payment method on every `CLIENT_TRANSACTION`; M3 create/renew and M4 walk-in check-in now create the transaction + line item atomically; Payments module (history with URL filters, additive void with required category, end-of-day collections by method spanning both transaction types). 5 of 8 milestones complete.
+  - Milestones 6–8: not started. **POS_SALE transactions are Milestone 6** (the Collections summary already queries both transaction types, so POS revenue appears there automatically once it lands). Dashboard panels (US-2.10/2.11/5.4) land in M8.
 
 ---
 
 ## Last Completed Work
+
+**DEV-LOG `#024` — Client Payments (Milestone 5 COMPLETE)** (committed):
+
+- **No schema migration** — `Transaction` / `TransactionLineItem` / `PaymentMethod` / `VoidReasonCategory` / `ItemType` were authored in `#016`.
+- **Shared lib:** `lib/payments/method.ts` (PaymentMethod enum/labels/guard), `lib/payments/void.ts` (VoidReasonCategory enum/labels/guard, ADR-028), `lib/payments/collections.ts` (`summarizeCollections` — pure, all-four-methods + grand total). `lib/dates.ts` += `gymDayStartUtc` (instant ↔ gym-local-day bounds for `transaction_date`) + `formatDateTimeInTz`. **+9 tests (65 total).**
+- **Retrofit M3** (`membership-{schema,actions,actions-ui}`): create + renew wrap `Membership` + `CLIENT_TRANSACTION` + one `MEMBERSHIP` line item (price snapshot, `referenceMembershipId`) in one interactive `$transaction`; dialog gains a payment-method `Select`. Membership History VOID badge now lights up.
+- **Retrofit M4** (`attendance/actions.ts`, `check-in-view.tsx`): WALK_IN check-in creates attendance + `CLIENT_TRANSACTION` + `WALK_IN_FEE` line item atomically; `fee_override_note` set when fee ≠ default; fee dialog gains payment-method `Select`. Member visits create no transaction.
+- **Payments module** (`payments/`): `?view=` sub-nav (History / Collections, ADR-047). History — chronological `CLIENT_TRANSACTION` table, URL filters (date preset / method / client name), VOID rows show category + note. Void (`actions.ts → voidClientTransaction`) — required category, note required only for `OTHER`, additive `status=VOID`, never cancels membership / deletes attendance. Collections — selected-day by-method totals + grand total spanning both transaction types (POS auto-included at M6), zero-day notice, today-capped date selector.
+- Verified: type-check ✓ · lint ✓ · test 65/65 ✓ · build ✓ (`/payments` 12.2 kB) · **Neon smoke** (₱1000 GCash membership + ₱75 Cash walk-in via `$transaction`; today's collections = ₱1075; void left ₱1000 with attendance + live membership intact; removed).
 
 **DEV-LOG `#023` — Attendance Analytics (Milestone 4, part 2 — M4 COMPLETE)** (committed):
 
@@ -112,7 +121,10 @@
                           + check-in-view + today-checkins + history-view
                           + history-filters + attendance-correction
                           + analytics-view + analytics-charts + analytics-period
-        payments, pos, inventory, reports/  placeholders
+        payments/         page (?view shell) + payments-nav + actions (void)
+                          + history-view + payment-filters + void-action
+                          + collections-view + collections-date (M5)
+        pos, inventory, reports/  placeholders
         settings/         page + settings-form + timezone-combobox + actions + schema
                           + membership-plans + plan-actions + plan-schema (US-3.9)
         clients/          page (list) + actions + client-schema + search-params
@@ -130,7 +142,8 @@
     lib/              auth.ts, auth-client.ts, prisma.ts, gym.ts, nav.ts, dates.ts,
                       utils.ts (+ test); clients/ (derive[+test], list, sort,
                       duplicate); memberships/ (duration[+test]);
-                      attendance/ (history, today, analytics, +tests)
+                      attendance/ (history, today, analytics, +tests);
+                      payments/ (method, void, collections [+test]); dates (+test)
     middleware.ts     default-deny route protection
     generated/        prisma client (gitignored, regenerated via `pnpm db:generate`)
   prisma/
@@ -157,15 +170,16 @@ Fully implemented and verified:
 - **Settings module (`#019`, US-1.2/1.3/1.4/1.7/1.8/1.9)** — Gym Information (incl. IANA timezone combobox), Pricing (walk-in fee), System Preferences (4 thresholds), via Server Action + Zod on the single `Gym` row. **Milestone 1 complete.**
 - **Client Management (`#020`, US-2.1/2.2/2.3/2.4/2.5/2.6/2.9/2.10/2.11)** — centralized derivation (`lib/clients/derive.ts`), registration/edit + duplicate warning, Client List (8 chips + search + archived + URL sort/pagination, server-rendered per ADR-047), Client Profile (header/quick-stats/details/tabs), soft-delete/archive. attendance-tab filters → M4; Dashboard feed panels (US-2.10/2.11) → M8.
 - **Membership Management (`#021`, US-3.1/3.2/3.3/3.4/3.9/3.10)** — create/renew/cancel membership (canonical date math ADR-040, snapshot price ADR-003), ad-hoc custom durations (ADR-015), Membership Plan catalog in Settings (US-3.9, last-active-plan retirement blocked), context-aware Client Profile button + history Cancel. Month→days pinned by ADR-048 (30/60/90). **Payment record (`CLIENT_TRANSACTION` + payment method) deferred to M5 (US-5.1)** — M3 stores `price_paid` only; the history VOID badge is wired and lights up with M5.
-- **Attendance (`#022` core + `#023` Analytics, US-4.1–4.5/4.8/4.9/4.10/4.11)** — three-view module (ADR-023): Check-In Station (auto-focus search → branch flows: duplicate/expired-renewal/upcoming/conversion/fee/quick-create + post-check-in expiry toast), Today's Check-Ins (total/unique + 2nd-visit + correction), Attendance History (URL date/visit-type filters), same-day `time_in` correction (US-4.11), Client Profile attendance filters, and Attendance Analytics (KPI cards + Recharts trend/day-of-week/by-hour + Member/Walk-In/Operational insights + Alerts incl. 20%-decline). Snapshots `membership_id`, stamps `created_by`. **Walk-in fee `CLIENT_TRANSACTION` + payment method deferred to M5 (US-5.1)** — M4 records `fee_charged` on the attendance only.
+- **Attendance (`#022` core + `#023` Analytics, US-4.1–4.5/4.8/4.9/4.10/4.11)** — three-view module (ADR-023): Check-In Station (auto-focus search → branch flows: duplicate/expired-renewal/upcoming/conversion/fee/quick-create + post-check-in expiry toast), Today's Check-Ins (total/unique + 2nd-visit + correction), Attendance History (URL date/visit-type filters), same-day `time_in` correction (US-4.11), Client Profile attendance filters, and Attendance Analytics (KPI cards + Recharts trend/day-of-week/by-hour + Member/Walk-In/Operational insights + Alerts incl. 20%-decline). Snapshots `membership_id`, stamps `created_by`. The walk-in fee dialog now also captures a payment method and creates the `CLIENT_TRANSACTION` (M5).
+- **Client Payments (`#024`, US-5.1/5.2/5.3/5.4)** — payment method on every `CLIENT_TRANSACTION`; M3 create/renew and M4 walk-in check-in create the transaction + line item atomically (membership = `MEMBERSHIP` @ price snapshot; walk-in = `WALK_IN_FEE` @ fee + `fee_override_note` when ≠ default; separate per ADR-024, never mixed per ADR-012). Payments module: Payment History (URL filters — date/method/client name), additive Void (required `void_reason_category`, note for `OTHER`; never cancels membership or deletes attendance), End-of-Day Collections (by-method totals + grand total spanning both transaction types, today-capped date selector). **Milestone 5 complete.**
 
-No **Milestone 5+** product features (payments, POS, inventory, dashboard/reports) are implemented yet.
+No **Milestone 6+** product features (POS, inventory, dashboard/reports) are implemented yet.
 
 ---
 
 ## Work In Progress
 
-Nothing is partially coded mid-stream — **Milestones 1–4 are committed** (`#015`–`#023`, all verified). Ready to start **Milestone 5 — Client Payments**.
+Nothing is partially coded mid-stream — **Milestones 1–5 are committed** (`#015`–`#024`, all verified). Ready to start **Milestone 6 — POS & Product Sales**.
 
 ---
 
@@ -175,7 +189,7 @@ Nothing is partially coded mid-stream — **Milestones 1–4 are committed** (`#
 2. **Prisma 7 needs a driver adapter** (resolved, noted for awareness): the runtime client uses `@prisma/adapter-pg` (depends on `pg`). This is Prisma's required driver, **not** a second query mechanism (TECH-STACK Backend Standards updated). `@prisma/adapter-neon` is the serverless/edge alternative — a one-file swap in `src/lib/prisma.ts`.
 3. **`pg` SSL deprecation notice** prints on connect (`sslmode=require` will mean `verify-full` in a future `pg` major). Informational, harmless for Neon today; revisit at the `pg` v9 upgrade.
 4. ~~Decide the list-state mechanism before the Client List~~ ✅ **Resolved (`#020`, ADR-047):** URL search params for list state; Zustand for POS cart + sidebar; derived/filtered tables render on the server. Synced to DECISIONS / TECH-STACK / DESIGN-SYSTEM.
-5. **Playwright (E2E) deferred** per TECH-STACK — not installed. (Milestone 3 is now done; revisit whether to add E2E before the heavier Attendance/POS flows.)
+5. **Playwright (E2E) deferred** per TECH-STACK — not installed. (Check-in, membership, and payments now shipped; POS lands in M6. Revisit once POS is in, so check-in/membership/payments/POS flows can be covered together.)
 6. **Sample owner is seeded — change before real use.** A sample owner exists for login/testing: username `owner` / password `ChangeMe!123` (gym "Block23 Gym", Asia/Manila). To swap in real values while there's no real data: set `SEED_OWNER_EMAIL`/`SEED_OWNER_USERNAME`/`SEED_OWNER_PASSWORD` (optionally `SEED_GYM_NAME`/`SEED_GYM_TIMEZONE`) in `.env`, then `pnpm prisma migrate reset --force` (wipes + re-migrates + reseeds). The plain `pnpm db:seed` is idempotent and skips while a user exists.
 
 No technical debt in the existing code.
@@ -184,14 +198,14 @@ No technical debt in the existing code.
 
 ## Next Recommended Milestone
 
-**Milestone 5 — Client Payments** (Milestone 4 is complete). This is where the **`CLIENT_TRANSACTION` + payment-method** layer that M3/M4 deferred finally lands. Scope (ROADMAP + USER-STORIES §5, MODULE-SPECS Module 5, USER-FLOWS Flow 11; ADR-003/006/012/024/028/035):
+**Milestone 6 — POS & Product Sales** (Milestone 5 is complete). The first revenue surface that is **client-anonymous** (`client_id` null on every `POS_SALE`, ADR-011) and the first to touch the **inventory ledger** (ADR-004). Scope (ROADMAP + USER-STORIES §6, MODULE-SPECS Module 6, USER-FLOWS Flows 8/16/20; ADR-003/004/006/009/011/012/026/027/034):
 
-1. **Payment method on every client transaction** (US-5.1) — Cash / GCash / Card / Other recorded on each `CLIENT_TRANSACTION`. **Retrofit the M3 membership create/renew flow and the M4 walk-in fee check-in to actually create the `CLIENT_TRANSACTION` (+ `TransactionLineItem`)** — membership = one `MEMBERSHIP` line item at `price_paid`; walk-in fee = one `WALK_IN_FEE` line item at the entered fee (`fee_override_note` when ≠ `Gym.default_walkin_fee`). Walk-in and membership are always separate transactions (ADR-024); never mixed (ADR-012). `unit_price`/`cost_price_snapshot` are snapshots (ADR-003).
-2. **Client payment history** (US-5.2) — chronological, filterable by date / client / payment method (URL state per ADR-047).
-3. **Void a client payment** (US-5.3, Flow 11) — required `void_reason_category` (enum, ADR-028) + optional note (required when `OTHER`); record preserved, excluded from revenue; **voiding is additive and never cancels a membership** (ADR-041) and never deletes the attendance (M4 edge case).
-4. **End-of-day collections** (US-5.4) — today's revenue by payment method across `CLIENT_TRANSACTION` + `POS_SALE` (POS arrives M6; show client side now), date selector for prior days.
+1. **Product catalog** (US-6.1–6.3, 6.15) — create/edit + soft-delete (`deleted_at`, ADR-005); `STANDARD_PRODUCT` vs `SERVING_BASED_PRODUCT`; `cost_price` + live gross-margin display; `low_stock_threshold` / `reorder_point`; product categories (US-6.5).
+2. **POS screen** (US-6.6–6.9, 6.13, 6.14, 6.16) — category tabs + grid + name search; cart; checkout with payment method + cash-change calculator; Per-Container mode for serving-based products (ADR-027, stock = qty × servings_per_container).
+3. **Stock + snapshots on sale** — each `PRODUCT` line item creates an `InventoryTransaction` (type=SALE) decrementing `current_stock`; `unit_price`/`cost_price_snapshot` snapshot at sale (ADR-003/026); stock-negative sale blocked, Force Sale override logs a `FORCED_SALE` adjustment (ADR-009/034).
+4. **POS History + void** (US-6.10) — `POS_SALE` list filterable by date/method; void with required `void_reason_category` (ADR-028), additive ledger reversal (Flow 11).
 
-> Wire payment creation into the existing M3 `membership-actions.ts` and M4 `attendance/actions.ts` (the membership dialog gains a payment-method field; the walk-in fee dialog gains one). Scope by session `gymId`; the Membership History VOID badge (already wired in `#020`) lights up once these transactions exist. Reuse `lib/clients/derive.ts`; do not duplicate. List/filter state per ADR-047.
+> Reuse what M5 built: the `lib/payments/method.ts` selector, the cash/change pattern is new, and **the Collections summary already spans `POS_SALE`** — once POS sales exist they appear in `/payments?view=collections` automatically (no rework). Mirror the `?view=` sub-nav + URL-filter patterns (ADR-047). Snapshots immutable (ADR-003/026); POS and client transactions never mix (ADR-012).
 
 **Verify & sync** each step: type-check, lint, test, build; update `DEVELOPMENT-LOG.md`, this file, ROADMAP.
 
@@ -212,4 +226,4 @@ No technical debt in the existing code.
 
 ## Suggested Resume Prompt
 
-> Resume Block23 Gym V2. Read `docs/SESSION_HANDOFF.md` first for current state. **Milestones 1–4 are complete** (`#015`–`#023`: scaffold, schema/DB, Better Auth, app shell, Settings; Client Management — ADR-047 list-state-in-URL, centralized derivation, List/Profile, archive; Membership Management — create/renew/cancel, canonical date math ADR-040, ad-hoc durations ADR-015, Plan catalog US-3.9, month→days ADR-048; Attendance — Check-In Station with branch flows, Today's list, History with URL filters, same-day correction US-4.11, and Analytics US-4.10 with Recharts + insight/alert panels). Next is **Milestone 5 — Client Payments (US-5.1–5.4)**: this is where the deferred **`CLIENT_TRANSACTION` + payment-method** layer lands — payment method (Cash/GCash/Card/Other) on every client transaction, retrofitting the **M3 membership create/renew** and the **M4 walk-in fee check-in** to actually create the transaction + line item (membership = `MEMBERSHIP` @ `price_paid`; walk-in = `WALK_IN_FEE` @ fee, with `fee_override_note` when ≠ default); chronological payment history (filterable, ADR-047); void with required `void_reason_category` (ADR-028, additive per Flow 11 — never cancels a membership or deletes attendance); end-of-day collections by method. Snapshots immutable (ADR-003); walk-in/membership always separate transactions (ADR-024), never mixed (ADR-012). Wire into the existing `membership-actions.ts` + `attendance/actions.ts`. **Reuse `lib/clients/derive.ts`** — do not duplicate. Scope by session `gymId`; list/filter state per ADR-047. Follow the design-first workflow, keep docs synchronized, update `DEVELOPMENT-LOG.md`, and run the full verification gate (type-check, lint, test, build) before calling anything done.
+> Resume Block23 Gym V2. Read `docs/SESSION_HANDOFF.md` first for current state. **Milestones 1–5 are complete** (`#015`–`#024`: scaffold, schema/DB, Better Auth, app shell, Settings; Client Management — ADR-047 list-state-in-URL, centralized derivation, List/Profile, archive; Membership Management — create/renew/cancel, canonical date math ADR-040, ad-hoc durations ADR-015, Plan catalog US-3.9, month→days ADR-048; Attendance — Check-In Station with branch flows, Today's list, History with URL filters, same-day correction US-4.11, Analytics US-4.10 with Recharts; **Client Payments — payment method on every `CLIENT_TRANSACTION`, M3/M4 retrofitted to create the transaction + line item atomically, Payment History with URL filters, additive Void with required `void_reason_category`, End-of-Day Collections by method spanning both transaction types**). Next is **Milestone 6 — POS & Product Sales (US-6.1–6.16)**: the product catalog (`STANDARD_PRODUCT` / `SERVING_BASED_PRODUCT`, soft-delete, cost price + gross margin, categories), the POS screen (category tabs + grid + search, cart, checkout with payment method + cash-change calculator, Per-Container mode ADR-027), stock + snapshots on sale (each `PRODUCT` line item → `InventoryTransaction` type=SALE decrementing `current_stock`; `unit_price`/`cost_price_snapshot` per ADR-003/026; Force Sale override logs `FORCED_SALE` per ADR-009/034), and POS History + void (required `void_reason_category`, additive ledger reversal, Flow 11). POS sales are client-anonymous (`client_id` null, ADR-011) and never mix with client transactions (ADR-012). **Reuse `lib/payments/method.ts`**; the Collections summary already spans `POS_SALE` so POS revenue appears there automatically. Scope by session `gymId`; list/filter state per ADR-047. Follow the design-first workflow, keep docs synchronized, update `DEVELOPMENT-LOG.md`, and run the full verification gate (type-check, lint, test, build) before calling anything done.

@@ -15,13 +15,16 @@ import {
   activeMembershipId,
   type CheckInBranch,
 } from "@/lib/clients/derive";
+import { isPaymentMethod, type PaymentMethod } from "@/lib/payments/method";
 
 // Attendance mutations + check-in search (Milestone 4 — US-4.1/4.2/4.5/4.8/4.11).
 // All scoped by the session gymId (ADR-001/025); writes stamp `created_by` (ADR-021).
 //
-// SCOPE BOUNDARY (M4 vs M5): the walk-in fee `CLIENT_TRANSACTION` + payment method
-// is Milestone 5 (US-5.1). M4 records the Attendance with `fee_charged` (the
-// denormalized display amount) only — the payment record is layered in at M5.
+// Milestone 5 (US-5.1): a WALK_IN check-in now also records a CLIENT_TRANSACTION + a
+// single WALK_IN_FEE line item (payment method, fee snapshot, `fee_override_note` when
+// the fee differs from `Gym.default_walkin_fee`) atomically with the Attendance.
+// Member check-ins create no transaction (they paid at membership purchase). Walk-in
+// and membership are always separate transactions (ADR-024), never mixed (ADR-012).
 
 export type CheckInSearchResult = {
   id: string;
@@ -125,6 +128,8 @@ export type CheckInInput = {
   membershipId?: string | null;
   /** walk-in fee charged (denormalized display only); null/0 for members. */
   feeCharged?: number | null;
+  /** required when visitType=WALK_IN — payment method for the walk-in fee (US-5.1). */
+  paymentMethod?: PaymentMethod | null;
 };
 
 export type CheckInResult =
@@ -159,24 +164,81 @@ export async function checkInClient(input: CheckInInput): Promise<CheckInResult>
   }
 
   const today = gymToday(gym.timezone);
-  await prisma.attendance.create({
-    data: {
-      gymId: ctx.gymId,
-      clientId: input.clientId,
-      visitDate: today,
-      timeIn: gymTimeNow(gym.timezone),
-      visitType: input.visitType,
-      membershipId,
-      feeCharged:
-        input.visitType === "WALK_IN" && input.feeCharged != null
-          ? input.feeCharged
-          : null,
-      createdById: ctx.userId,
-    },
-  });
+  const timeIn = gymTimeNow(gym.timezone);
+
+  if (input.visitType === "MEMBER") {
+    // Member visit: no payment is collected at check-in — record the attendance only.
+    await prisma.attendance.create({
+      data: {
+        gymId: ctx.gymId,
+        clientId: input.clientId,
+        visitDate: today,
+        timeIn,
+        visitType: "MEMBER",
+        membershipId,
+        feeCharged: null,
+        createdById: ctx.userId,
+      },
+    });
+  } else {
+    // Walk-in visit: the fee + its CLIENT_TRANSACTION (US-5.1) commit with the
+    // attendance. Default the fee from the gym setting; note any override (ADR-024).
+    if (!isPaymentMethod(input.paymentMethod ?? undefined)) {
+      return { ok: false, error: "Select a payment method." };
+    }
+    const defaultFee = Number(gym.defaultWalkinFee);
+    const fee =
+      input.feeCharged != null && Number.isFinite(input.feeCharged)
+        ? input.feeCharged
+        : defaultFee;
+    if (fee < 0) return { ok: false, error: "Fee can't be negative." };
+    const overrideNote =
+      fee !== defaultFee
+        ? `Fee adjusted from the ₱${defaultFee.toFixed(2)} default to ₱${fee.toFixed(2)}.`
+        : null;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.attendance.create({
+        data: {
+          gymId: ctx.gymId,
+          clientId: input.clientId,
+          visitDate: today,
+          timeIn,
+          visitType: "WALK_IN",
+          membershipId: null,
+          feeCharged: fee,
+          createdById: ctx.userId,
+        },
+      });
+      const transaction = await tx.transaction.create({
+        data: {
+          gymId: ctx.gymId,
+          transactionType: "CLIENT_TRANSACTION",
+          clientId: input.clientId,
+          transactionDate: new Date(),
+          totalAmount: fee,
+          paymentMethod: input.paymentMethod!,
+          createdById: ctx.userId,
+        },
+      });
+      await tx.transactionLineItem.create({
+        data: {
+          gymId: ctx.gymId,
+          transactionId: transaction.id,
+          itemType: "WALK_IN_FEE",
+          description: "Walk-in fee",
+          quantity: 1,
+          unitPrice: fee,
+          subtotal: fee,
+          feeOverrideNote: overrideNote,
+        },
+      });
+    });
+  }
 
   revalidatePath("/attendance");
   revalidatePath(`/clients/${input.clientId}`);
+  revalidatePath("/payments");
   return { ok: true };
 }
 

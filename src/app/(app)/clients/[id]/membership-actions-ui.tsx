@@ -39,6 +39,11 @@ import {
   toDateInputValue,
 } from "@/lib/dates";
 import { computeRenewalDates } from "@/lib/clients/derive";
+import {
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS,
+  type PaymentMethod,
+} from "@/lib/payments/method";
 import { createMembershipSchema, CUSTOM_PLAN } from "./membership-schema";
 import {
   createMembership,
@@ -76,6 +81,7 @@ type FormValues = {
   planChoice: string;
   customDays: number | null;
   price: number;
+  paymentMethod: PaymentMethod;
   startDate: string;
 };
 
@@ -107,6 +113,7 @@ export function MembershipActions({
       planChoice: firstChoice,
       customDays: null,
       price: initialPrice,
+      paymentMethod: "CASH",
       startDate: toDateInputValue(today),
     },
   });
@@ -122,6 +129,7 @@ export function MembershipActions({
       planChoice: firstChoice,
       customDays: null,
       price: initialPrice,
+      paymentMethod: "CASH",
       startDate: toDateInputValue(today),
     });
   }
@@ -169,6 +177,7 @@ export function MembershipActions({
         planChoice: values.planChoice,
         customDays: values.customDays,
         price: values.price,
+        paymentMethod: values.paymentMethod,
         startDate: values.startDate,
       });
       if (res.ok) {
@@ -189,6 +198,7 @@ export function MembershipActions({
       planChoice: values.planChoice,
       customDays: values.customDays,
       price: values.price,
+      paymentMethod: values.paymentMethod,
     });
     if (res.ok) {
       toast.success("Membership renewed.");
@@ -366,6 +376,34 @@ export function MembershipActions({
                           onChange={(e) => field.onChange(e.target.valueAsNumber)}
                         />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="paymentMethod"
+                  render={({ field }) => (
+                    <FormItem className="max-w-[12rem]">
+                      <FormLabel>Payment method</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {PAYMENT_METHODS.map((m) => (
+                            <SelectItem key={m} value={m}>
+                              {PAYMENT_METHOD_LABELS[m]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}

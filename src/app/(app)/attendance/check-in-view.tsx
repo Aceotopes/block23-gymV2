@@ -15,8 +15,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ClientTypeBadge } from "@/components/status-badge";
 import { formatDateOnlyISO } from "@/lib/dates";
+import {
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS,
+  type PaymentMethod,
+} from "@/lib/payments/method";
 import {
   searchClientsForCheckIn,
   checkInClient,
@@ -95,6 +107,7 @@ export function CheckInView({
     visitType: "MEMBER" | "WALK_IN",
     membershipId: string | null,
     feeCharged: number | null,
+    paymentMethod: PaymentMethod | null,
     expiry?: { expiringSoon: boolean; days: number | null },
   ) {
     setPending(true);
@@ -103,6 +116,7 @@ export function CheckInView({
       visitType,
       membershipId,
       feeCharged,
+      paymentMethod,
     });
     setPending(false);
     if (!res.ok) {
@@ -133,7 +147,7 @@ export function CheckInView({
         if (client.checkedInTodayAt) {
           setFlow({ kind: "duplicate", client });
         } else {
-          void doCheckIn(client, "MEMBER", client.activeMembershipId, null, {
+          void doCheckIn(client, "MEMBER", client.activeMembershipId, null, null, {
             expiringSoon: client.expiringSoon,
             days: client.daysUntilExpiry,
           });
@@ -217,7 +231,7 @@ export function CheckInView({
         pending={pending}
         onCancel={() => setFlow({ kind: "none" })}
         onConfirm={(client) =>
-          doCheckIn(client, "MEMBER", client.activeMembershipId, null, {
+          doCheckIn(client, "MEMBER", client.activeMembershipId, null, null, {
             expiringSoon: client.expiringSoon,
             days: client.daysUntilExpiry,
           })
@@ -251,8 +265,8 @@ export function CheckInView({
         flow={flow}
         pending={pending}
         onCancel={() => setFlow({ kind: "none" })}
-        onConfirm={(client, fee) =>
-          doCheckIn(client, "WALK_IN", null, fee)
+        onConfirm={(client, fee, method) =>
+          doCheckIn(client, "WALK_IN", null, fee, method)
         }
       />
 
@@ -486,14 +500,18 @@ function FeeDialog({
   flow: Flow;
   pending: boolean;
   onCancel: () => void;
-  onConfirm: (client: FeeTarget, fee: number) => void;
+  onConfirm: (client: FeeTarget, fee: number, method: PaymentMethod) => void;
 }) {
   const open = flow.kind === "fee";
   const client = flow.kind === "fee" ? flow.client : null;
   const [fee, setFee] = useState<number>(Number.NaN);
+  const [method, setMethod] = useState<PaymentMethod>("CASH");
 
   useEffect(() => {
-    if (client) setFee(client.defaultWalkinFee);
+    if (client) {
+      setFee(client.defaultWalkinFee);
+      setMethod("CASH");
+    }
   }, [client]);
 
   return (
@@ -502,9 +520,8 @@ function FeeDialog({
         <DialogHeader>
           <DialogTitle>Walk-in fee</DialogTitle>
           <DialogDescription>
-            Recording a walk-in visit for {client?.fullName}. The payment method is
-            captured in the Payments module — this records the visit and the fee
-            amount.
+            Recording a walk-in visit for {client?.fullName}. This records the visit
+            and the fee payment (US-5.1).
           </DialogDescription>
         </DialogHeader>
 
@@ -516,20 +533,37 @@ function FeeDialog({
           </p>
         ) : null}
 
-        <div className="space-y-2">
-          <label htmlFor="walkin-fee" className="text-sm font-medium">
-            Fee (₱)
-          </label>
-          <Input
-            id="walkin-fee"
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min={0}
-            className="w-40 font-mono tabular-nums"
-            value={Number.isNaN(fee) ? "" : fee}
-            onChange={(e) => setFee(e.target.valueAsNumber)}
-          />
+        <div className="flex flex-wrap gap-4">
+          <div className="space-y-2">
+            <label htmlFor="walkin-fee" className="text-sm font-medium">
+              Fee (₱)
+            </label>
+            <Input
+              id="walkin-fee"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min={0}
+              className="w-40 font-mono tabular-nums"
+              value={Number.isNaN(fee) ? "" : fee}
+              onChange={(e) => setFee(e.target.valueAsNumber)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Payment method</label>
+            <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAYMENT_METHODS.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {PAYMENT_METHOD_LABELS[m]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <DialogFooter>
@@ -537,7 +571,9 @@ function FeeDialog({
             Cancel
           </Button>
           <Button
-            onClick={() => client && onConfirm(client, Number.isNaN(fee) ? 0 : fee)}
+            onClick={() =>
+              client && onConfirm(client, Number.isNaN(fee) ? 0 : fee, method)
+            }
             disabled={pending}
           >
             {pending ? "Checking in…" : "Check in"}

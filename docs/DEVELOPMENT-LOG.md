@@ -5,6 +5,32 @@ Newest entries at the top.
 
 ---
 
+## [#024] Milestone 5 — Client Payments (US-5.1/5.2/5.3/5.4) — Milestone 5 COMPLETE — 2026-06-27
+
+**Commit:** _(Done)_
+
+**Purpose:** Land the deferred `CLIENT_TRANSACTION` + payment-method layer (US-5.1). Retrofit the M3 membership create/renew and the M4 walk-in fee check-in to create the transaction + line item, and build the Payments module (history, void, collections). No schema migration — `Transaction` / `TransactionLineItem` / `PaymentMethod` / `VoidReasonCategory` / `ItemType` were authored in `#016`.
+
+**Shared data layer:**
+- `lib/payments/method.ts` — `PaymentMethod` values + labels + `isPaymentMethod` guard (mirrors the Prisma enum; shared by membership dialog, walk-in fee dialog, filters, collections).
+- `lib/payments/void.ts` — `VoidReasonCategory` values + labels + guard (ADR-028; `OTHER` requires a note).
+- `lib/payments/collections.ts` — `summarizeCollections` (pure: groups rows into Cash/GCash/Card/Other + grand total, always all four methods). **Testable.**
+- `lib/dates.ts` — `gymDayStartUtc` (UTC instant of gym-local midnight) for bounding instant-based `transaction_date` to a gym-local calendar day (ADR-035), and `formatDateTimeInTz` (display an instant in `Gym.timezone`). **+9 tests (65 total).**
+
+**Retrofit M3 (`membership-{schema,actions,actions-ui}`):** create + renew now wrap the `Membership` and its `CLIENT_TRANSACTION` (`transaction_type=CLIENT_TRANSACTION`, `total_amount`=price, payment method) + one `MEMBERSHIP` line item (`unit_price`/`subtotal`=price snapshot, `referenceMembershipId`) in one interactive `prisma.$transaction`. The dialog gains a payment-method `Select` (default Cash). The Membership History VOID badge (wired in `#020`) now lights up. ADR-024 (separate transactions) / ADR-012 (never mixed) / ADR-003 (snapshot) honored.
+
+**Retrofit M4 (`attendance/actions.ts`, `check-in-view.tsx`):** a WALK_IN check-in now creates the attendance + a `CLIENT_TRANSACTION` + one `WALK_IN_FEE` line item atomically; `fee_override_note` is set when the fee ≠ `Gym.default_walkin_fee`. Member visits create no transaction. The walk-in fee dialog gains a payment-method `Select`.
+
+**Payments module (`payments/`):** `?view=` sub-nav (Payment History default / Collections, ADR-023/047 pattern). **History** (`history-view` + `payment-filters`) — chronological `CLIENT_TRANSACTION` table for the selected range, filterable by date preset / payment method / client name (URL state, ADR-047); voided rows show a VOID badge + reason category + note; COMPLETED rows offer the void action. **Void** (`void-action` + `actions.ts → voidClientTransaction`) — required category, note required only for `OTHER`, additive `status=VOID` via `updateMany` (idempotent guard), never cancels the membership (ADR-041) or deletes the attendance (Module 5 edge case). **Collections** (`collections-view` + `collections-date`) — selected-day totals by method spanning **both** transaction types (ADR-006 — POS_SALE auto-included when M6 lands), grand total, zero-day notice, today-capped date selector (US-5.4, Flow 17).
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (65/65) · `pnpm build` ✓ (`/payments` 12.2 kB). **Runtime smoke (Neon):** membership (₱1000 GCash) + walk-in (₱75 Cash) transactions created via interactive `$transaction`; today's collections query (gym-day instant bounds) returned Cash 1×₱75 + GCash 1×₱1000 = ₱1075; voiding the walk-in left the non-void total at ₱1000 with the attendance row and live membership untouched (additive). Smoke data removed.
+
+**Doc sync:** DEVELOPMENT-LOG (this entry); ROADMAP (M5 ✅ + M3/M4 deferral notes resolved); SESSION_HANDOFF; README; CLAUDE.md; memory. (No new ADR — built on ADR-003/006/012/024/028/035/041/047.)
+
+**Notes / decisions:** Payment method defaults to **Cash** in both dialogs (most common; overridable). The walk-in `fee_override_note` is **auto-populated with a factual note** ("Fee adjusted from the ₱X default to ₱Y.") rather than prompting for a reason — the quick check-in flow stays fast while the override remains auditable (MODULE-SPECS Module 5 leaves the note optional). `transaction_date` is stamped at creation (`new Date()`), the moment money is collected. Collections spans `POS_SALE` by query design now (returns client-only totals until M6). Partial refunds (US-5.6) and receipts (US-5.7) remain deferred (P2). **Next: Milestone 6 — POS & Product Sales.**
+
+---
+
 ## [#023] Milestone 4 (part 2) — Attendance Analytics (US-4.10) — Milestone 4 COMPLETE — 2026-06-27
 
 **Commit:** _(Done)_
