@@ -5,6 +5,31 @@ Newest entries at the top.
 
 ---
 
+## [#026] Milestone 6 (part 2) — POS Sell Screen, Checkout, Stock & History/Void (US-6.6–6.10/6.13/6.14/6.16) — Milestone 6 COMPLETE — 2026-06-27
+
+**Commit:** _(Done)_
+
+**Purpose:** Build the POS sell screen, checkout, stock deduction into the inventory ledger, container-mode sale, Force Sale, and POS History + void — completing Milestone 6. First client-anonymous revenue (`POS_SALE`, `client_id` null, ADR-011) and first inventory-ledger writes (ADR-004). No schema migration.
+
+**Pure lib (`lib/pos/cart.ts`):** `CartLine`/`CartMode` types, `cartKey` (product+mode), `lineSubtotal`/`cartTotal`, `stockDeduction` (container = qty×spc, else qty — ADR-027), `changeDue`, `lineDescription` (per-mode snapshot text). **+5 tests (76 total).**
+
+**Cart store (`pos-cart-store.ts`):** the one Zustand store reserved for the POS cart by ADR-047 (alongside the sidebar). Ephemeral (not persisted — MODULE-SPECS), keyed by product+mode so a serving-based product can sit in the cart both per-serving and per-container; re-adding bumps quantity.
+
+**Checkout + void (`pos-actions.ts`, gym-scoped, interactive `$transaction`):**
+- `createPosSale` — server-authoritative: re-loads each product (archived allowed — archived-mid-transaction completes), resolves mode→`unit_price` (selling vs `container_selling_price`) + `cost_price_snapshot` (ADR-003/026) + stock deduction. Stock gate per product (ADR-009): if any product's total deduction exceeds stock and `force` is unset, returns `needsForce` (name/available/requested). On confirm: one `POS_SALE` + a `PRODUCT` line item per cart row, each creating a `SALE` inventory entry (`quantity_delta = −deduction`, `resulting_stock`, `reference_transaction_line_item_id`) and decrementing `current_stock`; cash rule (US-6.13) — `CASH` requires `cashReceived ≥ total`.
+- **Force Sale ledger model (chosen interpretation):** the per-line `SALE` always carries the full `−deduction` (canonical "each line → SALE that decrements" — MODULE-SPECS); when that line takes stock negative, a flagged `ADJUSTMENT` with `adjustment_reason_category = FORCED_SALE`, `quantity_delta = 0`, and a note is also written (ADR-009/034 — "never silent"), keeping stock math entirely in the SALE entries and the void reversal simple.
+- `voidPosSale` — required `void_reason_category` (ADR-028) + note (required for `OTHER`); status→VOID; **additive reversal** (Flow 11): per line item, a new `ADJUSTMENT` restores `−Σ(its ledger deltas)` with `reference_transaction_line_item_id` set; the original SALE rows are preserved. System reversal — `adjustment_reason_category` left null (no owner category fits) with a "Void reversal" note; the positive delta excludes it from shrinkage (US-7.8).
+
+**UI:** `sell-view.tsx` (server — active products + category tabs derived from products present, so empty categories are hidden, US-6.16) → `pos-screen.tsx` (client — search + tabs + product grid + cart panel; serving-based-with-container cards show /serv + /cont add buttons; cart quantity steppers + remove) → `checkout-dialog.tsx` (payment method + cash-change calc + Force Sale confirmation). **POS History** (`pos-history-view.tsx`, server — today's count + revenue strip, date-preset + method filters (ADR-047), `POS_SALE` table, VOID badge + reason) + `pos-history-filters.tsx` + `pos-void-action.tsx`. `page.tsx` now renders Sell / Products / History.
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (76/76) · `pnpm build` ✓ (`/pos` 12.2 kB). **Runtime smoke (Neon):** normal sale (water 10→7 standard, whey 140→70 via container mode −70 servings); Force Sale (water 7→−3, 1 FORCED_SALE marker logged); void reversal restored stock (water →0, whey →140); today's COMPLETED POS aggregate excluded the voided sale (count 1, ₱250). Smoke data removed.
+
+**Doc sync:** DEVELOPMENT-LOG (this entry); ROADMAP (M6 ✅ complete); SESSION_HANDOFF; README; CLAUDE.md; memory. (No new ADR — built on ADR-003/004/006/009/011/012/026/027/028/034.)
+
+**Notes / decisions:** Force Sale marker uses `quantity_delta = 0` (the SALE carries the deduction) — chosen for a clean reversal and to honor "each line → one SALE that decrements." Void-reversal ADJUSTMENTs carry a null `adjustment_reason_category` (system reversal; no owner enum fits) + a note. Product images render via a plain `<img>` (arbitrary remote URLs can't be host-validated by `next/image`). The POS void dialog mirrors the payments void dialog (a future `/simplify` could DRY them). Product **restock** (raising `current_stock`) is **Milestone 7** — so the smoke seeds stock directly; in-app, selling before M7 uses Force Sale. The Collections summary (M5) already spans `POS_SALE`, so POS revenue surfaces there automatically. **Next: Milestone 7 — Inventory.**
+
+---
+
 ## [#025] Milestone 6 (part 1) — Product Catalog & Categories (US-6.1/6.2/6.3/6.4/6.5/6.15) — 2026-06-27
 
 **Commit:** _(Done)_

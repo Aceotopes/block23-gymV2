@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
 import { getCurrentGym } from "@/lib/gym";
+import { gymToday } from "@/lib/dates";
 import { PageHeader } from "@/components/page-header";
 import { PosNav, type PosViewKey } from "./pos-nav";
 import { ProductsView } from "./products-view";
+import { SellView } from "./sell-view";
+import { PosHistoryView } from "./pos-history-view";
 import { parseProductsQuery, type RawSearchParams } from "./products-search-params";
 
 export const metadata = { title: "POS · Block23 Gym" };
@@ -21,6 +24,9 @@ export default async function PosPage({
 
   const sp = await searchParams;
   const view = asView(typeof sp.view === "string" ? sp.view : undefined);
+  const flatSp: Record<string, string | undefined> = Object.fromEntries(
+    Object.entries(sp).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v]),
+  );
 
   return (
     <>
@@ -33,16 +39,14 @@ export default async function PosPage({
       {view === "products" ? (
         <ProductsView gymId={gym.id} query={parseProductsQuery(sp)} />
       ) : view === "history" ? (
-        <p className="text-muted-foreground text-sm">
-          POS History — the `POS_SALE` list and void action arrive in Milestone 6
-          Part 2.
-        </p>
+        <PosHistoryView
+          gymId={gym.id}
+          timezone={gym.timezone}
+          today={gymToday(gym.timezone)}
+          sp={flatSp}
+        />
       ) : (
-        <p className="text-muted-foreground text-sm">
-          The POS sell screen (grid, cart, checkout) arrives in Milestone 6 Part 2.
-          Set up your catalog under <span className="font-medium">Products</span>{" "}
-          first.
-        </p>
+        <SellView gymId={gym.id} />
       )}
     </>
   );

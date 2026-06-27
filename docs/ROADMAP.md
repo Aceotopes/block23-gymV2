@@ -59,16 +59,16 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [x] Void client payment with required void_reason_category and optional detail note — record preserved, excluded from revenue totals (US-5.3) — additive (Flow 11); never cancels the membership (ADR-041) or deletes the attendance
 - [x] End-of-day collections summary: today's revenue totals by payment method (Cash / GCash / Card / Other) spanning CLIENT_TRANSACTION and POS_SALE, with date selector for prior days (US-5.4) — spans both transaction types by query (POS_SALE auto-included at M6)
 
-### Milestone 6 — POS & Product Sales (Part 1 ✅ `#025` — catalog & categories; Part 2 pending — sell/checkout/void)
+### Milestone 6 — POS & Product Sales ✅ complete (Part 1 `#025` catalog · Part 2 `#026` sell/checkout/void)
 - [x] Product catalog: create, edit, soft-delete (archive) products via `deleted_at` — archived products excluded from POS grid and active-stock reports but retained for historical records (US-6.1 – US-6.3, US-6.15, ADR-005) — Part 1
-- [x] Serving-based product configuration: servings-per-container, price-per-serving, container_selling_price (optional), remaining servings tracking (US-6.4 catalog side; container-mode **sale** in Part 2 / US-6.14)
+- [x] Serving-based product configuration: servings-per-container, price-per-serving, container_selling_price (optional), remaining servings tracking (US-6.4; container-mode sale US-6.14 in Part 2)
 - [x] Product categories (US-6.5) — Part 1
-- [ ] POS screen: category filter tabs, product grid with images, product search, SERVING_BASED_PRODUCT container mode toggle, shopping cart, quantity adjustment (US-6.6 – US-6.8, US-6.16) — Part 2
-- [ ] POS checkout with payment method selection, cash change calculator (cash received → change due), no client required (US-6.9, US-6.13) — Part 2
-- [ ] Whole-container sale for SERVING_BASED_PRODUCT: container mode checkout, stock deduction = quantity × servings_per_container (US-6.14, Flow 16) — Part 2
-- [ ] Void POS sale with required void_reason_category and optional detail note (US-6.10) — Part 2
+- [x] POS screen: category filter tabs, product grid with images, product search, SERVING_BASED_PRODUCT container mode toggle, shopping cart, quantity adjustment (US-6.6 – US-6.8, US-6.16) — Part 2
+- [x] POS checkout with payment method selection, cash change calculator (cash received → change due), no client required (US-6.9, US-6.13) — Part 2
+- [x] Whole-container sale for SERVING_BASED_PRODUCT: container mode checkout, stock deduction = quantity × servings_per_container (US-6.14, Flow 16) — Part 2
+- [x] Void POS sale with required void_reason_category and optional detail note (US-6.10) — Part 2; additive ledger reversal (Flow 11)
 
-> **Part 1 (`#025`) delivered the catalog**: product CRUD + archive/restore, STANDARD vs SERVING_BASED with conditional fields, live gross margin (US-6.15), and category management. `current_stock` is ledger-driven (ADR-004) and starts at 0 — **restock is M7 (US-7.1)**; selling from zero uses the Force Sale override (ADR-009) shipping with the Part 2 sell screen. Product image is a URL field for now (R2 upload deferred).
+> **Part 1 (`#025`)**: product CRUD + archive/restore, STANDARD vs SERVING_BASED with conditional fields, live gross margin (US-6.15), category management. **Part 2 (`#026`)**: the POS sell screen (tabs/grid/search/cart + container-mode toggle), checkout (payment method + cash-change), `POS_SALE` creation with `unit_price`/`cost_price_snapshot` snapshots (ADR-003/026) + `SALE` inventory entries decrementing `current_stock` (ADR-004), Force Sale override logging a `FORCED_SALE` adjustment (ADR-009/034), and POS History + additive void (ADR-028, Flow 11). `current_stock` was seeded directly in the smoke — **in-app restock is M7 (US-7.1)**; the Collections summary (M5) already spans `POS_SALE`. Product image is a URL field (R2 upload deferred).
 
 ### Milestone 7 — Inventory
 - [ ] Record product restocks — units for STANDARD_PRODUCT, containers × servings_per_container for SERVING_BASED_PRODUCT; optional total restock cost capture (US-7.1, US-7.5)
