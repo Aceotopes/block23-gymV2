@@ -1,22 +1,31 @@
 # Session Handoff — Block23 Gym Management System
 
 > Canonical handoff document for resuming development across Claude Code sessions.
-> Last updated: **2026-06-27** (after DEV-LOG `#024` — Client Payments; **Milestone 5 COMPLETE**).
+> Last updated: **2026-06-27** (after DEV-LOG `#025` — Product Catalog; **Milestone 6 Part 1 done**, Part 2 next).
 
 ---
 
 ## Project Status
 
 - **Current Phase:** Phase 1 — MVP
-- **Current Milestone:** **Milestone 5 — Client Payments ✅ complete (`#024`).** Next: **Milestone 6 — POS & Product Sales.**
+- **Current Milestone:** **Milestone 6 — POS & Product Sales: Part 1 ✅ done (`#025`, catalog & categories).** Next: **Milestone 6 Part 2 — POS sell screen, checkout, stock, history/void.**
 - **Overall Progress:**
   - **Planning & design:** 100% complete — 10 planning docs, 48 ADRs (ADR-030–032 intentionally unused), Design System hardened as enforceable SSOT.
-  - **Implementation:** **Milestones 1–5 done (`#015`–`#024`).** M5: payment method on every `CLIENT_TRANSACTION`; M3 create/renew and M4 walk-in check-in now create the transaction + line item atomically; Payments module (history with URL filters, additive void with required category, end-of-day collections by method spanning both transaction types). 5 of 8 milestones complete.
-  - Milestones 6–8: not started. **POS_SALE transactions are Milestone 6** (the Collections summary already queries both transaction types, so POS revenue appears there automatically once it lands). Dashboard panels (US-2.10/2.11/5.4) land in M8.
+  - **Implementation:** **Milestones 1–5 done (`#015`–`#024`); Milestone 6 Part 1 done (`#025`).** M5: payment method on every `CLIENT_TRANSACTION`; M3/M4 retrofitted to create the transaction + line item atomically; Payments module. M6 Part 1: product catalog CRUD + archive/restore (STANDARD vs SERVING_BASED, conditional fields, live gross margin US-6.15) + category management, under the POS `?view=` shell.
+  - **M6 Part 2 (next):** the POS sell screen (grid/cart/checkout, cash-change, container mode), stock deduction into the inventory ledger, Force Sale (ADR-009), and POS History + void. `current_stock` is ledger-driven and starts at 0 — **restock is M7**. The Collections summary already spans `POS_SALE`, so POS revenue surfaces there automatically once sales exist. Dashboard panels (US-2.10/2.11/5.4) land in M8.
 
 ---
 
 ## Last Completed Work
+
+**DEV-LOG `#025` — Product Catalog & Categories (Milestone 6 Part 1)** (committed):
+
+- **No schema migration** — `Product` / `ProductCategory` were authored in `#016`.
+- **Pure lib** (`lib/products/`): `types.ts` (ProductType STANDARD/SERVING_BASED + labels + guard), `margin.ts` (`grossMargin` — pure ₱+%, US-6.15; `%` null at ₱0 selling; null when cost unset). **+6 tests (71 total).**
+- **Schema + actions:** `pos/product-schema.ts` (Zod shared client+server; `superRefine` requires `servings_per_container` for SERVING_BASED; `normalizeProduct` strips serving fields from STANDARD). `product-actions.ts` (create/update/archive/restore — gym-scoped, category-ownership checked, soft delete ADR-005, never writes `current_stock`). `category-actions.ts` (create/rename, dup-name block, no delete at MVP).
+- **UI:** POS `?view=` sub-nav (`pos-nav.tsx` — Sell / Products / History; Sell + History are Part-2 placeholders). Products view (server, URL search + show-archived ADR-047) + form dialog (RHF, type toggle reveals serving/container fields, live margin, category select) + row actions (Edit · Archive/Restore) + category manager (add + inline rename) + toolbar.
+- **Scope boundary:** `current_stock` starts at 0 (ledger-driven, ADR-004); restock is M7; Force Sale + the sell screen are Part 2. Image is a URL field (R2 upload deferred).
+- Verified: type-check ✓ · lint ✓ · test 71/71 ✓ · build ✓ (`/pos` 15.1 kB) · **Neon smoke** (STANDARD + SERVING_BASED create w/ serving fields, stock 0, price edit, archive excludes from active query, restore, category rename; removed).
 
 **DEV-LOG `#024` — Client Payments (Milestone 5 COMPLETE)** (committed):
 
@@ -124,7 +133,12 @@
         payments/         page (?view shell) + payments-nav + actions (void)
                           + history-view + payment-filters + void-action
                           + collections-view + collections-date (M5)
-        pos, inventory, reports/  placeholders
+        pos/              page (?view shell) + pos-nav + products-view
+                          + products-toolbar + products-search-params
+                          + product-form-dialog + product-row-actions
+                          + product-schema + product-actions + new-product-button
+                          + category-manager + category-actions (M6 Part 1)
+        inventory, reports/  placeholders
         settings/         page + settings-form + timezone-combobox + actions + schema
                           + membership-plans + plan-actions + plan-schema (US-3.9)
         clients/          page (list) + actions + client-schema + search-params
@@ -143,7 +157,8 @@
                       utils.ts (+ test); clients/ (derive[+test], list, sort,
                       duplicate); memberships/ (duration[+test]);
                       attendance/ (history, today, analytics, +tests);
-                      payments/ (method, void, collections [+test]); dates (+test)
+                      payments/ (method, void, collections [+test]); dates (+test);
+                      products/ (types, margin [+test])
     middleware.ts     default-deny route protection
     generated/        prisma client (gitignored, regenerated via `pnpm db:generate`)
   prisma/
@@ -172,14 +187,15 @@ Fully implemented and verified:
 - **Membership Management (`#021`, US-3.1/3.2/3.3/3.4/3.9/3.10)** — create/renew/cancel membership (canonical date math ADR-040, snapshot price ADR-003), ad-hoc custom durations (ADR-015), Membership Plan catalog in Settings (US-3.9, last-active-plan retirement blocked), context-aware Client Profile button + history Cancel. Month→days pinned by ADR-048 (30/60/90). **Payment record (`CLIENT_TRANSACTION` + payment method) deferred to M5 (US-5.1)** — M3 stores `price_paid` only; the history VOID badge is wired and lights up with M5.
 - **Attendance (`#022` core + `#023` Analytics, US-4.1–4.5/4.8/4.9/4.10/4.11)** — three-view module (ADR-023): Check-In Station (auto-focus search → branch flows: duplicate/expired-renewal/upcoming/conversion/fee/quick-create + post-check-in expiry toast), Today's Check-Ins (total/unique + 2nd-visit + correction), Attendance History (URL date/visit-type filters), same-day `time_in` correction (US-4.11), Client Profile attendance filters, and Attendance Analytics (KPI cards + Recharts trend/day-of-week/by-hour + Member/Walk-In/Operational insights + Alerts incl. 20%-decline). Snapshots `membership_id`, stamps `created_by`. The walk-in fee dialog now also captures a payment method and creates the `CLIENT_TRANSACTION` (M5).
 - **Client Payments (`#024`, US-5.1/5.2/5.3/5.4)** — payment method on every `CLIENT_TRANSACTION`; M3 create/renew and M4 walk-in check-in create the transaction + line item atomically (membership = `MEMBERSHIP` @ price snapshot; walk-in = `WALK_IN_FEE` @ fee + `fee_override_note` when ≠ default; separate per ADR-024, never mixed per ADR-012). Payments module: Payment History (URL filters — date/method/client name), additive Void (required `void_reason_category`, note for `OTHER`; never cancels membership or deletes attendance), End-of-Day Collections (by-method totals + grand total spanning both transaction types, today-capped date selector). **Milestone 5 complete.**
+- **Product Catalog (`#025`, US-6.1/6.2/6.3/6.4/6.5/6.15)** — POS module `?view=` shell; product CRUD + archive/restore (STANDARD vs SERVING_BASED with conditional servings/container fields, live gross margin), category management (add + rename). Gym-scoped, soft delete (ADR-005); `current_stock` ledger-driven and starts at 0. **Milestone 6 Part 1 done.**
 
-No **Milestone 6+** product features (POS, inventory, dashboard/reports) are implemented yet.
+**Milestone 6 Part 2** (POS sell screen, checkout, stock deduction, container mode, Force Sale, POS History + void) and **Milestones 7–8** (inventory, dashboard/reports) are not implemented yet.
 
 ---
 
 ## Work In Progress
 
-Nothing is partially coded mid-stream — **Milestones 1–5 are committed** (`#015`–`#024`, all verified). Ready to start **Milestone 6 — POS & Product Sales**.
+Nothing is partially coded mid-stream — **Milestones 1–5 + Milestone 6 Part 1 are committed** (`#015`–`#025`, all verified). Ready to start **Milestone 6 Part 2 — the POS sell screen, checkout, stock deduction, and POS History/void**.
 
 ---
 
@@ -198,14 +214,15 @@ No technical debt in the existing code.
 
 ## Next Recommended Milestone
 
-**Milestone 6 — POS & Product Sales** (Milestone 5 is complete). The first revenue surface that is **client-anonymous** (`client_id` null on every `POS_SALE`, ADR-011) and the first to touch the **inventory ledger** (ADR-004). Scope (ROADMAP + USER-STORIES §6, MODULE-SPECS Module 6, USER-FLOWS Flows 8/16/20; ADR-003/004/006/009/011/012/026/027/034):
+**Milestone 6 Part 2 — POS Sell Screen, Checkout, Stock & History/Void** (Part 1 catalog is done). The first revenue surface that is **client-anonymous** (`client_id` null on every `POS_SALE`, ADR-011) and the first to touch the **inventory ledger** (ADR-004). Scope (USER-STORIES §6, MODULE-SPECS Module 6, USER-FLOWS Flows 8/16; ADR-003/004/006/009/011/012/026/027/034):
 
-1. **Product catalog** (US-6.1–6.3, 6.15) — create/edit + soft-delete (`deleted_at`, ADR-005); `STANDARD_PRODUCT` vs `SERVING_BASED_PRODUCT`; `cost_price` + live gross-margin display; `low_stock_threshold` / `reorder_point`; product categories (US-6.5).
-2. **POS screen** (US-6.6–6.9, 6.13, 6.14, 6.16) — category tabs + grid + name search; cart; checkout with payment method + cash-change calculator; Per-Container mode for serving-based products (ADR-027, stock = qty × servings_per_container).
-3. **Stock + snapshots on sale** — each `PRODUCT` line item creates an `InventoryTransaction` (type=SALE) decrementing `current_stock`; `unit_price`/`cost_price_snapshot` snapshot at sale (ADR-003/026); stock-negative sale blocked, Force Sale override logs a `FORCED_SALE` adjustment (ADR-009/034).
-4. **POS History + void** (US-6.10) — `POS_SALE` list filterable by date/method; void with required `void_reason_category` (ADR-028), additive ledger reversal (Flow 11).
+1. **POS sell screen** (US-6.6–6.8, 6.16) — category filter tabs (one per category with ≥1 active product + "All"), product grid (image/name/price), name search (works with the tab filter), cart with quantity adjustment. Reuse the catalog query (`deleted_at IS NULL`). Cart state is the documented Zustand use (ADR-047) — or local component state since it's a single screen.
+2. **Container mode** (US-6.14, Flow 16) — for `SERVING_BASED_PRODUCT` with `container_selling_price` set, a Per Serving / Per Container toggle; container line item: `quantity` = containers, `unit_price` = `container_selling_price`, description "[name] — N container(s) (N×spc servings)", stock deducts `qty × servings_per_container`.
+3. **Checkout** (US-6.9, 6.13) — payment method (reuse `lib/payments/method.ts`) + cash-change calculator (cash received ≥ total to confirm); no client. On confirm: one `POS_SALE` Transaction (`client_id` null) + a `PRODUCT` line item per cart row with `unit_price`/`cost_price_snapshot` taken at checkout (ADR-003/026).
+4. **Stock + Force Sale** — each `PRODUCT` line item creates an `InventoryTransaction` (type=SALE, negative `quantity_delta`, `resulting_stock`, `reference_transaction_line_item_id`) and decrements `Product.current_stock`, all in one interactive `$transaction`. Selling below zero is blocked; an explicit Force Sale override proceeds and logs a `FORCED_SALE` adjustment (ADR-009/034 — system-assigned, not in the manual selector).
+5. **POS History + void** (US-6.10) — `POS_SALE` list with a today's-count/revenue strip, filterable by date/method; void with required `void_reason_category` (ADR-028) + optional note (required for `OTHER`), **additive ledger reversal** (a new ADJUSTMENT per line restoring stock, `reference_transaction_line_item_id` set; Flow 11) — original SALE rows preserved.
 
-> Reuse what M5 built: the `lib/payments/method.ts` selector, the cash/change pattern is new, and **the Collections summary already spans `POS_SALE`** — once POS sales exist they appear in `/payments?view=collections` automatically (no rework). Mirror the `?view=` sub-nav + URL-filter patterns (ADR-047). Snapshots immutable (ADR-003/026); POS and client transactions never mix (ADR-012).
+> Reuse: `lib/payments/method.ts` (payment select), the `?view=` sub-nav + URL-filter patterns (ADR-047), and the interactive-`$transaction` pattern from M5. **The Collections summary already spans `POS_SALE`** — once sales exist they appear in `/payments?view=collections` automatically (no rework). Snapshots immutable (ADR-003/026); POS and client transactions never mix (ADR-012). The grid's category tabs hide categories with zero active products (US-6.16).
 
 **Verify & sync** each step: type-check, lint, test, build; update `DEVELOPMENT-LOG.md`, this file, ROADMAP.
 
@@ -226,4 +243,4 @@ No technical debt in the existing code.
 
 ## Suggested Resume Prompt
 
-> Resume Block23 Gym V2. Read `docs/SESSION_HANDOFF.md` first for current state. **Milestones 1–5 are complete** (`#015`–`#024`: scaffold, schema/DB, Better Auth, app shell, Settings; Client Management — ADR-047 list-state-in-URL, centralized derivation, List/Profile, archive; Membership Management — create/renew/cancel, canonical date math ADR-040, ad-hoc durations ADR-015, Plan catalog US-3.9, month→days ADR-048; Attendance — Check-In Station with branch flows, Today's list, History with URL filters, same-day correction US-4.11, Analytics US-4.10 with Recharts; **Client Payments — payment method on every `CLIENT_TRANSACTION`, M3/M4 retrofitted to create the transaction + line item atomically, Payment History with URL filters, additive Void with required `void_reason_category`, End-of-Day Collections by method spanning both transaction types**). Next is **Milestone 6 — POS & Product Sales (US-6.1–6.16)**: the product catalog (`STANDARD_PRODUCT` / `SERVING_BASED_PRODUCT`, soft-delete, cost price + gross margin, categories), the POS screen (category tabs + grid + search, cart, checkout with payment method + cash-change calculator, Per-Container mode ADR-027), stock + snapshots on sale (each `PRODUCT` line item → `InventoryTransaction` type=SALE decrementing `current_stock`; `unit_price`/`cost_price_snapshot` per ADR-003/026; Force Sale override logs `FORCED_SALE` per ADR-009/034), and POS History + void (required `void_reason_category`, additive ledger reversal, Flow 11). POS sales are client-anonymous (`client_id` null, ADR-011) and never mix with client transactions (ADR-012). **Reuse `lib/payments/method.ts`**; the Collections summary already spans `POS_SALE` so POS revenue appears there automatically. Scope by session `gymId`; list/filter state per ADR-047. Follow the design-first workflow, keep docs synchronized, update `DEVELOPMENT-LOG.md`, and run the full verification gate (type-check, lint, test, build) before calling anything done.
+> Resume Block23 Gym V2. Read `docs/SESSION_HANDOFF.md` first for current state. **Milestones 1–5 are complete and Milestone 6 Part 1 is done** (`#015`–`#025`: scaffold, schema/DB, Better Auth, app shell, Settings; Client Management; Membership Management — date math ADR-040, ad-hoc ADR-015, Plan catalog, month→days ADR-048; Attendance — Check-In/branches, Today, History, correction US-4.11, Analytics US-4.10; Client Payments — payment method on every `CLIENT_TRANSACTION`, M3/M4 retrofitted, Payment History, additive Void, End-of-Day Collections; **Product Catalog — POS `?view=` shell, product CRUD + archive/restore (STANDARD/SERVING_BASED, conditional fields, live gross margin US-6.15), category management**). Next is **Milestone 6 Part 2 — the POS sell screen + checkout + stock + history/void (US-6.6–6.10, 6.13, 6.14, 6.16)**: category tab grid + name search + cart with quantity adjust; container mode for serving-based products (ADR-027 — qty=containers, stock deducts qty×servings_per_container, Flow 16); checkout with payment method (reuse `lib/payments/method.ts`) + cash-change calc, no client; on confirm create one `POS_SALE` (`client_id` null, ADR-011) + a `PRODUCT` line item per row with `unit_price`/`cost_price_snapshot` (ADR-003/026), each creating an `InventoryTransaction` type=SALE decrementing `current_stock` in one interactive `$transaction`; selling below zero blocked, Force Sale override logs `FORCED_SALE` (ADR-009/034); POS History with today's strip + date/method filters + additive void (required `void_reason_category` ADR-028, ledger-reversing ADJUSTMENT per Flow 11). POS never mixes with client transactions (ADR-012). **Restock is M7 — products start at `current_stock` 0**, so seed stock via a temporary PURCHASE ledger row in the smoke test (or test via Force Sale). The Collections summary already spans `POS_SALE` (no rework). Mirror the `?view=` sub-nav + URL-filter patterns (ADR-047). Follow the design-first workflow, keep docs synchronized, update `DEVELOPMENT-LOG.md`, and run the full verification gate (type-check, lint, test, build) before calling anything done.

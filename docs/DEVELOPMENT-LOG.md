@@ -5,6 +5,28 @@ Newest entries at the top.
 
 ---
 
+## [#025] Milestone 6 (part 1) — Product Catalog & Categories (US-6.1/6.2/6.3/6.4/6.5/6.15) — 2026-06-27
+
+**Commit:** _(Done)_
+
+**Purpose:** Build the product catalog + category management — the data and management layer the POS sell screen (Part 2) depends on. No schema migration — `Product` / `ProductCategory` were authored in `#016`. The POS screen, cart/checkout, stock deduction, container mode, and POS History/void are Part 2 (`#026`).
+
+**Scope boundary (M6 vs M7):** restock (US-7.1) is **Milestone 7**, so new products start at `current_stock = 0` (ledger-driven, ADR-004) — the catalog form never writes stock. Selling from zero relies on the Force Sale override (ADR-009), which arrives with the sell screen in Part 2. Product **image** is an optional URL field for now; R2 file-upload UX is deferred.
+
+**Pure lib (`lib/products/`):** `types.ts` (`ProductType` STANDARD/SERVING_BASED + labels + guard, mirrors the Prisma enum), `margin.ts` (`grossMargin` — pure ₱+% for US-6.15; `%` null when selling = 0 to avoid divide-by-zero; null when cost unset). **+6 tests (71 total).**
+
+**Schema + actions:** `pos/product-schema.ts` (Zod, shared client+server; conditional `superRefine` requiring `servings_per_container` for SERVING_BASED; `normalizeProduct` strips serving fields from STANDARD; required numbers NaN-on-empty, optional nullable). `product-actions.ts` (create/update/archive/restore — gym-scoped, category-ownership checked, soft delete via `deleted_at` ADR-005, never writes `current_stock`). `category-actions.ts` (create/rename — gym-scoped, case-insensitive duplicate block, no delete at MVP).
+
+**UI:** POS module `?view=` sub-nav (`pos-nav.tsx` — Sell / Products / History; Sell + History are Part-2 placeholders). **Products view** (`products-view.tsx`, server) — URL-driven search + show-archived (ADR-047, `products-search-params.ts`), table (name/category/type/price/live margin/stock), `Manage categories` + `New product` actions, "add a category first" empty state. `product-form-dialog.tsx` (RHF + zod; type toggle reveals servings/container fields; live gross-margin readout; category select). `product-row-actions.tsx` (Edit · Archive/Restore with confirm). `category-manager.tsx` (add + inline rename). `new-product-button.tsx` (disabled until a category exists). `products-toolbar.tsx` (debounced search + archived toggle).
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (71/71) · `pnpm build` ✓ (`/pos` 15.1 kB). **Runtime smoke (Neon):** STANDARD + SERVING_BASED products created (serving fields persisted: spc 70, container ₱3000; both stock 0); price edit applied; archive excluded the product from the active query (active 1 / all 2) and restore returned it; category rename applied. Smoke data removed.
+
+**Doc sync:** DEVELOPMENT-LOG (this entry); ROADMAP (M6 catalog boxes); SESSION_HANDOFF; README; CLAUDE.md; memory. (No new ADR — built on ADR-003/004/005/026/027.)
+
+**Notes / deferrals:** `current_stock` editing, restock, and inventory valuation are M7. The POS sell screen / checkout / Force Sale / container-mode sale / POS History + void are **M6 Part 2 (`#026`)**. Image upload (R2) deferred — URL field for now. Category delete out of scope (products reference categories). **Next: Milestone 6 Part 2.**
+
+---
+
 ## [#024] Milestone 5 — Client Payments (US-5.1/5.2/5.3/5.4) — Milestone 5 COMPLETE — 2026-06-27
 
 **Commit:** _(Done)_
