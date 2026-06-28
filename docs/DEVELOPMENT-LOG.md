@@ -5,9 +5,35 @@ Newest entries at the top.
 
 ---
 
-## [#027] Milestone 7 — Inventory: restock, adjustments, Current Stock & Movement History (US-7.1/7.2/7.4/7.5/7.6/7.7/7.8) — Milestone 7 COMPLETE — 2026-06-28
+## [#028] Milestone 8 (part 1) — Dashboard (US-8.1) — 2026-06-28
 
 **Commit:** _(pending)_
+
+**Purpose:** Build the Dashboard — the owner's daily command center (Module 1, US-8.1). First screen that consumes every prior module: the unified `Transaction` ledger (ADR-006), Attendance, the inventory ledger, and central client derivation. **No schema migration.** This is Part 1 of 4 for Milestone 8 (the Reports suite follows in `#029`–`#031`).
+
+**Pure lib (`lib/revenue/revenue.ts`):** the shared revenue-aggregation layer reused by the Dashboard and the M8 revenue reports — `RevenueSource` (`membership`/`walkin`/`product`) + labels, `classifyClientTransaction` (a CLIENT_TRANSACTION is membership-or-walk-in by line item type, never mixed — ADR-024; POS_SALE is always product), `revenueBySource`, `dailyRevenueTrend` (gap-filled multi-series), `pctChange` (null when prior = 0 → "N/A"). **+8 tests (100 total).**
+
+**Period selector (`dashboard-period-options.ts` + `dashboard-period.tsx`):** Today / Week (Mon-based) / Month (MTD) toggle driving the chart row; URL state `?period=` (ADR-047). The KPI cards always show their own contextual period regardless of the selector.
+
+**Charts (`dashboard-charts.tsx`, client Recharts):** Revenue trend (multi-series line — Membership/Walk-in/Product, `--chart-1/3/2`), Membership status donut (Active/Expiring/Expired via `PieChart`+`Cell`), Daily attendance (stacked bar Member vs Walk-in), Top products (horizontal bar, units/servings sold). Money axes/tooltips formatted in ₱; empty states for the donut + top-products.
+
+**View (`dashboard-view.tsx`, server):**
+- **6-card KPI strip:** Active Members (+Δ vs a month ago), Today's Check-Ins (+Δ vs yesterday), MTD Revenue (+% vs same-days last month via `pctChange`), Today's Revenue, Expiring Soon (amber), Inventory Value (reuses `inventoryValuation`, excluded-count hint). All revenue excludes voids (`status = COMPLETED`).
+- **Charts** fed by the period range: revenue trend (transactions bucketed to gym-local day + classified by source), membership donut + daily attendance (gap-filled), top products (SALE-ledger `groupBy`, abs `quantity_delta`).
+- **Six live-feed panels:** Recent POS sales (last 5 + relative time), Expiring soon (red <7d / amber), Inventory alerts (low-stock + remaining + days-until-stockout reusing `daysUntilStockout`), Today's Collections (reuses `summarizeCollections`, both transaction types, grand total), Frequent walk-ins (top 5 walk-in-only by visit count — ADR-036, no threshold), At-risk members (reuses `deriveClient.atRisk`). Each panel "View all →" links to the matching filtered Client List chip / module.
+- All client signals (active/expiring/at-risk/frequent) derive once through the shared `deriveClient` so the Dashboard agrees with the Client List + Attendance Analytics.
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (100/100) · `pnpm build` ✓ (`/dashboard` 123 kB w/ Recharts). **Live query smoke (Neon):** the full 9-query Dashboard battery (transaction findMany w/ `lineItems`, the COMPLETED instant-bound aggregates, attendance count + groupBy, client+membership derive feed, product + SALE `groupBy`, recent POS, today's collections) executed cleanly against the live schema (3 clients, 1 attendance-agg row); script removed.
+
+**Doc sync:** DEVELOPMENT-LOG (this entry); ROADMAP (M8 Part 1 ✅ + parts plan); SESSION_HANDOFF; CLAUDE.md; memory. (No new ADR — built on ADR-002/006/024/035/036 + the M5/M7 derivations.)
+
+**Notes / decisions:** Default period is **Week**. Active-members delta compares against in-effect memberships at the same date one month ago (computed from the already-fetched membership rows — no extra query). MTD % compares the current month-to-date against the **same number of elapsed days** last month (avoids month-length skew). Top products rank by units/servings from the SALE ledger (consistent across STANDARD/serving/container). The membership donut counts Active / Expiring-soon / Expired (Upcoming excluded). **Next: Milestone 8 Part 2 (`#029`) — Reports index + shared shell + CSV export + revenue/financial reports.**
+
+---
+
+## [#027] Milestone 7 — Inventory: restock, adjustments, Current Stock & Movement History (US-7.1/7.2/7.4/7.5/7.6/7.7/7.8) — Milestone 7 COMPLETE — 2026-06-28
+
+**Commit:** `4125768`
 
 **Purpose:** Close the inventory-ledger loop. M6 sales only *decrement* `current_stock`; M7 adds restock (raises it), manual adjustments, and the Current Stock analytics + Movement History views. No schema migration — `InventoryTransaction` (type/quantityDelta/resultingStock/adjustmentReasonCategory/totalRestockCost/note) was authored in `#016`.
 

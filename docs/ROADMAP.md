@@ -84,8 +84,8 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 
 > **`#027`**: the Inventory `?view=` shell (Current Stock · Movement History). Restock (`PURCHASE` ledger entry raising `current_stock` — `+units` STANDARD or `+containers×servings_per_container` SERVING_BASED, Flow 9, optional `total_restock_cost`) and Manual Adjustment (`ADJUSTMENT` with required owner reason category — `FORCED_SALE` excluded per ADR-034 — note for `OTHER`, below-zero blocked, Flow 19) are row dialogs, each one interactive `$transaction` moving ledger + cached `current_stock` together (ADR-004). Current Stock view derives low-stock/reorder flags, remaining-servings, days-until-stockout, this-month shrinkage (amber/red), and an inventory valuation footer — all at query time. Movement History is the per-product PURCHASE/SALE/ADJUSTMENT ledger with restock cost + reason filters. The Dashboard-side consumers of US-7.3/7.6/7.7 (low-stock feed, stockout estimates, Inventory Value KPI) land in **Milestone 8**.
 
-### Milestone 8 — Dashboard & Reports
-- [ ] Dashboard: 6-card KPI strip (Active Members, Today's Check-Ins, MTD Revenue, Today's Revenue, Expiring Soon, Inventory Value); trend charts (revenue/attendance/top products); live feeds (POS sales, expiring members, inventory alerts with stockout estimates, Today's Collections breakdown, frequent walk-ins, at-risk members) (US-8.1, US-2.10, US-2.11, US-5.4, US-7.6, US-7.7)
+### Milestone 8 — Dashboard & Reports (in progress — Part 1 `#028` Dashboard ✅)
+- [x] Dashboard: 6-card KPI strip (Active Members, Today's Check-Ins, MTD Revenue, Today's Revenue, Expiring Soon, Inventory Value); trend charts (revenue multi-series/membership donut/daily attendance/top products); live feeds (POS sales, expiring members, inventory alerts with stockout estimates, Today's Collections breakdown, frequent walk-ins, at-risk members) (US-8.1, US-2.10, US-2.11, US-5.4, US-7.6, US-7.7) — **Part 1 (`#028`)**
 - [ ] Revenue reports by period (Daily / Weekly / Monthly / This Year / Custom Range) and source (membership / walk-in / product) (US-8.2)
 - [ ] Revenue by payment method (Cash, GCash, Card, Other) (US-8.3)
 - [ ] Revenue by product category (US-8.4)
@@ -106,6 +106,8 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 - [ ] Period-over-period revenue comparison: current vs. prior period side-by-side by source, with % change; This Week/Month/Year presets + custom (US-8.20)
 - [ ] Slow-moving / dead stock report: active products with zero sales in 30/60/90-day window; cost value locked in stock; longest-inactive first (US-8.21)
 - [ ] Converted walk-ins report: clients who converted from walk-in to member in the period (ADR-020 derivation), with conversion timeline and pre-conversion visit count (US-8.22)
+
+> **Milestone 8 is delivered in four parts.** **Part 1 (`#028`) — Dashboard (US-8.1) ✅:** the 6-card KPI strip, the period-driven chart row (revenue multi-series line, membership donut, daily attendance stacked bar, top products horizontal bar — Recharts), and six live-feed panels (recent POS sales, expiring soon, inventory alerts w/ stockout estimate, Today's Collections, frequent walk-ins, at-risk members). Reuses central client derivation, the inventory derivations (`lib/inventory/stock.ts`), `summarizeCollections`, and a new shared revenue-aggregation lib (`lib/revenue/revenue.ts`). **Part 2 (`#029`)** — Reports index + shared report shell + CSV export (US-8.10) + the revenue/financial reports (US-8.2/8.3/8.4/8.20/8.15). **Part 3 (`#030`)** — membership + attendance reports (US-8.5/8.6/8.8/8.13/8.14/8.16/8.17/8.19/8.22). **Part 4 (`#031`)** — product + inventory reports (US-8.7/8.9/8.12/8.18/8.21) → MVP complete.
 
 ---
 

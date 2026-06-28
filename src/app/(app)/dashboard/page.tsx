@@ -1,13 +1,23 @@
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { getCurrentGym } from "@/lib/gym";
+import { gymToday } from "@/lib/dates";
 import { PageHeader } from "@/components/page-header";
+import { DashboardView } from "./dashboard-view";
+import { isDashboardPeriod, type DashboardPeriod } from "./dashboard-period-options";
 
-export const metadata = {
-  title: "Dashboard · Block23 Gym",
-};
+export const metadata = { title: "Dashboard · Block23 Gym" };
 
-export default async function DashboardPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const gym = await getCurrentGym();
+  if (!gym) redirect("/login");
+
+  const sp = await searchParams;
+  const rawPeriod = typeof sp.period === "string" ? sp.period : undefined;
+  const period: DashboardPeriod = isDashboardPeriod(rawPeriod) ? rawPeriod : "week";
 
   return (
     <>
@@ -15,11 +25,17 @@ export default async function DashboardPage() {
         title="Dashboard"
         description="Daily operational command center."
       />
-      <p className="text-sm text-muted-foreground">
-        Signed in as <span className="text-foreground">{session?.user.name}</span>
-        {session?.user.email ? ` (${session.user.email})` : null}. The KPI strip,
-        charts, and live feeds arrive in Milestone 8.
-      </p>
+      <DashboardView
+        gymId={gym.id}
+        timezone={gym.timezone}
+        today={gymToday(gym.timezone)}
+        period={period}
+        thresholds={{
+          expirationWarningDays: gym.expirationWarningDays,
+          walkinInactivityThresholdDays: gym.walkinInactivityThresholdDays,
+          memberInactivityWarningDays: gym.memberInactivityWarningDays,
+        }}
+      />
     </>
   );
 }
