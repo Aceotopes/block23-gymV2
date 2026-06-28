@@ -5,9 +5,41 @@ Newest entries at the top.
 
 ---
 
-## [#028] Milestone 8 (part 1) — Dashboard (US-8.1) — 2026-06-28
+## [#029] Milestone 8 (part 2) — Reports index, shared shell, CSV export & financial reports (US-8.2/8.3/8.4/8.10/8.15/8.20) — 2026-06-28
 
 **Commit:** _(pending)_
+
+**Purpose:** Stand up the Reports module — the index, the shared report infrastructure (period selector + CSV export), and the five revenue/financial reports — Part 2 of 4 for Milestone 8. **No schema migration.** Reads the unified `Transaction` ledger (ADR-006); voids excluded from revenue; snapshots keep historical figures correct (ADR-003/026).
+
+**Shared libs (`lib/reports/`):**
+- `period.ts` — `ReportPeriod` presets (Daily/Weekly/Monthly/This Year/Custom) → `reportRange` (inclusive date-only, ending today; This Year = Jan 1→today), plus `priorRange` (the immediately-preceding equal-length range, US-8.20).
+- `csv.ts` — `csvCell`/`toCsv` (RFC 4180-ish escaping: quote fields with comma/quote/newline, double embedded quotes).
+- **+11 tests (111 total).**
+
+**Reports infrastructure (`reports/`):**
+- `registry.ts` — the SSOT for all 19 reports (slug/title/description/group/story/`implemented`). The index links implemented reports and shows the rest as "Soon"; the flag flips on as Parts 3–4 land.
+- `page.tsx` — the index, grouped by domain (Revenue & financial / Membership / Attendance & clients / Products & inventory).
+- `[slug]/page.tsx` — resolves the slug → metadata (404 if missing/unimplemented), then dispatches to the report component with `{ gymId, timezone, today, sp }`.
+- `report-shell.tsx` (back link, `ReportNoData`, shared `peso`), `report-period.tsx` (the URL-state period selector, ADR-047), `csv-export-button.tsx` (builds the CSV client-side from the rows the server already rendered — no second query; UTF-8 BOM so Excel reads ₱).
+
+**Financial reports (`reports/reports/`):**
+- **Revenue by period & source** (US-8.2) — by-source summary cards (Membership/Walk-in/Product/Total via `revenueBySource` + `classifyClientTransaction`) + a gap-filled per-day table; CSV.
+- **Revenue by payment method** (US-8.3) — reuses `summarizeCollections` over both transaction types; all four methods + grand total.
+- **Revenue by product category** (US-8.4) — POS_SALE PRODUCT line item subtotals grouped by the product's category.
+- **Period-over-period revenue** (US-8.20) — current vs. `priorRange` by source with `pctChange` (green/red, "N/A"/"—" when the prior range has no data).
+- **Void analysis** (US-8.15) — voided transactions spanning both types, filterable by a transaction-type toggle; a category summary (all six categories, never collapsed) + a detail table; amounts shown as the amount removed from revenue.
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (111/111) · `pnpm build` ✓ (`/reports` index + `/reports/[slug]` 2.02 kB). **Live query smoke (Neon):** all five report query shapes executed against the live schema (the `lineItems` source classification, the `referenceProduct.category` join, the COMPLETED instant bounds, the `priorRange` comparison range, the VOID filter), and `toCsv` escaping verified; script removed.
+
+**Doc sync:** DEVELOPMENT-LOG (this entry); ROADMAP (Part 2 reports ✅); SESSION_HANDOFF; CLAUDE.md; memory. (No new ADR — built on ADR-003/006/024/026/028/035/047 + `lib/revenue` from `#028`.)
+
+**Notes / decisions:** Each `/reports/[slug]` is one dynamic route dispatching via the registry (not 19 folders) — scales cleanly as Parts 3–4 fill in. The CSV is built client-side from the same rows the table renders (single source, no export route / duplicate query). Period presets resolve to a single range ending today; "last month / arbitrary windows" are the Custom range's job. Period-over-period uses the literal AC definition — the immediately-preceding equal-length range (`priorRange`), not calendar months. **Next: Milestone 8 Part 3 (`#030`) — membership + attendance reports (US-8.5/8.6/8.8/8.13/8.14/8.16/8.17/8.19/8.22).**
+
+---
+
+## [#028] Milestone 8 (part 1) — Dashboard (US-8.1) — 2026-06-28
+
+**Commit:** `1ae0af1`
 
 **Purpose:** Build the Dashboard — the owner's daily command center (Module 1, US-8.1). First screen that consumes every prior module: the unified `Transaction` ledger (ADR-006), Attendance, the inventory ledger, and central client derivation. **No schema migration.** This is Part 1 of 4 for Milestone 8 (the Reports suite follows in `#029`–`#031`).
 
