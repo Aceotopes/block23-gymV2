@@ -70,17 +70,19 @@ All items in this phase are committed scope (P0). See [User Stories](docs/USER-S
 
 > **Part 1 (`#025`)**: product CRUD + archive/restore, STANDARD vs SERVING_BASED with conditional fields, live gross margin (US-6.15), category management. **Part 2 (`#026`)**: the POS sell screen (tabs/grid/search/cart + container-mode toggle), checkout (payment method + cash-change), `POS_SALE` creation with `unit_price`/`cost_price_snapshot` snapshots (ADR-003/026) + `SALE` inventory entries decrementing `current_stock` (ADR-004), Force Sale override logging a `FORCED_SALE` adjustment (ADR-009/034), and POS History + additive void (ADR-028, Flow 11). `current_stock` was seeded directly in the smoke — **in-app restock is M7 (US-7.1)**; the Collections summary (M5) already spans `POS_SALE`. Product image is a URL field (R2 upload deferred).
 
-### Milestone 7 — Inventory
-- [ ] Record product restocks — units for STANDARD_PRODUCT, containers × servings_per_container for SERVING_BASED_PRODUCT; optional total restock cost capture (US-7.1, US-7.5)
-- [ ] Every stock change logged as a discrete inventory movement record; manual adjustments require adjustment_reason_category (structured enum) and optional detail note (US-7.2)
-- [ ] Low-stock dashboard alerts per product threshold; reorder_point indicator on Current Stock view (distinct from low_stock_threshold) (US-7.3)
-- [ ] Remaining servings display for serving-based products (US-7.4)
-- [ ] Days-until-stockout estimate per product on Current Stock view — current_stock ÷ avg daily sales (last 30 days); shown in Inventory alerts panel on Dashboard (US-7.6)
-- [ ] Inventory valuation footer on Current Stock view: SUM(current_stock × cost_price) with excluded-count note; Dashboard KPI card (US-7.7)
-- [ ] Shrinkage column on Current Stock view: total negative adjustment quantity this month, broken down by adjustment_reason_category on expand; red/amber thresholds (US-7.8)
-- [ ] Automatic stock deduction on POS sale (covered by Milestone 6)
-- [ ] Force-sale override with logged flagged adjustment (covered by Milestone 6)
-- [ ] Manual inventory adjustments with required adjustment_reason_category and optional detail note (covered by US-7.2)
+### Milestone 7 — Inventory ✅ complete (`#027`)
+- [x] Record product restocks — units for STANDARD_PRODUCT, containers × servings_per_container for SERVING_BASED_PRODUCT; optional total restock cost capture (US-7.1, US-7.5)
+- [x] Every stock change logged as a discrete inventory movement record; manual adjustments require adjustment_reason_category (structured enum) and optional detail note (US-7.2)
+- [x] reorder_point indicator on Current Stock view (distinct from low_stock_threshold), low-stock flag on the stock view (US-7.3 — the Dashboard low-stock alert feed lands in M8)
+- [x] Remaining servings display for serving-based products (US-7.4)
+- [x] Days-until-stockout estimate per product on Current Stock view — current_stock ÷ avg daily sales (last 30 days) (US-7.6 — the Dashboard alerts-panel surfacing lands in M8)
+- [x] Inventory valuation footer on Current Stock view: SUM(current_stock × cost_price) with excluded-count note (US-7.7 — the Dashboard KPI card lands in M8)
+- [x] Shrinkage column on Current Stock view: total negative adjustment quantity this month, broken down by adjustment_reason_category on hover; red/amber thresholds (US-7.8)
+- [x] Automatic stock deduction on POS sale (delivered in Milestone 6)
+- [x] Force-sale override with logged flagged adjustment (delivered in Milestone 6)
+- [x] Manual inventory adjustments with required adjustment_reason_category and optional detail note (US-7.2); a below-zero manual decrease is blocked (Flow 19, unlike Force Sale)
+
+> **`#027`**: the Inventory `?view=` shell (Current Stock · Movement History). Restock (`PURCHASE` ledger entry raising `current_stock` — `+units` STANDARD or `+containers×servings_per_container` SERVING_BASED, Flow 9, optional `total_restock_cost`) and Manual Adjustment (`ADJUSTMENT` with required owner reason category — `FORCED_SALE` excluded per ADR-034 — note for `OTHER`, below-zero blocked, Flow 19) are row dialogs, each one interactive `$transaction` moving ledger + cached `current_stock` together (ADR-004). Current Stock view derives low-stock/reorder flags, remaining-servings, days-until-stockout, this-month shrinkage (amber/red), and an inventory valuation footer — all at query time. Movement History is the per-product PURCHASE/SALE/ADJUSTMENT ledger with restock cost + reason filters. The Dashboard-side consumers of US-7.3/7.6/7.7 (low-stock feed, stockout estimates, Inventory Value KPI) land in **Milestone 8**.
 
 ### Milestone 8 — Dashboard & Reports
 - [ ] Dashboard: 6-card KPI strip (Active Members, Today's Check-Ins, MTD Revenue, Today's Revenue, Expiring Soon, Inventory Value); trend charts (revenue/attendance/top products); live feeds (POS sales, expiring members, inventory alerts with stockout estimates, Today's Collections breakdown, frequent walk-ins, at-risk members) (US-8.1, US-2.10, US-2.11, US-5.4, US-7.6, US-7.7)

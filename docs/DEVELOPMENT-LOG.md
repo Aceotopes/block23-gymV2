@@ -5,6 +5,34 @@ Newest entries at the top.
 
 ---
 
+## [#027] Milestone 7 — Inventory: restock, adjustments, Current Stock & Movement History (US-7.1/7.2/7.4/7.5/7.6/7.7/7.8) — Milestone 7 COMPLETE — 2026-06-28
+
+**Commit:** _(pending)_
+
+**Purpose:** Close the inventory-ledger loop. M6 sales only *decrement* `current_stock`; M7 adds restock (raises it), manual adjustments, and the Current Stock analytics + Movement History views. No schema migration — `InventoryTransaction` (type/quantityDelta/resultingStock/adjustmentReasonCategory/totalRestockCost/note) was authored in `#016`.
+
+**Pure lib (`lib/inventory/`):**
+- `adjustment.ts` — owner-selectable `ADJUSTMENT_REASON_CATEGORIES` (the 7 owner reasons; **`FORCED_SALE` excluded** from the selector per ADR-034) + `isAdjustmentReasonCategory` guard + `ADJUSTMENT_REASON_LABELS` (all 8, incl. FORCED_SALE for movement-history display) + `MOVEMENT_TYPE_LABELS` (PURCHASE→Restock / SALE / ADJUSTMENT).
+- `stock.ts` — `restockDelta` (STANDARD +units / SERVING_BASED +containers×spc, Flow 9), `daysUntilStockout` (`stock ÷ (sold30/30)`, null when no sales — US-7.6), `inventoryValuation` (`Σ stock×cost`, null-cost excluded + counted — US-7.7), `shrinkageLevel` (none/amber/red; red = shrinkage > 10% of period sales, suppressed at zero sales — US-7.8).
+- **+16 tests (92 total).**
+
+**Schema + actions (`inventory/`, gym-scoped, server-authoritative, interactive `$transaction`):**
+- `inventory-schema.ts` — `restockSchema` (whole `quantityReceived ≥ 1`, optional `totalRestockCost ≥ 0`) and `adjustSchema` (non-zero whole `quantityDelta`, owner `category` enum, note required for `OTHER` via `superRefine`).
+- `actions.ts` — `restockProduct` → a `PURCHASE` entry (`quantity_delta = restockDelta`, `resulting_stock`, `total_restock_cost`) + raise `current_stock`. `adjustStock` → a signed `ADJUSTMENT` (required `adjustment_reason_category`, note for OTHER) + update `current_stock`; **a manual decrease below zero is BLOCKED** (Flow 19 — unlike the M6 Force Sale). Both move ledger + cached stock together (ADR-004).
+
+**UI (`?view=` shell — Current Stock · Movement History, ADR-047):**
+- `page.tsx` + `inventory-nav.tsx` — the two-view shell (replaces the M7 placeholder).
+- **Current Stock** (`stock-view.tsx`, server) — per-product stock (remaining servings + ≈containers for SERVING_BASED, US-7.4), low-stock + reorder badges (US-7.3), days-until-stockout (US-7.6), this-month shrinkage column with amber/red + per-category hover breakdown (US-7.8), and an inventory-valuation footer with excluded-count note (US-7.7). Derived figures come from three ledger `groupBy` aggregations (SALE last-30, SALE this-month, negative-ADJUSTMENT this-month) computed at query time. `stock-toolbar.tsx` (show-archived) + `stock-row-actions.tsx` (Restock · Adjust) + `restock-dialog.tsx` (live servings preview) + `adjust-dialog.tsx` (resulting-stock preview, below-zero guard).
+- **Movement History** (`movements-view.tsx`, server) — the per-product PURCHASE/SALE/ADJUSTMENT ledger; signed colored deltas, restock cost, reason labels (FORCED_SALE flagged), notes. `movements-filters.tsx` — date preset + movement type + product, URL state (ADR-047, reuses the attendance `presetRange`).
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (92/92) · `pnpm build` ✓ (`/inventory` 4.32 kB). **Runtime smoke (Neon):** serving-based product, restock 2 containers → `current_stock` 0→140; a −30 SALE then a −10 DAMAGE adjustment → 100; below-zero adjustment correctly rejected by the guard; stock-view aggregations — sold(abs)=30 → days-until-stockout 100, shrinkage `DAMAGE:10`, valuation ₱2000. Smoke data removed.
+
+**Doc sync:** DEVELOPMENT-LOG (this entry); ROADMAP (M7 ✅ complete); SESSION_HANDOFF; CLAUDE.md; memory. (No new ADR — built on ADR-004/026/028/034 + ADR-047.)
+
+**Notes / decisions:** Shrinkage counts only **negative** ADJUSTMENT deltas — so the M6 `FORCED_SALE` markers (`quantity_delta = 0`) and void-reversal ADJUSTMENTs (positive) are naturally excluded; only owner manual losses register. The Current Stock view includes archived products under the show-archived toggle (they keep stock + ledger so the owner can write off remaining stock), but the valuation footer counts **active** priced stock only (US-7.7). Days-until-stockout uses a 30-day window ÷ 30 for avg daily velocity. Restock/Adjust are row dialogs (Flow 9/19 — "select product → action"), not separate tabs. **The Dashboard-side consumers (low-stock feed, stockout estimates in alerts, Inventory Value KPI — US-7.3/7.6/7.7) land in Milestone 8.** **Next: Milestone 8 — Dashboard & Reports.**
+
+---
+
 ## [#026] Milestone 6 (part 2) — POS Sell Screen, Checkout, Stock & History/Void (US-6.6–6.10/6.13/6.14/6.16) — Milestone 6 COMPLETE — 2026-06-27
 
 **Commit:** _(Done)_

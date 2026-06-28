@@ -1,22 +1,29 @@
 # Session Handoff — Block23 Gym Management System
 
 > Canonical handoff document for resuming development across Claude Code sessions.
-> Last updated: **2026-06-27** (after DEV-LOG `#026` — POS sell/checkout/void; **Milestone 6 COMPLETE**).
+> Last updated: **2026-06-28** (after DEV-LOG `#027` — Inventory restock/adjustments/Current Stock/Movements; **Milestone 7 COMPLETE**).
 
 ---
 
 ## Project Status
 
 - **Current Phase:** Phase 1 — MVP
-- **Current Milestone:** **Milestone 6 — POS & Product Sales ✅ complete (`#025` catalog + `#026` sell/checkout/void).** Next: **Milestone 7 — Inventory.**
+- **Current Milestone:** **Milestone 7 — Inventory ✅ complete (`#027`).** Next: **Milestone 8 — Dashboard & Reports.**
 - **Overall Progress:**
   - **Planning & design:** 100% complete — 10 planning docs, 48 ADRs (ADR-030–032 intentionally unused), Design System hardened as enforceable SSOT.
-  - **Implementation:** **Milestones 1–6 done (`#015`–`#026`).** 6 of 8 milestones complete. M5: payment method on every `CLIENT_TRANSACTION`; M3/M4 retrofitted; Payments module. M6: product catalog + category management; the POS sell screen (tabs/grid/search/cart + container mode), checkout (payment method + cash-change), `POS_SALE` with price/cost snapshots + `SALE` ledger entries decrementing `current_stock`, Force Sale (ADR-009/034), and POS History + additive void.
-  - **M7 (next):** Inventory — restock (raises `current_stock` via PURCHASE ledger entries — products currently start at 0), manual adjustments (required reason category), Current Stock view (low-stock flag, reorder indicator, days-until-stockout, valuation footer, shrinkage column), remaining-servings display. Dashboard panels (US-2.10/2.11/5.4/7.6/7.7) land in M8.
+  - **Implementation:** **Milestones 1–7 done (`#015`–`#027`).** 7 of 8 milestones complete. M5: payment method on every `CLIENT_TRANSACTION`; M3/M4 retrofitted; Payments module. M6: product catalog + category management; the POS sell screen (tabs/grid/search/cart + container mode), checkout (payment method + cash-change), `POS_SALE` with price/cost snapshots + `SALE` ledger entries decrementing `current_stock`, Force Sale (ADR-009/034), and POS History + additive void. M7: restock (`PURCHASE` ledger entry raising `current_stock`) + manual adjustments (required reason, below-zero blocked), the Current Stock view (low-stock/reorder flags, remaining-servings, days-until-stockout, valuation footer, shrinkage), and the Movement History ledger.
+  - **M8 (next):** Dashboard & Reports — the 6-card KPI strip (incl. Inventory Value US-7.7), trend/breakdown charts, live-feed panels (POS sales, expiring members, low-stock alerts with stockout estimates US-7.3/7.6, Today's Collections US-5.4, frequent walk-ins US-2.10, at-risk members US-2.11), and the Reports suite (US-8.x). M7 delivered the inventory *derivations* (valuation, stockout, shrinkage) the Dashboard cards/feeds consume.
 
 ---
 
 ## Last Completed Work
+
+**DEV-LOG `#027` — Inventory: restock, adjustments, Current Stock & Movement History (Milestone 7 COMPLETE)** (committed):
+
+- **No schema migration** — `InventoryTransaction` was authored in `#016`. **Pure lib** `lib/inventory/`: `adjustment.ts` (owner reason categories — `FORCED_SALE` excluded from the selector per ADR-034 — labels incl. FORCED_SALE for display, movement-type labels) + `stock.ts` (`restockDelta`, `daysUntilStockout`, `inventoryValuation`, `shrinkageLevel`). **+16 tests (92 total).**
+- **Actions** (`inventory/actions.ts`, gym-scoped, interactive `$transaction`): `restockProduct` — `PURCHASE` entry (`+units` STANDARD / `+containers×spc` SERVING_BASED, optional `total_restock_cost`) raising `current_stock` (Flow 9); `adjustStock` — signed `ADJUSTMENT` with required owner reason + note-for-`OTHER`, **below-zero decrease blocked** (Flow 19). Schemas in `inventory-schema.ts`.
+- **UI** (`?view=` shell — Current Stock · Movement History): `stock-view` (server — remaining-servings, low-stock/reorder badges, days-until-stockout, this-month shrinkage amber/red w/ hover breakdown, valuation footer; three ledger `groupBy` aggregations) + `stock-toolbar` (show-archived) + `stock-row-actions` → `restock-dialog` / `adjust-dialog`. `movements-view` (server — per-product PURCHASE/SALE/ADJUSTMENT ledger, signed colored deltas, restock cost, reasons) + `movements-filters` (date preset + type + product, ADR-047).
+- Verified: type-check ✓ · lint ✓ · test 92/92 ✓ · build ✓ (`/inventory` 4.32 kB) · **Neon smoke** (restock 2 containers 0→140; −30 SALE + −10 DAMAGE → 100; below-zero adjust rejected; days-until-stockout 100, shrinkage DAMAGE:10, valuation ₱2000; removed).
 
 **DEV-LOG `#026` — POS Sell Screen, Checkout, Stock & History/Void (Milestone 6 COMPLETE)** (committed):
 
@@ -149,7 +156,12 @@
                           Sell: sell-view + pos-screen + pos-cart-store
                           + checkout-dialog + pos-actions · History: pos-history-view
                           + pos-history-filters + pos-void-action (M6 Part 2)
-        inventory, reports/  placeholders
+        inventory/        page (?view shell) + inventory-nav + actions
+                          + inventory-schema + inventory-search-params ·
+                          Stock: stock-view + stock-toolbar + stock-row-actions
+                          + restock-dialog + adjust-dialog · Movements:
+                          movements-view + movements-filters (M7)
+        reports/          placeholder
         settings/         page + settings-form + timezone-combobox + actions + schema
                           + membership-plans + plan-actions + plan-schema (US-3.9)
         clients/          page (list) + actions + client-schema + search-params
@@ -200,14 +212,15 @@ Fully implemented and verified:
 - **Client Payments (`#024`, US-5.1/5.2/5.3/5.4)** — payment method on every `CLIENT_TRANSACTION`; M3 create/renew and M4 walk-in check-in create the transaction + line item atomically (membership = `MEMBERSHIP` @ price snapshot; walk-in = `WALK_IN_FEE` @ fee + `fee_override_note` when ≠ default; separate per ADR-024, never mixed per ADR-012). Payments module: Payment History (URL filters — date/method/client name), additive Void (required `void_reason_category`, note for `OTHER`; never cancels membership or deletes attendance), End-of-Day Collections (by-method totals + grand total spanning both transaction types, today-capped date selector). **Milestone 5 complete.**
 - **Product Catalog (`#025`, US-6.1/6.2/6.3/6.4/6.5/6.15)** — POS module `?view=` shell; product CRUD + archive/restore (STANDARD vs SERVING_BASED with conditional servings/container fields, live gross margin), category management (add + rename). Gym-scoped, soft delete (ADR-005); `current_stock` ledger-driven and starts at 0.
 - **POS Sales (`#026`, US-6.6/6.7/6.8/6.9/6.10/6.13/6.14/6.16)** — the sell screen (category tabs, product grid, name search, cart with quantity adjust, Per Serving/Per Container modes), checkout (payment method + cash-change calc, no client), `POS_SALE` creation (`client_id` null, price/cost snapshots) with `SALE` inventory entries decrementing `current_stock`, Force Sale override (logs a `FORCED_SALE` marker), and POS History (today's count/revenue strip, date/method filters, additive void with required reason). **Milestone 6 complete.**
+- **Inventory (`#027`, US-7.1/7.2/7.4/7.5/7.6/7.7/7.8)** — restock (`PURCHASE` ledger entry raising `current_stock` — `+units`/`+containers×spc`, optional `total_restock_cost`, Flow 9) and manual adjustment (`ADJUSTMENT` with required owner reason category — `FORCED_SALE` excluded ADR-034 — note for `OTHER`, below-zero decrease blocked, Flow 19), each one interactive `$transaction` moving ledger + cached stock (ADR-004). Current Stock view (remaining-servings, low-stock + reorder flags, days-until-stockout, this-month shrinkage amber/red w/ per-category breakdown, inventory-valuation footer — all derived at query time) + Movement History (per-product PURCHASE/SALE/ADJUSTMENT ledger w/ restock cost + reason filters). **Milestone 7 complete.** Dashboard-side consumers (low-stock feed, stockout in alerts, Inventory Value KPI — US-7.3/7.6/7.7) land in M8.
 
-**Milestones 7–8** (inventory, dashboard/reports) are not implemented yet.
+**Milestone 8** (dashboard & reports) is not implemented yet.
 
 ---
 
 ## Work In Progress
 
-Nothing is partially coded mid-stream — **Milestones 1–6 are committed** (`#015`–`#026`, all verified). Ready to start **Milestone 7 — Inventory**.
+Nothing is partially coded mid-stream — **Milestones 1–7 are committed** (`#015`–`#027`, all verified). Ready to start **Milestone 8 — Dashboard & Reports**. _(`#027` itself is staged for commit — the owner controls when to commit.)_
 
 ---
 
@@ -226,14 +239,12 @@ No technical debt in the existing code.
 
 ## Next Recommended Milestone
 
-**Milestone 7 — Inventory** (Milestone 6 is complete). Closes the inventory-ledger loop: M6 sales decrement `current_stock`, but nothing yet *raises* it — so products created in M6 sit at 0 and only Force Sale can move them. M7 adds restock + adjustments and the Current Stock analytics view. Scope (USER-STORIES §7, MODULE-SPECS Module 7, USER-FLOWS Flows 9/19; ADR-004/026/028/034):
+**Milestone 8 — Dashboard & Reports** (Milestone 7 is complete — the final MVP milestone). This consumes everything the prior seven milestones produced; little-to-no new schema. Scope (USER-STORIES §8 + US-2.10/2.11/5.4/7.3/7.6/7.7, MODULE-SPECS Modules 1 + 8, USER-FLOWS Flow 10; ADR-006/035/036):
 
-1. **Restock** (US-7.1/7.5, Flow 9) — per product, a `PURCHASE` `InventoryTransaction`: `quantity_delta = +units` (STANDARD) or `+containers × servings_per_container` (SERVING_BASED, Flow 9), `resulting_stock`, optional `total_restock_cost` (null-safe), increment `current_stock`. Mirror the M6 interactive-`$transaction` ledger pattern.
-2. **Manual adjustment** (US-7.2, Flow 19) — a `+/−` delta `ADJUSTMENT` with a **required** `adjustment_reason_category` (owner enum — `DAMAGE/EXPIRY/THEFT/COUNT_CORRECTION/NATURAL_WASTAGE/PROMOTION/OTHER`; **`FORCED_SALE` is NOT in the selector** — ADR-034) + note (required for `OTHER`, ADR-028). A manual decrease below zero is **blocked** (unlike Force Sale — Flow 19 edge case).
-3. **Current Stock view** — stock levels, low-stock flag (`current_stock ≤ low_stock_threshold`), reorder indicator (`reorder_point`, distinct from the alert), remaining-servings display for serving-based (US-7.4), days-until-stockout (`current_stock ÷ avg daily units sold last 30d`, US-7.6, derived), inventory valuation footer (`Σ current_stock × cost_price`, excluded-count note, US-7.7), shrinkage column (this-month negative-`quantity_delta` ADJUSTMENTs by category, amber/red thresholds, US-7.8).
-4. **Inventory Movement History** — the per-product `InventoryTransaction` ledger (PURCHASE/SALE/ADJUSTMENT) with restock cost + reasons; the audit surface for everything above.
+1. **Dashboard** (US-8.1, Module 1) — the 6-card KPI strip (Active Members + Δ, Today's Check-Ins + Δ, MTD Revenue + %, Today's Revenue, Expiring Soon, **Inventory Value** — reuse `inventoryValuation` from `lib/inventory/stock.ts`), the period selector + charts (Revenue trend multi-series, Membership donut, Daily attendance, Top products — Recharts as in Attendance Analytics), and the live-feed panels (Recent POS sales, Expiring soon, **Inventory alerts** with remaining + days-until-stockout reusing `daysUntilStockout`, Today's Collections reusing `summarizeCollections`, Frequent walk-ins top-5 ADR-036, At-risk members). All exclude voided transactions.
+2. **Reports** (US-8.2–8.22) — Revenue (by period/source/method/category), Attendance (CSV export), Membership lists, Best Sellers / Slow-Moving, Frequent Walk-In, Gross Profit (US-8.12 — cost snapshots), Inventory Usage w/ shrinkage breakdown (US-8.9), Restock Cost (US-8.18). Period selectors + CSV export.
 
-> All stock math stays ledger-first (ADR-004) — `current_stock` is the cached running total. Reuse: the `?view=` sub-nav + URL filters (ADR-047), the interactive-`$transaction` pattern, and the void/reason-enum patterns. Days-until-stockout, valuation, and shrinkage are **derived at query time** (not stored). The Dashboard cards/alerts that consume these (US-7.6/7.7 KPIs, low-stock feed) are **Milestone 8**.
+> Reuse heavily: central derivation (`lib/clients/derive.ts`), the inventory derivations shipped in `#027` (valuation / days-until-stockout / shrinkage), `summarizeCollections` (M5), the attendance analytics aggregation + Recharts patterns (`#023`), and the `?view=` + URL-filter conventions (ADR-047). The Dashboard reads from the unified `Transaction` ledger (ADR-006) + the `InventoryTransaction` ledger; "today"/period boundaries go through `Gym.timezone` (ADR-035). No new ADR is expected — flag one only if a genuinely new decision surfaces.
 
 **Verify & sync** each step: type-check, lint, test, build; update `DEVELOPMENT-LOG.md`, this file, ROADMAP.
 
@@ -254,4 +265,4 @@ No technical debt in the existing code.
 
 ## Suggested Resume Prompt
 
-> Resume Block23 Gym V2. Read `docs/SESSION_HANDOFF.md` first for current state. **Milestones 1–6 are complete** (`#015`–`#026`: scaffold, schema/DB, Better Auth, app shell, Settings; Client Management; Membership Management — date math ADR-040, ad-hoc ADR-015, Plan catalog, month→days ADR-048; Attendance — Check-In/branches, Today, History, correction US-4.11, Analytics US-4.10; Client Payments — payment method on every `CLIENT_TRANSACTION`, M3/M4 retrofitted, Payment History, additive Void, End-of-Day Collections; **POS & Product Sales — product catalog + categories; the sell screen (tabs/grid/search/cart + container mode), checkout (payment method + cash-change), `POS_SALE` with price/cost snapshots + `SALE` ledger entries decrementing `current_stock`, Force Sale → `FORCED_SALE` marker, POS History + additive void**). Next is **Milestone 7 — Inventory (US-7.1–7.8)**: restock (`PURCHASE` `InventoryTransaction` — `+units` STANDARD or `+containers×servings_per_container` SERVING_BASED per Flow 9, optional `total_restock_cost`, raises `current_stock` — this is what lets stock exceed 0; M6 only decrements); manual adjustment (`ADJUSTMENT` with **required** `adjustment_reason_category` — owner enum, **`FORCED_SALE` excluded** ADR-034 — + note for `OTHER`, ADR-028; below-zero decrease blocked, Flow 19); Current Stock view (low-stock flag vs `low_stock_threshold`, `reorder_point` indicator, remaining-servings US-7.4, days-until-stockout `current_stock ÷ avg daily sold last 30d` US-7.6, valuation footer `Σ current_stock×cost_price` US-7.7, shrinkage column by category US-7.8 — all **derived at query time**); and Inventory Movement History (the per-product ledger). Ledger-first (ADR-004) — `current_stock` is the cached running total. Reuse the `?view=` sub-nav + URL filters (ADR-047), the interactive-`$transaction` pattern, and the reason-enum patterns. Dashboard cards/alerts consuming these are M8. Follow the design-first workflow, keep docs synchronized, update `DEVELOPMENT-LOG.md`, and run the full verification gate (type-check, lint, test, build) before calling anything done.
+> Resume Block23 Gym V2. Read `docs/SESSION_HANDOFF.md` first for current state. **Milestones 1–7 are complete** (`#015`–`#027`: scaffold, schema/DB, Better Auth, app shell, Settings; Client Management; Membership Management — date math ADR-040, ad-hoc ADR-015, Plan catalog, month→days ADR-048; Attendance — Check-In/branches, Today, History, correction US-4.11, Analytics US-4.10; Client Payments — payment method on every `CLIENT_TRANSACTION`, M3/M4 retrofitted, Payment History, additive Void, End-of-Day Collections; POS & Product Sales — catalog + categories, sell screen + container mode, checkout, `POS_SALE` snapshots + `SALE` ledger, Force Sale, POS History + void; **Inventory — restock (`PURCHASE` raises `current_stock`, optional `total_restock_cost`, Flow 9), manual adjustment (`ADJUSTMENT`, required owner reason, `FORCED_SALE` excluded ADR-034, below-zero blocked Flow 19), Current Stock view (low-stock/reorder flags, remaining-servings, days-until-stockout, shrinkage amber/red, valuation footer — all derived), and Movement History ledger**). Next is **Milestone 8 — Dashboard & Reports (US-8.x + US-2.10/2.11/5.4/7.3/7.6/7.7)** — the final MVP milestone: the Dashboard (6-card KPI strip incl. Inventory Value, Recharts trend/breakdown charts, live-feed panels — recent POS sales, expiring members, low-stock alerts w/ stockout estimates, Today's Collections, frequent walk-ins, at-risk members) and the Reports suite (revenue by period/source/method/category, attendance w/ CSV, membership lists, best/slow sellers, frequent walk-in, gross profit, inventory usage + shrinkage, restock cost). Consumes everything already built — reuse `lib/clients/derive.ts`, the inventory derivations (`lib/inventory/stock.ts` — valuation/stockout/shrinkage), `summarizeCollections` (M5), and the attendance-analytics Recharts + `?view=`/URL-filter patterns (ADR-047). Reads from the unified `Transaction` ledger (ADR-006) + `InventoryTransaction`; all period boundaries through `Gym.timezone` (ADR-035); voids excluded everywhere. Follow the design-first workflow, keep docs synchronized, update `DEVELOPMENT-LOG.md`, and run the full verification gate (type-check, lint, test, build) before calling anything done.
