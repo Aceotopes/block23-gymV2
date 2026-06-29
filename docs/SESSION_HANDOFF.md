@@ -1,23 +1,31 @@
 # Session Handoff — Block23 Gym Management System
 
 > Canonical handoff document for resuming development across Claude Code sessions.
-> Last updated: **2026-06-28** (after DEV-LOG `#029` — Reports index + financial reports; **Milestone 8 Parts 1–2 of 4 complete**).
+> Last updated: **2026-06-28** (after DEV-LOG `#030` — membership + attendance/clients reports; **Milestone 8 Parts 1–3 of 4 complete**).
 
 ---
 
 ## Project Status
 
 - **Current Phase:** Phase 1 — MVP
-- **Current Milestone:** **Milestone 8 — Dashboard & Reports — IN PROGRESS (Parts 1–2 of 4 ✅: `#028` Dashboard · `#029` Reports index + financial reports).** Next: **Part 3 (`#030`) — membership + attendance reports.**
+- **Current Milestone:** **Milestone 8 — Dashboard & Reports — IN PROGRESS (Parts 1–3 of 4 ✅: `#028` Dashboard · `#029` Reports index + financial reports · `#030` membership + attendance/clients reports).** Next: **Part 4 (`#031`) — product + inventory reports → MVP complete.**
 - **Overall Progress:**
   - **Planning & design:** 100% complete — 10 planning docs, 48 ADRs (ADR-030–032 intentionally unused), Design System hardened as enforceable SSOT.
-  - **Implementation:** **Milestones 1–7 done (`#015`–`#027`); Milestone 8 Parts 1–2 done (`#028`–`#029`).** 7 of 8 milestones complete; M8 (final) in progress.
-  - **M8 is delivered in 4 parts:** Part 1 (`#028`) — Dashboard ✅; Part 2 (`#029`) — Reports index + shared report shell + CSV export (US-8.10) + revenue/financial reports (US-8.2/8.3/8.4/8.20/8.15) ✅; Part 3 (`#030`) — membership + attendance reports (US-8.5/8.6/8.8/8.13/8.14/8.16/8.17/8.19/8.22); Part 4 (`#031`) — product + inventory reports (US-8.7/8.9/8.12/8.18/8.21) → MVP complete. M5: payment method on every `CLIENT_TRANSACTION`; M3/M4 retrofitted; Payments module. M6: product catalog + category management; the POS sell screen (tabs/grid/search/cart + container mode), checkout (payment method + cash-change), `POS_SALE` with price/cost snapshots + `SALE` ledger entries decrementing `current_stock`, Force Sale (ADR-009/034), and POS History + additive void. M7: restock (`PURCHASE` ledger entry raising `current_stock`) + manual adjustments (required reason, below-zero blocked), the Current Stock view (low-stock/reorder flags, remaining-servings, days-until-stockout, valuation footer, shrinkage), and the Movement History ledger.
+  - **Implementation:** **Milestones 1–7 done (`#015`–`#027`); Milestone 8 Parts 1–3 done (`#028`–`#030`).** 7 of 8 milestones complete; M8 (final) in progress — only Part 4 (product + inventory reports) remains.
+  - **M8 is delivered in 4 parts:** Part 1 (`#028`) — Dashboard ✅; Part 2 (`#029`) — Reports index + shared report shell + CSV export (US-8.10) + revenue/financial reports (US-8.2/8.3/8.4/8.20/8.15) ✅; Part 3 (`#030`) — membership + attendance/clients reports (US-8.5/8.6/8.8/8.13/8.14/8.16/8.17/8.19/8.22) ✅; Part 4 (`#031`) — product + inventory reports (US-8.7/8.9/8.12/8.18/8.21) → MVP complete. M5: payment method on every `CLIENT_TRANSACTION`; M3/M4 retrofitted; Payments module. M6: product catalog + category management; the POS sell screen (tabs/grid/search/cart + container mode), checkout (payment method + cash-change), `POS_SALE` with price/cost snapshots + `SALE` ledger entries decrementing `current_stock`, Force Sale (ADR-009/034), and POS History + additive void. M7: restock (`PURCHASE` ledger entry raising `current_stock`) + manual adjustments (required reason, below-zero blocked), the Current Stock view (low-stock/reorder flags, remaining-servings, days-until-stockout, valuation footer, shrinkage), and the Movement History ledger.
   - **Dashboard (`#028`, US-8.1) ✅ done:** the 6-card KPI strip (incl. Inventory Value US-7.7), the period-driven chart row (revenue multi-series / membership donut / daily attendance / top products), and six live-feed panels (recent POS sales, expiring members, low-stock alerts w/ stockout estimates US-7.3/7.6, Today's Collections US-5.4, frequent walk-ins US-2.10, at-risk members US-2.11). Reuses central derivation + the inventory derivations + `summarizeCollections` + a new `lib/revenue/revenue.ts`. **Remaining M8: the Reports suite (Parts 2–4).**
 
 ---
 
 ## Last Completed Work
+
+**DEV-LOG `#030` — Membership + attendance/clients reports (Milestone 8 Part 3 of 4)** (committed):
+
+- **No schema migration.** **Shared libs** `lib/reports/`: `membership.ts` (`isRenewal`, `renewalRate`, `monthBuckets`), `attendance.ts` (`attendanceReportRows` per-day member/walk-in/unique splits + `sumAttendanceRows` range totals with distinct-across-range uniques), `conversion.ts` (`deriveConversion` — ADR-020 walk-in→member). **+13 tests (124 total).**
+- **Reports infra:** `ReportProps` gains `thresholds` (gym status/at-risk/conversion windows, passed from the `[slug]` dispatch page) so reports derive consistently with the Client List / Dashboard / Analytics; new generic `report-filter.tsx` (`ReportSegmentFilter` — single-param URL filter, composes with the period selector via `extra`). 9 registry flags flipped to `implemented: true`; 9 cases added to the `[slug]` dispatch.
+- **9 reports** (`reports/reports/`): **Membership** — Membership status lists (US-8.6, point-in-time, status chips), New vs. renewals (US-8.16, per-month + plan filter + renewal rate), Plan performance (US-8.17, per plan + ad-hoc roll-up + status filter + ADR-003 note), Net change (US-8.19, monthly new+renewals−expired + cumulative active, trailing 12 months, green/red). **Attendance & clients** — Attendance report (US-8.5, per-day splits + comparison toggle), Member engagement (US-8.13, active members, selected vs. prior period visits, least-engaged first), At-risk members (US-8.14, central at-risk signal), Frequent walk-ins (US-8.8, threshold-gated), Converted walk-ins (US-8.22, ADR-020 + averages). Every report exports CSV.
+- All reuse `lib/clients/derive.ts` + the shared `ReportPeriodSelector`/`CsvExportButton`/`reportRange`/`priorRange`. Cancelled memberships excluded (ADR-041); voids never remove attendance (US-8.5); price snapshots (ADR-003); period bounds via `Gym.timezone` (ADR-035).
+- Verified: type-check ✓ · lint ✓ · test 124/124 ✓ · build ✓ (`/reports/[slug]` 2.15 kB).
 
 **DEV-LOG `#029` — Reports index, shared shell, CSV export & financial reports (Milestone 8 Part 2 of 4)** (committed):
 
@@ -179,9 +187,12 @@
                           + restock-dialog + adjust-dialog · Movements:
                           movements-view + movements-filters (M7)
         reports/          page (index) + registry + report-shell + report-period
-                          + csv-export-button + [slug]/page (dispatch) ·
+                          + report-filter + csv-export-button + [slug]/page (dispatch) ·
                           reports/ (revenue, revenue-by-method, revenue-by-category,
-                          revenue-comparison, void-analysis + void-type-filter) (M8 Part 2)
+                          revenue-comparison, void-analysis + void-type-filter — Part 2;
+                          membership-status, new-vs-renewals, plan-performance,
+                          net-change, attendance, member-engagement, at-risk-members,
+                          frequent-walk-ins, converted-walk-ins — M8 Part 3)
         settings/         page + settings-form + timezone-combobox + actions + schema
                           + membership-plans + plan-actions + plan-schema (US-3.9)
         clients/          page (list) + actions + client-schema + search-params
@@ -201,7 +212,9 @@
                       duplicate); memberships/ (duration[+test]);
                       attendance/ (history, today, analytics, +tests);
                       payments/ (method, void, collections [+test]); dates (+test);
-                      products/ (types, margin [+test]); pos/ (cart [+test])
+                      products/ (types, margin [+test]); pos/ (cart [+test]);
+                      revenue/ (revenue [+test]); reports/ (period, csv,
+                      membership, attendance, conversion — all [+test])
     middleware.ts     default-deny route protection
     generated/        prisma client (gitignored, regenerated via `pnpm db:generate`)
   prisma/
@@ -236,7 +249,9 @@ Fully implemented and verified:
 - **Dashboard (`#028`, US-8.1 — Milestone 8 Part 1)** — the daily command center: a 6-card KPI strip (Active Members +Δ, Today's Check-Ins +Δ, MTD Revenue +%, Today's Revenue, Expiring Soon, Inventory Value), a Today/Week/Month period selector driving four Recharts charts (revenue multi-series line, membership-status donut, daily attendance stacked bar, top products), and six live-feed panels (recent POS sales, expiring soon, inventory alerts w/ stockout, Today's Collections, frequent walk-ins top-5, at-risk members). New shared `lib/revenue/revenue.ts`; reuses `deriveClient`, `inventoryValuation`/`daysUntilStockout`, `summarizeCollections`. All revenue excludes voids.
 - **Reports — index + financial (`#029`, US-8.2/8.3/8.4/8.10/8.15/8.20 — Milestone 8 Part 2)** — the `/reports` index (grouped cards) + `/reports/[slug]` dispatch via a registry; shared `lib/reports/period.ts` (period presets + `priorRange`) + `lib/reports/csv.ts` + a `CsvExportButton`; and five financial reports: Revenue by period & source, Revenue by payment method, Revenue by category, Period-over-Period revenue, Void Analysis. Each exports to CSV. Reuses `lib/revenue/revenue.ts` + `summarizeCollections`.
 
-**Milestone 8 Reports suite (Parts 3–4)** — membership/attendance + product/inventory reports — is not implemented yet (the registry lists them as "Soon").
+- **Reports — membership + attendance/clients (`#030`, US-8.5/8.6/8.8/8.13/8.14/8.16/8.17/8.19/8.22 — Milestone 8 Part 3)** — nine reports: Membership status lists, New vs. renewals, Plan performance, Net change; Attendance report (w/ period-over-period toggle), Member engagement, At-risk members, Frequent walk-ins, Converted walk-ins. New pure libs `lib/reports/{membership,attendance,conversion}.ts` (+13 tests); `ReportProps` extended with gym `thresholds`; generic `ReportSegmentFilter`. Each exports CSV. Reuses `lib/clients/derive.ts` + the shared report shell.
+
+**Milestone 8 Reports suite (Part 4)** — product/inventory reports (US-8.7/8.9/8.12/8.18/8.21) — is not implemented yet (the registry lists those five as "Soon").
 
 ---
 
@@ -261,19 +276,13 @@ No technical debt in the existing code.
 
 ## Next Recommended Milestone
 
-**Milestone 8 — Dashboard & Reports — Part 3 of 4 (`#030`)** (Parts 1–2 done: Dashboard + the financial reports + the shared reports infra). The **membership + attendance/clients reports**. Each is a new `/reports/[slug]` report component registered in `reports/registry.ts` (flip `implemented: true`), reusing the shared `ReportPeriodSelector` + `CsvExportButton` + `reportRange`/`priorRange`. Scope (USER-STORIES §8, MODULE-SPECS Module 8; ADR-003/020/040/047):
+**Milestone 8 — Dashboard & Reports — Part 4 of 4 (`#031`) → MVP complete** (Parts 1–3 done: Dashboard + financial reports + membership/attendance reports + the shared reports infra). The **product + inventory reports** — the last five. Each is a new `/reports/[slug]` report component registered in `reports/registry.ts` (flip `implemented: true` for the five Products & inventory entries), reusing the shared `ReportPeriodSelector` + `CsvExportButton` + `reportRange`/`priorRange`. Scope (USER-STORIES §8, MODULE-SPECS Module 8; ADR-003/026/004/034/047):
 
-**Membership:** Membership status lists (US-8.6 — Active/Expiring/Expired, reuse `deriveClient`/`deriveMembershipStatus`), New vs. Renewals (US-8.16 — `renewed_from_membership_id` null vs not, per period, renewal rate, filter by plan), Plan Performance (US-8.17 — per `MembershipPlan` incl. retired-with-sales, count/revenue/avg `price_paid`), Net Change (US-8.19 — new+renewals−expired per month + cumulative active, last 12 months).
+**Products & inventory:** Best Sellers (US-8.7 — top products by units/servings sold + by revenue, secondary ascending sort, category filter), Gross Profit (US-8.12 — per product revenue − COGS via `cost_price_snapshot` ADR-026, margin %, flags null-cost-snapshot sales, blended totals), Inventory Usage (US-8.9 — per product sold/restocked/adjusted over a range + a shrinkage section by `adjustment_reason_category`), Restock Cost (US-8.18 — `InventoryTransaction.total_restock_cost` where `type=PURCHASE`, per-product subtotal + grand total, null entries excluded with count noted), Slow-Moving / Dead Stock (US-8.21 — active products with zero sales in a 30/60/90-day window, cost value locked in stock, longest-inactive first).
 
-**Attendance & clients:** Attendance report (US-8.5 — per-period-unit rows: total/unique/member/walk-in + period-over-period toggle), Member Engagement (US-8.13 — active members by visit frequency, least-engaged first), At-risk Members (US-8.14 — reuse the at-risk derivation), Frequent Walk-Ins (US-8.8 — high-visit walk-ins, ADR-020 conversion definition), Converted Walk-Ins (US-8.22 — ADR-020 derived conversions in period + timeline).
+> Reuse: `lib/clients/derive.ts`, `lib/revenue/revenue.ts` (`#028`), `lib/reports/{period,csv}.ts`, the inventory derivations `lib/inventory/stock.ts` (`#027`), the `lib/products/margin.ts` gross-margin helper, the shared `report-period.tsx`/`report-filter.tsx`/`csv-export-button.tsx`/`report-shell.tsx`, and the Movement-History/Current-Stock aggregation patterns (`#027`). Read the unified `Transaction`/`TransactionLineItem` ledger (ADR-006) + the `InventoryTransaction` ledger; voids excluded from revenue; cost snapshots keep historical gross profit permanently correct (ADR-026); period boundaries go through `Gym.timezone` (ADR-035). No new ADR expected — flag one only if a genuinely new decision surfaces.
 
-Then **Part 4 (`#031`)** — product + inventory reports (US-8.7 Best Sellers / US-8.9 Inventory Usage+shrinkage / US-8.12 Gross Profit / US-8.18 Restock Cost / US-8.21 Slow-Moving) → **MVP complete**.
-
-> Reuse: `lib/clients/derive.ts` (status/at-risk/conversion), `lib/reports/{period,csv}.ts`, the shared `report-period.tsx`/`csv-export-button.tsx`/`report-shell.tsx`, and the attendance-history/analytics aggregation patterns (`#022`/`#023`). Snapshots keep historical figures correct (ADR-003); period bounds via `Gym.timezone` (ADR-035); voids excluded from revenue.
-
-> Reuse heavily: `lib/revenue/revenue.ts` (`#028`), central derivation (`lib/clients/derive.ts`), the inventory derivations (`#027`), `summarizeCollections` (M5), and the attendance-analytics aggregation patterns (`#023`). All reports read the unified `Transaction` ledger (ADR-006) + the `InventoryTransaction` ledger; voids excluded from revenue everywhere; snapshots make historical figures permanently correct (ADR-003/026); period boundaries go through `Gym.timezone` (ADR-035). No new ADR expected — flag one only if a genuinely new decision surfaces.
-
-**Verify & sync** each part: type-check, lint, test, build; update `DEVELOPMENT-LOG.md`, this file, ROADMAP. **Commit cadence: commit each part, then pause for owner review before the next part.**
+**Verify & sync:** type-check, lint, test, build; update `DEVELOPMENT-LOG.md`, this file, ROADMAP, README, CLAUDE.md (MVP complete). **Commit cadence: commit Part 4, then pause for owner review.**
 
 ---
 
@@ -292,4 +301,4 @@ Then **Part 4 (`#031`)** — product + inventory reports (US-8.7 Best Sellers / 
 
 ## Suggested Resume Prompt
 
-> Resume Block23 Gym V2. Read `docs/SESSION_HANDOFF.md` first for current state. **Milestones 1–7 are complete (`#015`–`#027`); Milestone 8 (the final milestone, delivered in 4 parts) has Parts 1–2 done: `#028` Dashboard (US-8.1 — 6-card KPI strip, period-driven Recharts charts, six live-feed panels, on a new `lib/revenue/revenue.ts`) and `#029` Reports index + financial reports (the `/reports` index + `/reports/[slug]` dispatch via `reports/registry.ts`; shared `lib/reports/period.ts` + `lib/reports/csv.ts` + `ReportPeriodSelector`/`CsvExportButton`; and 5 reports — Revenue by period/source US-8.2, by method US-8.3, by category US-8.4, Period-over-Period US-8.20, Void Analysis US-8.15, all CSV-exportable).** Next is **Part 3 (`#030`) — membership + attendance/clients reports (US-8.6/8.16/8.17/8.19 + US-8.5/8.13/8.14/8.8/8.22)**: each is a new `/reports/[slug]` report component registered in `reports/registry.ts` (flip `implemented:true`), reusing the shared `ReportPeriodSelector`/`CsvExportButton`/`reportRange`/`priorRange` and `lib/clients/derive.ts` (status / at-risk / ADR-020 conversion) + the attendance aggregation patterns (`#022`/`#023`). Then **Part 4 (`#031`) — product + inventory reports (US-8.7/8.9/8.12/8.18/8.21)** → MVP complete. All reports read the unified `Transaction` ledger (ADR-006) + `InventoryTransaction`; voids excluded from revenue; snapshots keep historical figures correct (ADR-003/026); period boundaries through `Gym.timezone` (ADR-035); URL-filter state per ADR-047. Follow the design-first workflow, keep docs synchronized, update `DEVELOPMENT-LOG.md`, run the full gate (type-check, lint, test, build), and **commit each part then pause for owner review**.
+> Resume Block23 Gym V2. Read `docs/SESSION_HANDOFF.md` first for current state. **Milestones 1–7 are complete (`#015`–`#027`); Milestone 8 (the final milestone, delivered in 4 parts) has Parts 1–3 done: `#028` Dashboard (US-8.1), `#029` Reports index + financial reports (the `/reports` index + `/reports/[slug]` dispatch via `reports/registry.ts`; shared `lib/reports/period.ts` + `lib/reports/csv.ts` + `ReportPeriodSelector`/`CsvExportButton`; 5 financial reports), and `#030` the nine membership + attendance/clients reports (US-8.5/8.6/8.8/8.13/8.14/8.16/8.17/8.19/8.22 — on new pure libs `lib/reports/{membership,attendance,conversion}.ts`, `ReportProps` extended with gym `thresholds`, generic `ReportSegmentFilter`).** Next is the **final part — Part 4 (`#031`) — product + inventory reports (US-8.7 Best Sellers / US-8.12 Gross Profit / US-8.9 Inventory Usage+shrinkage / US-8.18 Restock Cost / US-8.21 Slow-Moving) → MVP complete**: each is a new `/reports/[slug]` report component registered in `reports/registry.ts` (flip the five Products & inventory `implemented:true`), reusing the shared `ReportPeriodSelector`/`ReportSegmentFilter`/`CsvExportButton`/`reportRange`/`priorRange`, `lib/products/margin.ts`, the inventory derivations `lib/inventory/stock.ts` (`#027`), and `lib/revenue/revenue.ts`. All reports read the unified `Transaction`/`TransactionLineItem` ledger (ADR-006) + `InventoryTransaction`; voids excluded from revenue; cost snapshots keep historical gross profit correct (ADR-026); period boundaries through `Gym.timezone` (ADR-035); URL-filter state per ADR-047. Follow the design-first workflow, keep docs synchronized, update `DEVELOPMENT-LOG.md`, run the full gate (type-check, lint, test, build), and **commit Part 4 then pause for owner review** (and update README/CLAUDE.md to mark the MVP complete).

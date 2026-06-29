@@ -75,7 +75,7 @@ export const REPORTS: ReportMeta[] = [
     description: "Active, expiring-soon, and expired members.",
     group: "Membership",
     story: "US-8.6",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "new-vs-renewals",
@@ -83,7 +83,7 @@ export const REPORTS: ReportMeta[] = [
     description: "New memberships vs. renewals per period, with renewal rate.",
     group: "Membership",
     story: "US-8.16",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "plan-performance",
@@ -91,7 +91,7 @@ export const REPORTS: ReportMeta[] = [
     description: "Per plan — count sold, revenue, and average price paid.",
     group: "Membership",
     story: "US-8.17",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "net-change",
@@ -99,7 +99,7 @@ export const REPORTS: ReportMeta[] = [
     description: "New + renewals − expired per month, with cumulative active count.",
     group: "Membership",
     story: "US-8.19",
-    implemented: false,
+    implemented: true,
   },
 
   // ── Attendance & clients (Part 3, #030) ──
@@ -110,7 +110,7 @@ export const REPORTS: ReportMeta[] = [
       "Check-ins per period with member vs. walk-in and unique-visitor breakdowns.",
     group: "Attendance & clients",
     story: "US-8.5",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "member-engagement",
@@ -118,7 +118,7 @@ export const REPORTS: ReportMeta[] = [
     description: "Active members ranked by visit frequency, least engaged first.",
     group: "Attendance & clients",
     story: "US-8.13",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "at-risk-members",
@@ -126,7 +126,7 @@ export const REPORTS: ReportMeta[] = [
     description: "Active members who haven't visited within the threshold.",
     group: "Attendance & clients",
     story: "US-8.14",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "frequent-walk-ins",
@@ -134,7 +134,7 @@ export const REPORTS: ReportMeta[] = [
     description: "High-visit walk-in clients with no active membership.",
     group: "Attendance & clients",
     story: "US-8.8",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "converted-walk-ins",
@@ -142,7 +142,7 @@ export const REPORTS: ReportMeta[] = [
     description: "Walk-in clients who became members in the period.",
     group: "Attendance & clients",
     story: "US-8.22",
-    implemented: false,
+    implemented: true,
   },
 
   // ── Products & inventory (Part 4, #031) ──

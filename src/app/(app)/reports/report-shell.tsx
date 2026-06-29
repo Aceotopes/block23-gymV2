@@ -4,10 +4,20 @@ import { EmptyState } from "@/components/empty-state";
 
 // Shared report-page chrome (Module 8). Each `/reports/[slug]` report renders a back
 // link, then its own period toolbar + table. `sp` is the flattened URL search params.
+// `thresholds` are the gym's derivation settings (status/at-risk/conversion windows),
+// reused so reports agree with the Client List, Dashboard, and Analytics surfaces.
+export type ReportThresholds = {
+  expirationWarningDays: number;
+  walkinInactivityThresholdDays: number;
+  memberInactivityWarningDays: number;
+  walkinConversionPromptVisits: number;
+};
+
 export type ReportProps = {
   gymId: string;
   timezone: string;
   today: Date;
+  thresholds: ReportThresholds;
   sp: Record<string, string | undefined>;
 };
 

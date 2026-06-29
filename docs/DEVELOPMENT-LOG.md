@@ -5,6 +5,41 @@ Newest entries at the top.
 
 ---
 
+## [#030] Milestone 8 (part 3) — Membership + attendance/clients reports (US-8.5/8.6/8.8/8.13/8.14/8.16/8.17/8.19/8.22) — 2026-06-28
+
+**Commit:** _(pending)_
+
+**Purpose:** The nine membership and attendance/client reports — Part 3 of 4 for Milestone 8. **No schema migration.** Each is a new `/reports/[slug]` report component registered in `registry.ts` (flag flipped to `implemented: true`), reusing the shared `ReportPeriodSelector` / `CsvExportButton` / `reportRange` / `priorRange` from `#029` and the centralized derivation (`lib/clients/derive.ts`). Cancelled memberships excluded from every derivation (ADR-041); voids never remove attendance records (US-8.5); price snapshots keep figures correct (ADR-003); period boundaries via `Gym.timezone` (ADR-035); URL-filter state (ADR-047).
+
+**Shared libs (`lib/reports/`):**
+- `membership.ts` — `isRenewal` (structural: `renewed_from_membership_id` null/not, MODULE-SPECS §8), `renewalRate` (renewals ÷ total, null when nothing sold), `monthBuckets` (whole calendar-month enumeration over a range, unclipped, labelled).
+- `attendance.ts` — `attendanceReportRows` (per-day, gap-filled, member/walk-in + unique splits) + `sumAttendanceRows` (range totals; uniques are distinct-across-range, not summed daily uniques).
+- `conversion.ts` — `deriveConversion` (ADR-020 walk-in→member: WALK_IN visits predating the earliest non-cancelled `Membership.created_at`; conversion date, first walk-in, count before, days to convert).
+- **+13 tests (124 total).**
+
+**Reports infrastructure:** `report-shell.tsx` — `ReportProps` gains `thresholds` (the gym's status/at-risk/conversion windows, passed from the dispatch page) so reports derive consistently with the Client List / Dashboard / Analytics. `report-filter.tsx` — a generic single-param segmented URL filter (composes with the period selector via its `extra`).
+
+**Membership reports (`reports/reports/`):**
+- **Membership status lists** (US-8.6) — point-in-time (as of today), MEMBER clients by derived status; status filter chips (All/Active/Expiring/Upcoming/Expired); name/status/expiry/days-until-expiry/last-visit.
+- **New vs. renewals** (US-8.16) — per-month new vs. renewal count + revenue + renewal rate %; plan filter (incl. ad-hoc); blended total row.
+- **Plan performance** (US-8.17) — per plan: count sold, total revenue (`SUM price_paid`), avg price paid; active plans always shown (zero rows kept), inactive plans only with sales, ad-hoc roll-up row; plan-status filter; the ADR-003 snapshot note.
+- **Net change** (US-8.19) — per month new + renewals − expired (end_date in month) + cumulative active (distinct in-effect clients at month end); default trailing 12 months; green/red net.
+
+**Attendance & clients reports:**
+- **Attendance report** (US-8.5) — per-day rows (total/unique/member/walk-in + member-unique/walk-in-unique); comparison toggle adds a prior-equivalent-range totals panel with % change per metric.
+- **Member engagement** (US-8.13) — active members, all-time visits + selected-period vs. prior-period visits (default Monthly = this vs. last month) + days since last visit; least-engaged first.
+- **At-risk members** (US-8.14) — point-in-time active members past `member_inactivity_warning_days` (reuses the central at-risk signal); days-since descending.
+- **Frequent walk-ins** (US-8.8) — WALK_IN clients meeting `walkin_conversion_prompt_visits`, ranked by visit count.
+- **Converted walk-ins** (US-8.22) — conversions (ADR-020) in the period; first walk-in, visits before, conversion date, days to convert, plan, price; averages summary row.
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (124/124) · `pnpm build` ✓ (`/reports/[slug]` 2.15 kB).
+
+**Doc sync:** DEVELOPMENT-LOG (this entry); ROADMAP (Part 3 reports ✅); SESSION_HANDOFF; CLAUDE.md; memory. (No new ADR — built on ADR-002/003/019/020/035/040/041/047 + the `#029` report shell.)
+
+**Notes / decisions:** (1) The attendance report renders **per-day** rows over the selected `reportRange` (consistent with the US-8.2 revenue report's per-day breakdown) rather than collapsing Weekly/Monthly into single rows; the period-over-period comparison is a totals panel (current vs. prior, % per metric) since a parallel column set doesn't map onto a daily table. (2) Cancelled memberships are excluded from the new-vs-renewals / plan-performance / net-change counts and revenue (ADR-041 — cancelled records are erroneous and excluded from all derivations). (3) Member engagement uses the period selector to drive "selected period vs. prior period" visit columns (default Monthly ⇒ this month vs. last month, honoring the AC's fixed columns while staying date-range-filterable). (4) Plan performance shows inactive plans only when they had sales in the period and rolls ad-hoc (null-plan) memberships into a "Custom (ad-hoc)" row so revenue reconciles. **Next: Milestone 8 Part 4 (`#031`) — product + inventory reports (US-8.7/8.9/8.12/8.18/8.21) → MVP complete.**
+
+---
+
 ## [#029] Milestone 8 (part 2) — Reports index, shared shell, CSV export & financial reports (US-8.2/8.3/8.4/8.10/8.15/8.20) — 2026-06-28
 
 **Commit:** _(pending)_
