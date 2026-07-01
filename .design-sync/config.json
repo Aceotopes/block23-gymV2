@@ -1,0 +1,24 @@
+{
+  "projectId": "7689474d-e967-46ef-ad35-973ee25e40a3",
+  "shape": "package",
+  "pkg": "block23-gym",
+  "globalName": "Block23Gym",
+  "tsconfig": "tsconfig.json",
+  "srcDir": "src/components/ui",
+  "cssEntry": "ds-styles.css",
+  "readmeHeader": ".design-sync/conventions.md",
+  "dtsPropsFor": {
+    "Button": "/** Visual style. */\nvariant?: \"default\" | \"secondary\" | \"outline\" | \"ghost\" | \"destructive\" | \"link\";\n/** Control size (icon* = square icon buttons). */\nsize?: \"default\" | \"xs\" | \"sm\" | \"lg\" | \"icon\" | \"icon-xs\" | \"icon-sm\" | \"icon-lg\";\n/** Render as the child element (Radix Slot) instead of a <button>. */\nasChild?: boolean;\nchildren?: React.ReactNode;\nclassName?: string;\ndisabled?: boolean;\ntype?: \"button\" | \"submit\" | \"reset\";\nonClick?: React.MouseEventHandler<HTMLButtonElement>;",
+    "Badge": "/** Visual style. */\nvariant?: \"default\" | \"secondary\" | \"outline\" | \"destructive\";\n/** Render as the child element (Radix Slot), e.g. a link. */\nasChild?: boolean;\nchildren?: React.ReactNode;\nclassName?: string;"
+  },
+  "overrides": {
+    "Dialog": { "cardMode": "single", "viewport": "520x460" },
+    "AlertDialog": { "cardMode": "single", "viewport": "520x400" },
+    "Sheet": { "cardMode": "single", "viewport": "600x460" },
+    "Popover": { "cardMode": "single", "viewport": "400x340" },
+    "DropdownMenu": { "cardMode": "single", "viewport": "360x340" },
+    "Tooltip": { "cardMode": "single", "viewport": "360x200" },
+    "Command": { "cardMode": "single", "viewport": "400x420" },
+    "Table": { "cardMode": "column" }
+  }
+}
