@@ -152,7 +152,7 @@ export const REPORTS: ReportMeta[] = [
     description: "Top products by units/servings sold and by revenue.",
     group: "Products & inventory",
     story: "US-8.7",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "gross-profit",
@@ -160,7 +160,7 @@ export const REPORTS: ReportMeta[] = [
     description: "Revenue − COGS per product, with margin %.",
     group: "Products & inventory",
     story: "US-8.12",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "inventory-usage",
@@ -168,7 +168,7 @@ export const REPORTS: ReportMeta[] = [
     description: "Stock movements per product with a shrinkage breakdown.",
     group: "Products & inventory",
     story: "US-8.9",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "restock-cost",
@@ -176,7 +176,7 @@ export const REPORTS: ReportMeta[] = [
     description: "Inventory spend per product per period.",
     group: "Products & inventory",
     story: "US-8.18",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "slow-moving",
@@ -184,7 +184,7 @@ export const REPORTS: ReportMeta[] = [
     description: "Active products with no sales in a configurable window.",
     group: "Products & inventory",
     story: "US-8.21",
-    implemented: false,
+    implemented: true,
   },
 ];
 

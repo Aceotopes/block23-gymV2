@@ -18,6 +18,11 @@ import { MemberEngagementReport } from "../reports/member-engagement-report";
 import { AtRiskMembersReport } from "../reports/at-risk-members-report";
 import { FrequentWalkInsReport } from "../reports/frequent-walk-ins-report";
 import { ConvertedWalkInsReport } from "../reports/converted-walk-ins-report";
+import { BestSellersReport } from "../reports/best-sellers-report";
+import { GrossProfitReport } from "../reports/gross-profit-report";
+import { InventoryUsageReport } from "../reports/inventory-usage-report";
+import { RestockCostReport } from "../reports/restock-cost-report";
+import { SlowMovingReport } from "../reports/slow-moving-report";
 
 export async function generateMetadata({
   params,
@@ -59,6 +64,16 @@ function renderReport(slug: string, props: ReportProps) {
       return <FrequentWalkInsReport {...props} />;
     case "converted-walk-ins":
       return <ConvertedWalkInsReport {...props} />;
+    case "best-sellers":
+      return <BestSellersReport {...props} />;
+    case "gross-profit":
+      return <GrossProfitReport {...props} />;
+    case "inventory-usage":
+      return <InventoryUsageReport {...props} />;
+    case "restock-cost":
+      return <RestockCostReport {...props} />;
+    case "slow-moving":
+      return <SlowMovingReport {...props} />;
     default:
       return null;
   }

@@ -5,9 +5,36 @@ Newest entries at the top.
 
 ---
 
-## [#030] Milestone 8 (part 3) — Membership + attendance/clients reports (US-8.5/8.6/8.8/8.13/8.14/8.16/8.17/8.19/8.22) — 2026-06-28
+## [#031] Milestone 8 (part 4) — Product + inventory reports (US-8.7/8.9/8.12/8.18/8.21) — MVP COMPLETE — 2026-06-29
 
 **Commit:** _(pending)_
+
+**Purpose:** The final five reports — products & inventory — completing Milestone 8 and the MVP. **No schema migration.** Each is a new `/reports/[slug]` component registered in `registry.ts` (the five Products & inventory flags flipped to `implemented: true`), reusing the shared `ReportPeriodSelector` / `ReportSegmentFilter` / `CsvExportButton` / `reportRange` from `#029`–`#030`. All product figures read the unified `Transaction`/`TransactionLineItem` ledger (ADR-006) joined to the `InventoryTransaction` ledger (ADR-004); voids excluded (only `COMPLETED` `POS_SALE` line items); cost snapshots keep historical gross profit correct (ADR-026); period boundaries via `Gym.timezone` (ADR-035); URL-filter state (ADR-047).
+
+**Shared lib (`lib/reports/products.ts`):**
+- `grossProfit(revenue, cogs)` — profit + margin % (null at ≤0 revenue, no divide-by-zero).
+- `costValueInStock(currentStock, costPrice)` — `current_stock × cost_price`; null when cost unset.
+- `parseSlowMovingWindow` (30/60/90, default 30) + `SLOW_MOVING_WINDOWS`; `parseBestSellerSort` (desc default / asc).
+- **+9 tests (133 total).**
+
+**Reports (`reports/reports/`):**
+- **Best sellers** (US-8.7) — per product: units/servings sold + revenue, sorted descending (top sellers) with an Ascending toggle (lowest first / dead-stock candidates); category filter. Units come from the SALE ledger (stock units) so container-mode sales count consistently.
+- **Gross profit** (US-8.12) — per product: units, revenue (Σ subtotal), COGS (Σ `cost_price_snapshot` × stock units), gross profit, margin %; blended total row; null-cost-snapshot lines excluded from COGS and counted ("N sales without cost data — margin may be understated"; all-null ⇒ "No cost data available"). Category filter.
+- **Inventory usage** (US-8.9) — per product over the range: sold / restocked / net-adjusted / net stock change from the ledger, plus a **shrinkage** section (negative ADJUSTMENT quantity per product by `adjustment_reason_category`; FORCED_SALE qty-0 markers and void reversals never count). Two CSV exports (usage + shrinkage). Category filter.
+- **Restock cost** (US-8.18) — `PURCHASE` ledger entries: detail rows (product / date / stock added / cost) with per-product subtotals + a grand total; null-`total_restock_cost` events shown with "—" and excluded from totals (excluded-count notice). Category filter.
+- **Slow-moving / dead stock** (US-8.21) — active products (`deleted_at IS NULL`) with zero sales in a 30/60/90-day window (default 30, window-selector filter): current stock, cost value locked in stock (null cost ⇒ "—", excluded from the total), last sale (or "Never sold"), days since last sale; longest-inactive first (never-sold lead). Last sale via a `groupBy` `_max(createdAt)` over SALE entries.
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm test` ✓ (133/133) · `pnpm build` ✓ (`/reports/[slug]` 2.15 kB) · **Neon query-shape smoke** (all five report query shapes — line-item + SALE-movement join, ledger usage, PURCHASE rows, active-products + `groupBy` last-sale — executed against the live schema; script removed).
+
+**Doc sync:** DEVELOPMENT-LOG (this entry); SESSION_HANDOFF (M8 + **MVP complete**); ROADMAP (Milestone 8 ✅, MVP ✅); README + CLAUDE.md (MVP complete); memory. (No new ADR — built on ADR-003/004/006/026/034/035/047 + the `#029`–`#030` report shell.)
+
+**Notes / decisions:** (1) "Units / servings sold" is taken from the **SALE inventory ledger** (stock units), not the line-item `quantity` — a container-mode sale records `quantity` in containers but moves `containers × servings_per_container` stock, so the ledger is the consistent measure across modes and matches Inventory Usage. (2) COGS uses `cost_price_snapshot × stock-units-sold` (per the same ledger) rather than `× quantity`, keeping container sales correct (the US-8.12 AC formula assumes quantity = stock units). (3) Slow-moving uses a dedicated 30/60/90 window selector instead of the standard period presets (per the US-8.21 AC); all other product reports use the shared period selector + category filter. **Milestone 8 and the MVP are complete — all 8 milestones (`#015`–`#031`) delivered.**
+
+---
+
+## [#030] Milestone 8 (part 3) — Membership + attendance/clients reports (US-8.5/8.6/8.8/8.13/8.14/8.16/8.17/8.19/8.22) — 2026-06-28
+
+**Commit:** _(Done)_
 
 **Purpose:** The nine membership and attendance/client reports — Part 3 of 4 for Milestone 8. **No schema migration.** Each is a new `/reports/[slug]` report component registered in `registry.ts` (flag flipped to `implemented: true`), reusing the shared `ReportPeriodSelector` / `CsvExportButton` / `reportRange` / `priorRange` from `#029` and the centralized derivation (`lib/clients/derive.ts`). Cancelled memberships excluded from every derivation (ADR-041); voids never remove attendance records (US-8.5); price snapshots keep figures correct (ADR-003); period boundaries via `Gym.timezone` (ADR-035); URL-filter state (ADR-047).
 
@@ -42,7 +69,7 @@ Newest entries at the top.
 
 ## [#029] Milestone 8 (part 2) — Reports index, shared shell, CSV export & financial reports (US-8.2/8.3/8.4/8.10/8.15/8.20) — 2026-06-28
 
-**Commit:** _(pending)_
+**Commit:** _(Done)_
 
 **Purpose:** Stand up the Reports module — the index, the shared report infrastructure (period selector + CSV export), and the five revenue/financial reports — Part 2 of 4 for Milestone 8. **No schema migration.** Reads the unified `Transaction` ledger (ADR-006); voids excluded from revenue; snapshots keep historical figures correct (ADR-003/026).
 
@@ -74,7 +101,7 @@ Newest entries at the top.
 
 ## [#028] Milestone 8 (part 1) — Dashboard (US-8.1) — 2026-06-28
 
-**Commit:** `1ae0af1`
+**Commit:** _(Done)_
 
 **Purpose:** Build the Dashboard — the owner's daily command center (Module 1, US-8.1). First screen that consumes every prior module: the unified `Transaction` ledger (ADR-006), Attendance, the inventory ledger, and central client derivation. **No schema migration.** This is Part 1 of 4 for Milestone 8 (the Reports suite follows in `#029`–`#031`).
 
@@ -100,7 +127,7 @@ Newest entries at the top.
 
 ## [#027] Milestone 7 — Inventory: restock, adjustments, Current Stock & Movement History (US-7.1/7.2/7.4/7.5/7.6/7.7/7.8) — Milestone 7 COMPLETE — 2026-06-28
 
-**Commit:** `4125768`
+**Commit:** _(Done)_
 
 **Purpose:** Close the inventory-ledger loop. M6 sales only *decrement* `current_stock`; M7 adds restock (raises it), manual adjustments, and the Current Stock analytics + Movement History views. No schema migration — `InventoryTransaction` (type/quantityDelta/resultingStock/adjustmentReasonCategory/totalRestockCost/note) was authored in `#016`.
 

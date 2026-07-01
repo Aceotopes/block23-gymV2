@@ -35,11 +35,8 @@ import { ClientRowActions } from "../client-row-actions";
 import { MembershipActions } from "./membership-actions-ui";
 import { MembershipRowActions } from "./membership-row-actions";
 import { AttendanceCorrection } from "../../attendance/attendance-correction";
-import {
-  ProfileAttendanceFilters,
-  isProfileRange,
-  type ProfileRange,
-} from "./profile-attendance-filters";
+import { ProfileAttendanceFilters } from "./profile-attendance-filters";
+import { isProfileRange, type ProfileRange } from "./profile-attendance-params";
 
 export const metadata = { title: "Client · Block23 Gym" };
 
