@@ -143,8 +143,10 @@ Applying the approved **Block 23 Console** prototype (Claude Design project, ven
 - [x] Settings module rebuilt to the prototype (mono eyebrows + Space Grotesk titles, ₱-prefixed money inputs, Membership Plans as a table per MODULE-SPECS §9).
 - [x] App shell — 58px glass topbar (wordmark tile + brand mark, live gym-local clock, owner chip) + functional **⌘K command palette** (cmdk) + 240px sidebar (MENU eyebrow, violet-tinted active item + accent bar).
 
+**Done (`#033`):**
+- [x] Dashboard — Today's Revenue hero + 5 stat cards, charts rows (revenue trend + status donut; daily attendance + top-products bars), and the 6 live-feed panels; greeting header + segmented period pill.
+
 **Remaining (screen-by-screen, dependency order):**
-- [ ] Dashboard (KPI hero strip, chart row, live-feed panels)
 - [ ] Clients (list + filter chips, profile)
 - [ ] Attendance (check-in station, history, analytics)
 - [ ] Client Payments (history, collections)

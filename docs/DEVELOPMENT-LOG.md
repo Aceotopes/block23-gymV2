@@ -5,9 +5,29 @@ Newest entries at the top.
 
 ---
 
-## [#032] Design System Refresh (part 1) — Claude Design token remap + Settings + app shell + ⌘K palette (ADR-049) — 2026-07-02
+## [#033] Design System Refresh (part 2) — Dashboard re-theme to the Block 23 Console (ADR-049) — 2026-07-02
 
 **Commit:** _(this commit)_
+
+**Purpose:** Re-theme the Dashboard (Module 1, US-8.1) to the approved **"Block 23 Console"** prototype — part 2 of the Design System Refresh (ADR-049). **No schema migration; presentation-only** — every query, derivation, and Recharts wiring is preserved. Two small server-side additions feed the new hero (today revenue by source, today transaction count, vs-yesterday delta).
+
+**Changes (`src/app/(app)/dashboard/`):**
+- **`page.tsx`** — replaced the generic `PageHeader` with the prototype greeting header: "Good {morning/afternoon/evening}, {firstName}" (gym-local hour via `Gym.timezone`, ADR-035) + "Here's how {gym} is running — {date}", with the period pill and a "Reconcile day →" violet gradient link to `/payments?view=collections`. Fetches the session (for the name) alongside the gym.
+- **`dashboard-view.tsx`** — rebuilt to the prototype layout: a **Today's Revenue hero** (2×2, violet wash + bloom — big Space Grotesk ₱ figure, colored vs-yesterday delta pill, transaction count, Membership/Product/Walk-in source breakdown); **5 stat cards** (Active members, Today's check-ins, MTD revenue, Expiring soon [amber-tinted], Inventory value) with mono eyebrows + display numbers + signed mono deltas; **charts row A** (Revenue trend span-2 with a custom line legend + Membership-status donut with a legend list — donut recolored to **status hues** emerald/amber/neutral); **charts row B** (Daily attendance span-2 + **Top products as gradient bars**); **6 live-feed panels** (Today's Collections with method icons + grand total, Expiring soon, Inventory alerts with LOW/OUT tags, Recent POS sales showing item names, At-risk members with the orange title dot, Frequent walk-ins) with avatar initials + status pills. Added `bySource` / `todayCount` / yesterday-revenue aggregate for the hero.
+- **`dashboard-period.tsx`** — the Today/Week/Month selector is now the segmented pill (violet-gradient active segment), moved into the page header.
+- **`dashboard-charts.tsx`** — removed the generic Recharts `<Legend>`s (the view renders custom legends) and the Top-products chart (now HTML bars); color comment updated to ADR-049.
+
+**Deliberate calls:** kept the **Daily Attendance** chart and the **Frequent Walk-ins** panel (delivered features the prototype dashboard omits); Inventory alerts show **LOW/OUT** only (no REORDER — `reorder_point` isn't in that query, so no invented state).
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ · `pnpm build` ✓ (`/dashboard` 120 kB). Tests unaffected (no lib changes; 133/133).
+
+**Doc sync:** DEVELOPMENT-LOG (this entry); ROADMAP (Design System Refresh — Dashboard ticked); SESSION_HANDOFF; memory. (No new ADR — implements ADR-049.)
+
+---
+
+## [#032] Design System Refresh (part 1) — Claude Design token remap + Settings + app shell + ⌘K palette (ADR-049) — 2026-07-02
+
+**Commit:** `b9b3ab2`
 
 **Purpose:** Begin applying the approved **"Block 23 Console"** prototype (imported from the Claude Design project via the design MCP; vendored at `Block23-Gym-Design-System_V2/`) as the running app's visual identity — a warm near-black canvas with a **violet primary** and **Space Grotesk + IBM Plex** type — superseding ADR-045's indigo/slate + Geist palette. **New ADR-049** (supersedes the color & typography clauses of ADR-045; structural principles retained). **No behavior, data, or schema changes** — a pure re-theme; all server-action / Zod / RHF wiring preserved per screen.
 

@@ -13,13 +13,13 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
 } from "recharts";
 import type { RevenueTrendPoint } from "@/lib/revenue/revenue";
 
 // Recharts wrappers for the Dashboard (US-8.1). Colors from the design tokens
-// (DESIGN-SYSTEM §3 chart palette): chart-1 indigo = membership/member, chart-2
-// emerald = product, chart-3 amber = walk-in. Client components — Recharts needs the DOM.
+// (ADR-049 / DESIGN-TOKENS.MD categorical palette): chart-1 violet = membership,
+// chart-2 teal = product, chart-3 amber = walk-in. Legends are rendered by the
+// server view (prototype style), not by Recharts. Client components — Recharts needs the DOM.
 
 const axis = { fontSize: 12, stroke: "var(--muted-foreground)" };
 const grid = "var(--border)";
@@ -68,7 +68,6 @@ export function RevenueTrendChart({ data }: { data: RevenueTrendPoint[] }) {
           formatter={(v, name) => [peso(Number(v)), name]}
           contentStyle={tooltipStyle}
         />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
         <Line type="monotone" dataKey="membership" name="Membership" stroke="var(--chart-1)" strokeWidth={2} dot={false} />
         <Line type="monotone" dataKey="walkin" name="Walk-in" stroke="var(--chart-3)" strokeWidth={2} dot={false} />
         <Line type="monotone" dataKey="product" name="Product" stroke="var(--chart-2)" strokeWidth={2} dot={false} />
@@ -85,13 +84,13 @@ export function MembershipDonutChart({
   const empty = data.every((d) => d.value === 0);
   if (empty) {
     return (
-      <div className="text-muted-foreground flex h-[220px] items-center justify-center text-sm">
+      <div className="text-muted-foreground flex h-[200px] items-center justify-center text-sm">
         No members yet
       </div>
     );
   }
   return (
-    <ResponsiveContainer width="100%" height={220}>
+    <ResponsiveContainer width="100%" height={200}>
       <PieChart>
         <Pie
           data={data}
@@ -106,7 +105,6 @@ export function MembershipDonutChart({
           ))}
         </Pie>
         <Tooltip contentStyle={tooltipStyle} />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
       </PieChart>
     </ResponsiveContainer>
   );
@@ -133,47 +131,8 @@ export function DailyAttendanceChart({
           labelFormatter={(v) => shortDate(String(v))}
           contentStyle={tooltipStyle}
         />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
         <Bar dataKey="member" name="Member" stackId="a" fill="var(--chart-1)" />
         <Bar dataKey="walkin" name="Walk-in" stackId="a" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
-
-export function TopProductsChart({
-  data,
-}: {
-  data: { name: string; qty: number }[];
-}) {
-  if (data.length === 0) {
-    return (
-      <div className="text-muted-foreground flex h-[220px] items-center justify-center text-sm">
-        No product sales in this period
-      </div>
-    );
-  }
-  return (
-    <ResponsiveContainer width="100%" height={220}>
-      <BarChart
-        data={data}
-        layout="vertical"
-        margin={{ top: 8, right: 16, bottom: 0, left: 8 }}
-      >
-        <CartesianGrid strokeDasharray="3 3" stroke={grid} horizontal={false} />
-        <XAxis type="number" tick={axis} tickLine={false} allowDecimals={false} />
-        <YAxis
-          type="category"
-          dataKey="name"
-          tick={axis}
-          tickLine={false}
-          width={110}
-        />
-        <Tooltip
-          formatter={(v) => [Number(v), "Units / servings"]}
-          contentStyle={tooltipStyle}
-        />
-        <Bar dataKey="qty" name="Units / servings" fill="var(--chart-2)" radius={[0, 4, 4, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

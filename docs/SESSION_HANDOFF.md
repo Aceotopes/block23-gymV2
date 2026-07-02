@@ -1,7 +1,7 @@
 # Session Handoff — Block23 Gym Management System
 
 > Canonical handoff document for resuming development across Claude Code sessions.
-> Last updated: **2026-07-02** (after DEV-LOG `#032` — Design System Refresh part 1: Claude Design token remap + Settings + app shell + ⌘K palette, **ADR-049**). The MVP remains complete (`#015`–`#031`); `#032` is a pure re-theme, no behavior/data/schema change.
+> Last updated: **2026-07-02** (after DEV-LOG `#033` — Design System Refresh part 2: Dashboard re-theme to the Block 23 Console, **ADR-049**). The MVP remains complete (`#015`–`#031`); `#032`–`#033` are pure re-themes, no behavior/data/schema change.
 
 ---
 
@@ -19,7 +19,12 @@
 
 ## Last Completed Work
 
-**DEV-LOG `#032` — Design System Refresh (part 1): Claude Design token remap + Settings + app shell + ⌘K palette (ADR-049)** (this commit):
+**DEV-LOG `#033` — Design System Refresh (part 2): Dashboard re-theme (ADR-049)** (this commit):
+
+- **Dashboard → Block 23 Console.** `dashboard/{page,dashboard-view,dashboard-period,dashboard-charts}.tsx` restyled to the prototype: greeting header ("Good {morning/afternoon/evening}, {name}") + segmented period pill + "Reconcile day" link; a **Today's Revenue hero** (2×2 violet wash + bloom, big Space Grotesk figure, vs-yesterday delta pill, Membership/Product/Walk-in source split) + 5 stat cards; charts rows (revenue trend + status donut with legend list; daily attendance + top-products gradient bars); 6 live-feed panels with avatar initials + status pills. **Presentation-only — all queries/derivations/Recharts wiring preserved;** added today-by-source, today count, and a yesterday-revenue aggregate for the hero. Donut recolored to status hues (emerald/amber/neutral). Kept the Daily Attendance chart + Frequent Walk-ins panel (features the prototype omits). Gate: type-check ✓ · lint ✓ · build ✓ (`/dashboard` 120 kB); tests unaffected (133).
+- **Remaining refresh screens:** Clients → Attendance → Payments → POS → Inventory → Reports → mobile pass, plus the `DESIGN-SYSTEM.md` body rewrite. See ROADMAP → "Design System Refresh — Block 23 Console."
+
+**DEV-LOG `#032` — Design System Refresh (part 1): Claude Design token remap + Settings + app shell + ⌘K palette (ADR-049)** (committed `b9b3ab2`):
 
 - **New direction, new ADR.** Applying the approved **"Block 23 Console"** prototype (imported from the Claude Design project via the design MCP; vendored at `Block23-Gym-Design-System_V2/`) as the app's visual identity — warm near-black canvas, **violet primary `#8B43F0`** (action/active only, never status), **Space Grotesk + IBM Plex Sans/Mono**. **ADR-049** supersedes ADR-045's indigo/slate + Geist palette (structural principles retained). **Pure re-theme — no behavior/data/schema change; all server-action/Zod/RHF wiring preserved.**
 - **Tokens:** `globals.css` now imports the full `--b23-*` set (SSOT `docs/DESIGN-TOKENS.MD`); shadcn semantic tokens remapped onto `var(--b23-*)` (no hex); **dark-only** (`:root` = single source of truth, `.dark` inherits); `@theme` fonts → b23 families; Google Fonts wired.
@@ -273,7 +278,7 @@ Fully implemented and verified:
 
 ## Work In Progress
 
-**Design System Refresh (ADR-049) is in progress** — part 1 (`#032`: Claude Design token remap + Settings + app shell + ⌘K palette) is committed. The remaining module screens (Dashboard → Clients → Attendance → Payments → POS → Inventory → Reports → mobile), plus the `DESIGN-SYSTEM.md` body rewrite to ADR-049, re-theme incrementally — see ROADMAP → "Design System Refresh — Block 23 Console." The refresh is **presentation-only** (no behavior/data/schema change). **The MVP itself is complete** — Milestones 1–8 delivered (`#015`–`#031` committed).
+**Design System Refresh (ADR-049) is in progress** — part 1 (`#032`: token remap + Settings + app shell + ⌘K palette) and part 2 (`#033`: Dashboard) are committed. The remaining module screens (Clients → Attendance → Payments → POS → Inventory → Reports → mobile), plus the `DESIGN-SYSTEM.md` body rewrite to ADR-049, re-theme incrementally — see ROADMAP → "Design System Refresh — Block 23 Console." The refresh is **presentation-only** (no behavior/data/schema change). **The MVP itself is complete** — Milestones 1–8 delivered (`#015`–`#031` committed).
 
 ---
 
