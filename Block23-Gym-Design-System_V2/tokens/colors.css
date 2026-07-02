@@ -1,0 +1,76 @@
+/* ============================================================
+   Block 23 Gym — Color System
+   Extracted verbatim from the approved "Block 23 Console" prototype.
+   Identity: warm near-black canvas + violet primary.
+   (Canvas/surfaces/type extracted verbatim from the approved "Block 23
+    Console" prototype; the primary is electric violet, per the prototype.
+    Supersedes the indigo/slate direction in DESIGN-SYSTEM.md.)
+   ------------------------------------------------------------
+   Rules that ride with these values:
+   - Violet (--b23-accent) is for PRIMARY actions & active states ONLY.
+     It is never a status color. On-primary text is LIGHT (--b23-primary-on).
+   - Status = color + label + icon/shape, never color alone.
+   - Currency & numeric data use mono + tabular figures.
+   ============================================================ */
+
+:root {
+  /* ---- Canvas & surfaces (warm near-black, low-fatigue) ---- */
+  --b23-black:        #050504; /* deepest — scrims, gradient floors     */
+  --b23-bg-deep:      #0C0B09; /* section wells below the app canvas    */
+  --b23-bg:           #100F0D; /* app canvas (level 0)                  */
+  --b23-surface:      #1A1815; /* resting card / panel (level 1)        */
+  --b23-surface-2:    #221F1A; /* table header, insets, menus (level 2) */
+  --b23-surface-3:    #2B2721; /* raised chips, avatars, hover fills    */
+
+  /* ---- Borders (hairlines separate surfaces, not shadows) ---- */
+  --b23-border:       #2E2A24; /* default 1px hairline                  */
+  --b23-border-2:     #3C372F; /* stronger border: inputs, focus rings  */
+
+  /* ---- Text ---- */
+  --b23-fg:           #F3F0EA; /* primary text (~14:1 on canvas)        */
+  --b23-fg-2:         #CAC4B8; /* secondary text, values-in-context     */
+  --b23-muted:        #9C9488; /* labels, captions, secondary           */
+  --b23-faint:        #6E675C; /* faintest — hints, disabled, meta      */
+  --b23-neutral:      #7A7167; /* neutral status dot (Expired / Inactive)*/
+
+  /* ---- Primary accent — VIOLET (actions & active state only) ---- */
+  --b23-accent:       #8B43F0; /* the brand violet                       */
+  --b23-accent-hi:    color-mix(in oklab, var(--b23-accent) 72%, #ffffff); /* text/glyph on canvas */
+  --b23-accent-lo:    color-mix(in srgb, var(--b23-accent) 76%, #000000);  /* gradient floor       */
+  --b23-accent-light: #C6A0FA; /* light violet — light accent surfaces   */
+
+  /* ---- Status: SUCCESS (emerald) ---- */
+  --b23-success:      #34D399; /* on-canvas text/icon/dot                */
+  --b23-success-solid:#1FA77B; /* solid fill (white text)                */
+  --b23-success-deep: #06281D; /* subtle surface floor                   */
+
+  /* ---- Status: WARNING (amber) ---- */
+  --b23-warning:      #FBBF24; /* on-canvas text/icon                    */
+  --b23-warning-solid:#B4560F; /* deep amber for solid contexts          */
+
+  /* ---- Status: DANGER (red / rose) ---- */
+  --b23-danger:       #F87171; /* on-canvas danger text/icon             */
+  --b23-danger-rose:  #FB7185; /* form errors, void/cancel accents       */
+  --b23-danger-solid: #E5484D; /* solid destructive fill (white text)    */
+
+  /* ---- Status: INFO (sky) ---- */
+  --b23-info:         #38BDF8; /* on-canvas info text/icon               */
+
+  /* ---- At-risk (orange — kept distinct from amber "Expiring soon") ---- */
+  --b23-at-risk:      #FB923C;
+
+  /* ---- Data-viz categorical (see typography/charts note) ---- */
+  --b23-cat-membership: #B69BFF; /* violet-light  */
+  --b23-cat-product:    #2DD4BF; /* teal          */
+  --b23-cat-walkin:     #FBBF24; /* amber         */
+  --b23-cat-info:       #38BDF8; /* sky           */
+
+  /* ---- Semantic aliases (consume these in UI) ---- */
+  --b23-canvas:        var(--b23-bg);
+  --b23-text:          var(--b23-fg);
+  --b23-text-muted:    var(--b23-muted);
+  --b23-surface-card:  var(--b23-surface);
+  --b23-primary:       var(--b23-accent);
+  --b23-primary-on:    #FFFFFF;         /* light text on the violet gradient */
+  --b23-focus-ring:    color-mix(in srgb, var(--b23-accent) 20%, transparent);
+}

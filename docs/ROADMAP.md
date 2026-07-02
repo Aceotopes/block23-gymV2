@@ -131,3 +131,25 @@ Items deferred from MVP. No committed timeline.
 | US-6.12 | Print or email receipt for POS sales |
 | US-7.9 | Automated reorder notifications to a supplier |
 | US-8.11 | PDF report export |
+
+---
+
+## Design System Refresh — "Block 23 Console" (Claude Design) · ADR-049
+
+Applying the approved **Block 23 Console** prototype (Claude Design project, vendored at `Block23-Gym-Design-System_V2/`) as the running app's visual identity — a warm near-black canvas with a violet primary and Space Grotesk + IBM Plex type, superseding ADR-045's indigo/slate + Geist palette. Values SSOT: `docs/DESIGN-TOKENS.MD`. This is a re-theme of the existing, shipped MVP — no behavior or data changes; server-action/validation wiring is preserved per screen. Rolled out incrementally so each surface can be reviewed against the prototype.
+
+**Done (`#032`):**
+- [x] Token foundation — `--b23-*` set imported to `globals.css`; shadcn semantic tokens remapped onto them; dark-only (`:root` = single source of truth, `.dark` inherits); Google Fonts (Space Grotesk / IBM Plex Sans / IBM Plex Mono) wired.
+- [x] Settings module rebuilt to the prototype (mono eyebrows + Space Grotesk titles, ₱-prefixed money inputs, Membership Plans as a table per MODULE-SPECS §9).
+- [x] App shell — 58px glass topbar (wordmark tile + brand mark, live gym-local clock, owner chip) + functional **⌘K command palette** (cmdk) + 240px sidebar (MENU eyebrow, violet-tinted active item + accent bar).
+
+**Remaining (screen-by-screen, dependency order):**
+- [ ] Dashboard (KPI hero strip, chart row, live-feed panels)
+- [ ] Clients (list + filter chips, profile)
+- [ ] Attendance (check-in station, history, analytics)
+- [ ] Client Payments (history, collections)
+- [ ] POS (sell screen, product management, history) + shared modals (destructive confirm, stock override)
+- [ ] Inventory (current stock, movement history, restock/adjust modals)
+- [ ] Reports (index + report shell)
+- [ ] Mobile pass across surfaces
+- [ ] Refresh the `DESIGN-SYSTEM.md` narrative body to ADR-049 (currently reconciled via a top banner; full rewrite pending)

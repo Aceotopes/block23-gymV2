@@ -703,7 +703,7 @@ These constraints are inputs to the Design System's color and typography token c
 ## ADR-045: Design language — dark-first, professional indigo on neutral slate
 
 **Date:** 2026-06-25
-**Status:** Accepted
+**Status:** Superseded by ADR-049 for color & typography (2026-07-02) — indigo/slate + Geist replaced by warm-violet + Space Grotesk/IBM Plex. The structural principles below (dark-first, CSS-variable tokens, status-never-color-alone, shadcn `new-york`/lucide) remain in force.
 
 **Decision:** The Design System is **dark-first** with a **professional indigo accent** (`indigo-500` on dark / `indigo-600` on light) on a **neutral slate** chrome. Semantic colors: emerald (success), amber (warning), red (danger), sky (info); at-risk uses orange to stay distinct from amber "expiring soon." Typography is **Geist Sans** (UI) + **Geist Mono** (tabular numbers/money). Base color `slate`, shadcn style `new-york`, icons `lucide`. All values are delivered as CSS variables (dark on `:root`, light override) so theme is a values flip, not a rebuild. The full specification — tokens, type scale, spacing/layout, component inventory, patterns, and the WCAG 2.1 AA application — lives in `DESIGN-SYSTEM.md`.
 
@@ -776,3 +776,28 @@ Filtered, derived lists are **rendered on the server** (React Server Components)
 - **A configurable days-per-month setting** — premature; no requirement asks for it, and it would complicate plan creation. An owner who wants a non-30-day "month" can create a Custom-days plan.
 
 **Relationship:** Implements US-3.9 / US-3.3 on top of ADR-040 (renewal math) and ADR-015 (custom durations / ad-hoc null plan). Editing a plan's duration does not alter existing memberships' stored `end_date` (those are derived at creation from the then-current duration; snapshot integrity per ADR-003).
+
+---
+
+## ADR-049: Design language refresh — warm-violet "Block 23 Console" (Claude Design) supersedes the ADR-045 palette
+
+**Date:** 2026-07-02
+**Status:** Accepted (supersedes the color & typography clauses of ADR-045; ADR-045's structural principles stand)
+
+**Decision:** Adopt the **"Block 23 Console"** design language — extracted verbatim from the approved prototype in the Claude Design project (`Block23-Gym-Design-System_V2/`, ground truth) — as the running app's visual identity, replacing ADR-045's indigo-on-slate + Geist palette:
+
+- **Canvas:** warm near-black `#100F0D` (not cool slate); surfaces step up in warmth (`#1A1815` → `#221F1A` → `#2B2721`).
+- **Primary:** electric **violet `#8B43F0`**, reserved for **action & active state only — never a status color**. On-primary text is light (`#FFFFFF`).
+- **Status hues (unchanged intent):** emerald `#34D399` (success), amber `#FBBF24` (warning), red/rose `#F87171`/`#FB7185` (danger), sky `#38BDF8` (info), orange `#FB923C` (at-risk — distinct from amber), neutral `#7A7167` (expired/inactive) — all kept distinct from the violet primary.
+- **Type:** **Space Grotesk** (display/headings/KPI/wordmark), **IBM Plex Sans** (body), **IBM Plex Mono** (all numerics + uppercase micro-eyebrows, `tabular-nums`) — replacing Geist Sans/Mono.
+- **Delivery:** the token set is `--b23-*` custom properties (SSOT: `docs/DESIGN-TOKENS.MD`); shadcn's semantic tokens (`--background`, `--primary`, `--card`, …) are **remapped onto `--b23-*`** in `globals.css`. **Dark-only:** `:root` is the single source of truth; the `.dark` selector is retained (shadcn `dark:` variant target) but inherits from `:root`.
+- **Status is still color + label + shape**, never color alone (ADR-045/ADR-044 retained).
+
+**Why:** The shipped prototype — the ground truth the design system was exported from — used warm-violet + Space Grotesk/IBM Plex, a direction the earlier ADR-045 documentation (indigo/slate/Geist) never matched; the design-system readme flagged the discrepancy and noted applying the prototype is "a full re-theme." The owner chose to apply the prototype's identity to the app. Violet satisfies ADR-045's own decisive criterion — a primary that does **not** collide with any domain status hue (at-risk orange, success emerald, info/upcoming sky) — so affordances stay unambiguous. The warm near-black canvas is lower-fatigue than cool slate for long operational sessions, and Space Grotesk gives a distinct "operational-instrument" display voice while IBM Plex Mono preserves tabular numerics.
+
+**Rejected:**
+- **Keep ADR-045 (indigo/slate/Geist)** — the owner explicitly wants the approved prototype's identity in the product; retaining the documented-but-never-shipped palette would leave code and design permanently divergent.
+- **Cool-slate canvas with the violet accent** — discards the warm near-black signature that distinguishes the console from generic slate SaaS.
+- **Violet as an additional status color** — violet is reserved for action/active state; using it for status would collide with the primary affordance and break the status language.
+
+**Relationship:** Supersedes the **color & typography** clauses of ADR-045; ADR-045's **structural principles remain in force** — dark-first, tokens as CSS variables (theme = a values flip), status-never-color-alone, shadcn `new-york` + lucide, desktop-first (ADR-033). Maintains the WCAG 2.1 AA baseline (ADR-044); on-primary text is light. **Values SSOT is `docs/DESIGN-TOKENS.MD`;** `DESIGN-SYSTEM.md`'s narrative is being refreshed to match. Applied incrementally — `globals.css` token remap, the Settings module, and the app shell (58px glass topbar + wordmark + ⌘K command palette + sidebar) shipped first; the remaining module screens follow (see ROADMAP → "Design System Refresh — Block 23 Console").

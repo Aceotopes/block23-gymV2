@@ -1,7 +1,7 @@
 # Session Handoff — Block23 Gym Management System
 
 > Canonical handoff document for resuming development across Claude Code sessions.
-> Last updated: **2026-06-29** (after DEV-LOG `#031` — product + inventory reports; **Milestone 8 complete — MVP COMPLETE**).
+> Last updated: **2026-07-02** (after DEV-LOG `#032` — Design System Refresh part 1: Claude Design token remap + Settings + app shell + ⌘K palette, **ADR-049**). The MVP remains complete (`#015`–`#031`); `#032` is a pure re-theme, no behavior/data/schema change.
 
 ---
 
@@ -19,7 +19,15 @@
 
 ## Last Completed Work
 
-**DEV-LOG `#031` — Product + inventory reports (Milestone 8 Part 4 of 4 — MVP COMPLETE)** (commit pending):
+**DEV-LOG `#032` — Design System Refresh (part 1): Claude Design token remap + Settings + app shell + ⌘K palette (ADR-049)** (this commit):
+
+- **New direction, new ADR.** Applying the approved **"Block 23 Console"** prototype (imported from the Claude Design project via the design MCP; vendored at `Block23-Gym-Design-System_V2/`) as the app's visual identity — warm near-black canvas, **violet primary `#8B43F0`** (action/active only, never status), **Space Grotesk + IBM Plex Sans/Mono**. **ADR-049** supersedes ADR-045's indigo/slate + Geist palette (structural principles retained). **Pure re-theme — no behavior/data/schema change; all server-action/Zod/RHF wiring preserved.**
+- **Tokens:** `globals.css` now imports the full `--b23-*` set (SSOT `docs/DESIGN-TOKENS.MD`); shadcn semantic tokens remapped onto `var(--b23-*)` (no hex); **dark-only** (`:root` = single source of truth, `.dark` inherits); `@theme` fonts → b23 families; Google Fonts wired.
+- **Settings** rebuilt to the prototype (mono eyebrows + Space Grotesk titles, ₱-prefixed mono money inputs, **Membership Plans as a table** per MODULE-SPECS §9, labelled status badges). **App shell:** 58px glass topbar (wordmark tile + brand, live gym-local clock via `getCurrentGym()`/ADR-035, owner chip) + **functional ⌘K command palette** (`command-menu.tsx`, cmdk — navigates the 8 sections) + sidebar (MENU eyebrow, violet active item + accent bar).
+- **Verified:** type-check ✓ · lint ✓ (changed files). No test/build regression expected (presentational only; 133 tests unaffected).
+- **Remaining:** module screens re-theme incrementally (Dashboard → Clients → Attendance → Payments → POS → Inventory → Reports → mobile pass), plus the `DESIGN-SYSTEM.md` body rewrite to ADR-049 (reconciled via a banner for now). See ROADMAP → "Design System Refresh — Block 23 Console."
+
+**DEV-LOG `#031` — Product + inventory reports (Milestone 8 Part 4 of 4 — MVP COMPLETE)** (committed `bf07958`):
 
 - **No schema migration.** **Shared lib** `lib/reports/products.ts`: `grossProfit` (profit + margin %, null margin at ≤0 revenue), `costValueInStock` (`current_stock × cost_price`, null when cost unset), `parseSlowMovingWindow` (30/60/90, default 30) + `SLOW_MOVING_WINDOWS`, `parseBestSellerSort` (desc default / asc). **+9 tests (133 total).**
 - **5 reports** (`reports/reports/`): **Best sellers** (US-8.7 — units/servings + revenue, top/lowest sort, category filter), **Gross profit** (US-8.12 — revenue/COGS/profit/margin per product, blended totals, null-cost flag, category filter), **Inventory usage** (US-8.9 — sold/restocked/net-adjusted/net change + shrinkage-by-reason section, two CSV exports, category filter), **Restock cost** (US-8.18 — `PURCHASE` detail rows + per-product subtotal + grand total, null-cost excluded with count, category filter), **Slow-moving / dead stock** (US-8.21 — active products with no sales in a 30/60/90-day window, cost value locked, last sale / days since, longest-inactive first). 5 registry flags flipped; 5 cases added to the `[slug]` dispatch.
@@ -265,7 +273,7 @@ Fully implemented and verified:
 
 ## Work In Progress
 
-Nothing is partially coded mid-stream — **Milestones 1–8 are complete** (`#015`–`#030` committed; `#031` verified and staged for commit). **The MVP is complete.** _(`#031` is staged for commit — the owner controls when to commit; pause for owner review after.)_
+**Design System Refresh (ADR-049) is in progress** — part 1 (`#032`: Claude Design token remap + Settings + app shell + ⌘K palette) is committed. The remaining module screens (Dashboard → Clients → Attendance → Payments → POS → Inventory → Reports → mobile), plus the `DESIGN-SYSTEM.md` body rewrite to ADR-049, re-theme incrementally — see ROADMAP → "Design System Refresh — Block 23 Console." The refresh is **presentation-only** (no behavior/data/schema change). **The MVP itself is complete** — Milestones 1–8 delivered (`#015`–`#031` committed).
 
 ---
 

@@ -1,0 +1,63 @@
+/* ============================================================
+   Block 23 Gym — Elevation, Shadow, Glow & Motion
+   Dark UI: surfaces separate by fill + 1px border, not heavy
+   shadows. Shadows appear on overlays and hero elements only.
+   Hero surfaces carry a subtle VIOLET glow.
+   ============================================================ */
+
+:root {
+  /* ---- Inner highlight (top edge catch-light on cards) ---- */
+  --b23-inset-hi:  inset 0 1px 0 rgba(255,255,255,.04);
+
+  /* ---- Resting card: inset highlight + soft grounding shadow ---- */
+  --b23-shadow-card: inset 0 1px 0 rgba(255,255,255,.04), 0 12px 30px -24px rgba(0,0,0,.9);
+
+  /* ---- Table / large panel ---- */
+  --b23-shadow-panel: inset 0 1px 0 rgba(255,255,255,.04), 0 16px 40px -30px rgba(0,0,0,.9);
+
+  /* ---- Overlays ---- */
+  --b23-shadow-popover: 0 18px 44px -18px rgba(0,0,0,.8);
+  --b23-shadow-dialog:  0 0 0 1px rgba(182,155,255,.04), 0 40px 90px -36px rgba(0,0,0,.95), 0 0 60px -30px var(--b23-accent);
+  --b23-shadow-toast:   0 18px 50px -16px rgba(0,0,0,.8);
+
+  /* ---- Hero glow (violet bloom under primary elements) ---- */
+  --b23-glow-hero:  0 24px 60px -34px var(--b23-accent), inset 0 1px 0 rgba(255,255,255,.06);
+  --b23-glow-btn:   0 10px 24px -10px var(--b23-accent);
+  --b23-glow-logo:  0 6px 16px -6px var(--b23-accent);
+
+  /* ---- Focus ring ---- */
+  --b23-ring: 0 0 0 3px var(--b23-focus-ring);
+
+  /* ---- Scrim (dialog backdrop) ---- */
+  --b23-scrim: rgba(8,7,6,.66);
+
+  /* ---- The signature primary gradient (buttons, active pills, logo) ---- */
+  --b23-grad-primary: linear-gradient(150deg, var(--b23-accent), color-mix(in srgb, var(--b23-accent) 76%, #000));
+  --b23-grad-logo:    linear-gradient(150deg, var(--b23-accent), color-mix(in srgb, var(--b23-accent) 68%, #000));
+
+  /* ---- Motion (nothing exceeds 240ms; ease-out enter, ease-in exit) ---- */
+  --b23-dur-fast: 120ms; /* @kind other */
+  --b23-dur-base: 180ms; /* @kind other */
+  --b23-dur-slow: 240ms; /* @kind other */
+  --b23-ease-out: cubic-bezier(.2,.7,.3,1); /* @kind other */
+  --b23-ease-in:  cubic-bezier(.4,0,.9,.4); /* @kind other */
+
+  /* ---- Z-index scale ---- */
+  --b23-z-base:    0;  /* @kind other */
+  --b23-z-raised:  10; /* @kind other */
+  --b23-z-topbar:  20; /* @kind other */
+  --b23-z-popover: 30; /* @kind other */
+  --b23-z-scrim:   40; /* @kind other */
+  --b23-z-dialog:  50; /* @kind other */
+  --b23-z-toast:   60; /* @kind other */
+  --b23-z-tooltip: 70; /* @kind other */
+}
+
+/* Keyframes used across the system */
+@keyframes b23-in   { from { opacity: 0; transform: translateY(8px); }             to { opacity: 1; transform: none; } }
+@keyframes b23-rise { from { opacity: 0; transform: translateY(14px) scale(.99); } to { opacity: 1; transform: none; } }
+@keyframes b23-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

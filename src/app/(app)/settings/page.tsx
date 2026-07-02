@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentGym } from "@/lib/gym";
-import { PageHeader } from "@/components/page-header";
 import { SettingsForm } from "./settings-form";
 import { MembershipPlansSection } from "./membership-plans";
 
@@ -26,10 +25,19 @@ export default async function SettingsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Settings"
-        description="Gym information, pricing, membership plans, and system preferences."
-      />
+      {/* Page header — design-system eyebrow + Space Grotesk display title. */}
+      <header className="mb-8 space-y-1.5">
+        <p className="font-mono text-[11px] font-semibold uppercase tracking-[var(--b23-track-eyebrow)] text-muted-foreground">
+          Configuration
+        </p>
+        <h1 className="font-display text-2xl font-semibold tracking-[var(--b23-track-display)] text-foreground">
+          Settings
+        </h1>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Gym information, pricing, membership plans, and system preferences.
+        </p>
+      </header>
+
       <div className="space-y-6">
         <SettingsForm
           defaultValues={{

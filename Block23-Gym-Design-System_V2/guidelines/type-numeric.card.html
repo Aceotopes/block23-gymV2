@@ -1,0 +1,15 @@
+<!-- @dsCard group="Type" viewport="700x150" name="Numeric & tabular" subtitle="All money, counts & deltas use mono tabular figures" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:20px;background:var(--b23-bg);display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+  .col{display:flex;flex-direction:column;gap:6px}
+  .lbl{font:600 10px var(--b23-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--b23-faint)}
+  .v{font:600 22px var(--b23-mono);color:var(--b23-fg);font-variant-numeric:tabular-nums}
+  .up{color:var(--b23-success)}.dn{color:var(--b23-danger)}
+  .delta{font:600 14px var(--b23-mono)}
+</style></head><body>
+  <div class="col"><span class="lbl">Currency</span><span class="v">₱18,450.00</span><span class="v" style="font-size:15px;color:var(--b23-fg-2)">₱612,300.00</span></div>
+  <div class="col"><span class="lbl">Counts</span><span class="v">1,204</span><span class="v" style="font-size:15px;color:var(--b23-fg-2)">96 check-ins</span></div>
+  <div class="col"><span class="lbl">Deltas</span><span class="delta up">▲ +12.4%</span><span class="delta dn">▼ −3.2%</span></div>
+  <div class="col"><span class="lbl">Void / negative</span><span class="v" style="font-size:15px;color:var(--b23-faint);text-decoration:line-through">₱500.00</span><span class="v" style="font-size:15px;color:var(--b23-danger)">−₱120.00</span></div>
+</body></html>

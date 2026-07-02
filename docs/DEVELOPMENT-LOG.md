@@ -5,9 +5,32 @@ Newest entries at the top.
 
 ---
 
+## [#032] Design System Refresh (part 1) — Claude Design token remap + Settings + app shell + ⌘K palette (ADR-049) — 2026-07-02
+
+**Commit:** _(this commit)_
+
+**Purpose:** Begin applying the approved **"Block 23 Console"** prototype (imported from the Claude Design project via the design MCP; vendored at `Block23-Gym-Design-System_V2/`) as the running app's visual identity — a warm near-black canvas with a **violet primary** and **Space Grotesk + IBM Plex** type — superseding ADR-045's indigo/slate + Geist palette. **New ADR-049** (supersedes the color & typography clauses of ADR-045; structural principles retained). **No behavior, data, or schema changes** — a pure re-theme; all server-action / Zod / RHF wiring preserved per screen.
+
+**Tokens (`globals.css` + `docs/DESIGN-TOKENS.MD`):**
+- Imported the full `--b23-*` token set (colors, type, spacing/radius, elevation/motion) into `:root` verbatim from `DESIGN-TOKENS.MD` (the values SSOT).
+- Remapped shadcn's semantic tokens (`--background`, `--foreground`, `--card`, `--primary`, `--border`, `--ring`, `--radius`, chart + sidebar) onto `var(--b23-*)` — no hex in the remaps.
+- **Dark-only:** `:root` is the single source of truth; `.dark` retained as the shadcn `dark:` variant target but inherits (no overrides). `@theme inline` fonts point at `--b23-sans`/`-mono`/`-display`; body uses the b23 canvas/type. Google Fonts (Space Grotesk / IBM Plex Sans / IBM Plex Mono) imported.
+
+**Settings module (rebuilt to the prototype):** `page.tsx`, `settings-form.tsx`, `membership-plans.tsx` — mono uppercase eyebrows + Space Grotesk (`font-display`) titles, DS card radius/shadow, ₱-prefixed mono money inputs, primary actions as violet gradient pills. **Membership Plans now render as a table** (Name · Duration · Default price · Status) per MODULE-SPECS §9 (was a `<ul>`), status via a labelled badge + dot (never color alone). Schemas / actions / `TimezoneCombobox` untouched.
+
+**App shell:** 58px glass topbar (`topbar.tsx`) — "23" wordmark tile + `Block 23 / GYM · OPERATIONS`, live gym-local clock (`topbar-clock.tsx`, hydration-safe, timezone from `getCurrentGym()` in the layout per ADR-035), owner chip (`user-menu.tsx` — avatar initials + name + role, sign-out preserved). **Functional ⌘K command palette** (`command-menu.tsx`, cmdk) — click the search bar or press ⌘K/Ctrl+K, fuzzy-filter the 8 nav destinations, Enter navigates (entity search can layer on later). Sidebar (`app-sidebar.tsx`) — MENU eyebrow, flat warm canvas + hairline border, violet-tinted active item + left accent bar, 1.7-stroke 18px icons; collapse preserved. No fabricated "collected today" drawer card (would require live data — omitted).
+
+**Verification:** `pnpm type-check` ✓ · `pnpm lint` ✓ (all changed files). Pure presentational change; no test/build regression expected (existing 133 tests unaffected).
+
+**Doc sync:** DECISIONS (**ADR-049** added; ADR-045 marked superseded for color & typography); CLAUDE.md (design-language locked-decision bullet + ADR range → ADR-049); ROADMAP (new "Design System Refresh — Block 23 Console" track with done/remaining); README (indigo → warm-violet, ADR count → 46/ADR-049); DESIGN-SYSTEM.md (top banner reconciling to ADR-049; full-body rewrite pending); DEVELOPMENT-LOG (this entry); SESSION_HANDOFF; memory.
+
+**Notes:** (1) `Block23-Gym-Design-System_V2/` is vendored into the repo as the design SSOT reference (the imported Claude Design export — prototype HTML + tokens + component contracts). (2) Search bar is now functional (was presentational last pass). (3) Remaining module screens re-theme incrementally — see ROADMAP.
+
+---
+
 ## [#031] Milestone 8 (part 4) — Product + inventory reports (US-8.7/8.9/8.12/8.18/8.21) — MVP COMPLETE — 2026-06-29
 
-**Commit:** _(pending)_
+**Commit:** _(Done)_
 
 **Purpose:** The final five reports — products & inventory — completing Milestone 8 and the MVP. **No schema migration.** Each is a new `/reports/[slug]` component registered in `registry.ts` (the five Products & inventory flags flipped to `implemented: true`), reusing the shared `ReportPeriodSelector` / `ReportSegmentFilter` / `CsvExportButton` / `reportRange` from `#029`–`#030`. All product figures read the unified `Transaction`/`TransactionLineItem` ledger (ADR-006) joined to the `InventoryTransaction` ledger (ADR-004); voids excluded (only `COMPLETED` `POS_SALE` line items); cost snapshots keep historical gross profit correct (ADR-026); period boundaries via `Gym.timezone` (ADR-035); URL-filter state (ADR-047).
 

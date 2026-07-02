@@ -1,0 +1,25 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Chart categoricals" subtitle="Fixed series mapping — distinguished by more than hue" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:20px;background:var(--b23-bg);display:flex;flex-direction:column;gap:16px}
+  .legend{display:flex;gap:20px;flex-wrap:wrap}
+  .item{display:inline-flex;align-items:center;gap:8px;font:500 13px var(--b23-sans);color:var(--b23-fg-2)}
+  .line{width:16px;height:3px;border-radius:2px}
+  .h{font:500 11px var(--b23-mono);color:var(--b23-faint);margin-left:auto}
+  .bars{display:flex;align-items:flex-end;gap:10px;height:56px}
+  .bar{width:44px;border-radius:5px 5px 0 0}
+</style></head><body>
+  <div class="legend">
+    <span class="item"><span class="line" style="background:var(--b23-cat-membership)"></span>Membership</span>
+    <span class="item"><span class="line" style="background:var(--b23-cat-product)"></span>Product</span>
+    <span class="item"><span class="line" style="background:var(--b23-cat-walkin)"></span>Walk-in</span>
+    <span class="item"><span class="line" style="background:var(--b23-cat-info)"></span>Secondary</span>
+    <span class="h">#B69BFF · #2DD4BF · #FBBF24 · #38BDF8</span>
+  </div>
+  <div class="bars">
+    <div class="bar" style="height:100%;background:var(--b23-cat-membership)"></div>
+    <div class="bar" style="height:72%;background:var(--b23-cat-product)"></div>
+    <div class="bar" style="height:44%;background:var(--b23-cat-walkin)"></div>
+    <div class="bar" style="height:58%;background:var(--b23-cat-info)"></div>
+  </div>
+</body></html>

@@ -1,0 +1,17 @@
+<!-- @dsCard group="Spacing" viewport="700x200" name="Elevation & glow" subtitle="Fill + hairline separates; shadow & violet bloom for hero/overlays" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:24px;background:var(--b23-bg);display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+  .card{width:150px;height:100px;border-radius:16px;padding:14px;display:flex;flex-direction:column;justify-content:flex-end}
+  .n{font:600 13px var(--b23-sans);color:var(--b23-fg)}
+  .h{font:400 11px var(--b23-mono);color:var(--b23-muted);margin-top:3px}
+</style></head><body>
+  <div class="card" style="background:var(--b23-surface);border:1px solid var(--b23-border);box-shadow:var(--b23-shadow-card)">
+    <span class="n">Resting card</span><span class="h">fill + hairline</span></div>
+  <div class="card" style="background:var(--b23-surface-2);border:1px solid var(--b23-border-2);box-shadow:var(--b23-shadow-popover)">
+    <span class="n">Popover</span><span class="h">+ soft shadow</span></div>
+  <div class="card" style="background:linear-gradient(155deg,color-mix(in srgb,var(--b23-accent) 16%,var(--b23-surface)),var(--b23-surface) 58%);border:1px solid color-mix(in srgb,var(--b23-accent) 30%,var(--b23-border));box-shadow:var(--b23-glow-hero)">
+    <span class="n">Hero</span><span class="h">violet wash + bloom</span></div>
+  <div class="card" style="background:var(--b23-surface);border:1px solid var(--b23-border-2);box-shadow:var(--b23-shadow-dialog)">
+    <span class="n">Dialog</span><span class="h">glow ring</span></div>
+</body></html>

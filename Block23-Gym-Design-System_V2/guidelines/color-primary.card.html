@@ -1,0 +1,18 @@
+<!-- @dsCard group="Colors" viewport="700x170" name="Primary — violet" subtitle="Actions & active state ONLY — never a status color" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:20px;background:var(--b23-bg);display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .tile{width:120px;height:112px;border-radius:14px;display:flex;flex-direction:column;justify-content:flex-end;padding:12px;color:var(--b23-primary-on)}
+  .n{font:600 12px var(--b23-sans)}.h{font:500 11px var(--b23-mono);opacity:.85;margin-top:2px}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:999px;border:none;background:var(--b23-grad-primary);color:var(--b23-primary-on);font:600 13px var(--b23-sans);box-shadow:var(--b23-glow-btn)}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;font:600 12.5px var(--b23-sans);background:color-mix(in srgb,var(--b23-accent) 18%,transparent);color:var(--b23-accent-hi);border:1px solid color-mix(in srgb,var(--b23-accent) 42%,transparent)}
+  .col{display:flex;flex-direction:column;gap:10px}
+</style></head><body>
+  <div class="tile" style="background:var(--b23-grad-primary)"><span class="n">accent</span><span class="h">#8B43F0</span></div>
+  <div class="tile" style="background:var(--b23-accent-hi)"><span class="n" style="color:#241A00">accent-hi</span><span class="h" style="color:#3a2c00">glyph / text</span></div>
+  <div class="tile" style="background:var(--b23-accent-light)"><span class="n" style="color:#241A00">accent-light</span><span class="h" style="color:#3a2c00">#C6A0FA</span></div>
+  <div class="col">
+    <button class="btn">Reconcile day →</button>
+    <span class="pill"><span style="width:7px;height:7px;border-radius:999px;background:var(--b23-accent-light)"></span>Selected chip</span>
+  </div>
+</body></html>

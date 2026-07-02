@@ -68,7 +68,7 @@ Changes in one document almost always require updates in others. Use this map.
 
 ## Locked Design Decisions
 
-These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-048; ADR-030–032 intentionally unused) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
+These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-049; ADR-030–032 intentionally unused) represent resolved questions. Reopening one requires a new ADR with an explicit rejected-alternative and reasoning. Treat conflicts with these decisions as signals that a proposed change needs more analysis, not as reasons to silently override them.
 
 **gym_id on every entity (ADR-001, ADR-025):** Multi-tenancy foundation. Every entity — including child/detail entities (`Membership`, `TransactionLineItem`, `InventoryTransaction`) — carries a `gym_id` FK. Enables database-level Row-Level Security without join-chain subqueries.
 
@@ -118,7 +118,7 @@ These ADRs (in `DECISIONS.md`, currently ADR-001 through ADR-048; ADR-030–032 
 
 **Accessibility baseline (ADR-044):** Target WCAG 2.1 AA — keyboard operability, visible focus, contrast ≥ 4.5:1 (text) / 3:1 (large/UI), status never color-alone, labelled fields, `prefers-reduced-motion`. Detailed in `TECH-STACK.md` → Accessibility Standards.
 
-**Design language (ADR-045):** Dark-first, professional indigo accent (`indigo-500` dark / `indigo-600` light) on neutral slate chrome; semantic emerald/amber/red/sky (at-risk = orange to stay distinct from amber); Geist Sans + Geist Mono (tabular money/numbers); shadcn `new-york` / base color `slate` / lucide icons; tokens as CSS variables (theme = values flip). Full spec in `DESIGN-SYSTEM.md`. Status badges always carry a text label + icon — never color alone.
+**Design language (ADR-045 → superseded by ADR-049):** The shipped language is the **"Block 23 Console"** (Claude Design) direction — dark-only, warm near-black canvas (`#100F0D`), **violet primary `#8B43F0` for action/active state only (never a status color)**, semantic emerald/amber/red-rose/sky (at-risk = orange to stay distinct from amber) kept distinct from the primary; **Space Grotesk (display) + IBM Plex Sans (body) + IBM Plex Mono (tabular money/numbers + uppercase micro-eyebrows)**; shadcn `new-york` / lucide icons; tokens are `--b23-*` CSS variables (SSOT `docs/DESIGN-TOKENS.MD`) with shadcn's semantic tokens remapped onto them in `globals.css`; `:root` is the single source of truth (`.dark` inherits). Status badges always carry a text label + icon — never color alone. ADR-045's indigo/slate + Geist palette is superseded; its structural principles stand. Narrative spec in `DESIGN-SYSTEM.md` (being refreshed to ADR-049).
 
 **List state in the URL (ADR-047):** List filter/search/sort/page/tab/period state lives in URL search params (shareable, refresh-safe, back-restorable); Zustand is reserved for the POS cart and sidebar collapse. Derived/filtered tables (e.g. the Client List) render on the server from the URL — the client-side TanStack `DataTable` is deferred to the first view that needs live table interactivity. Client `client_type`/`status`/at-risk are derived centrally in `lib/clients/derive.ts` (ADR-002/017/019/037/040/041), never stored.
 

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -22,6 +23,14 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -79,24 +88,53 @@ function peso(value: number): string {
   })}`;
 }
 
+// Design-system status pill: label + shape (dot) + fixed status hue — never
+// color alone. Active = emerald dot; Inactive = hollow neutral dot.
+function PlanStatus({ active }: { active: boolean }) {
+  return active ? (
+    <Badge variant="outline" className="gap-1.5 font-normal">
+      <span className="size-1.5 rounded-full bg-[var(--b23-success)]" />
+      Active
+    </Badge>
+  ) : (
+    <Badge variant="outline" className="gap-1.5 font-normal text-muted-foreground">
+      <span className="size-1.5 rounded-full border-[1.5px] border-[var(--b23-neutral)]" />
+      Inactive
+    </Badge>
+  );
+}
+
+const headClass =
+  "font-mono text-[11px] uppercase tracking-[var(--b23-track-eyebrow)]";
+
 export function MembershipPlansSection({ plans }: { plans: PlanItem[] }) {
   const [createOpen, setCreateOpen] = useState(false);
 
   return (
-    <Card className="max-w-3xl">
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
-        <div className="space-y-1.5">
-          <CardTitle>Membership Plans</CardTitle>
-          <CardDescription>
-            The plan options offered in the Add/Renew membership flow. Editing a
-            plan&apos;s price affects future memberships only — past records keep
-            their snapshot. Retired plans stay here and can be reactivated.
-          </CardDescription>
-        </div>
-        <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus aria-hidden />
-          Add plan
-        </Button>
+    <Card className="max-w-3xl rounded-[var(--b23-radius-2xl)] shadow-[var(--b23-shadow-card)]">
+      <CardHeader>
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-[var(--b23-track-eyebrow)] text-muted-foreground">
+          Catalog
+        </span>
+        <CardTitle className="font-display text-xl font-semibold tracking-[var(--b23-track-display)]">
+          Membership plans
+        </CardTitle>
+        <CardDescription>
+          The plan options offered in the Add/Renew membership flow. Editing a
+          plan&apos;s price affects future memberships only — past records keep
+          their snapshot. Retired plans stay here and can be reactivated.
+        </CardDescription>
+        <CardAction>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+            className="rounded-full bg-[image:var(--b23-grad-primary)] shadow-[var(--b23-glow-btn)] hover:brightness-110"
+          >
+            <Plus aria-hidden />
+            Add plan
+          </Button>
+        </CardAction>
       </CardHeader>
       <CardContent>
         {plans.length === 0 ? (
@@ -106,29 +144,42 @@ export function MembershipPlansSection({ plans }: { plans: PlanItem[] }) {
             description="Add your standard 1/2/3-month plans (or a custom duration). Membership purchases can still use an inline custom duration without a saved plan."
           />
         ) : (
-          <ul className="divide-border divide-y">
-            {plans.map((plan) => (
-              <li
-                key={plan.id}
-                className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-              >
-                <div className="min-w-0 space-y-0.5">
-                  <p className="flex items-center gap-2 font-medium">
-                    <span className="truncate">{plan.name}</span>
-                    {plan.isActive ? null : (
-                      <Badge variant="outline" className="text-muted-foreground">
-                        Inactive
-                      </Badge>
-                    )}
-                  </p>
-                  <p className="text-muted-foreground text-sm tabular-nums">
-                    {durationDaysLabel(plan.durationDays)} · {peso(plan.defaultPrice)}
-                  </p>
-                </div>
-                <PlanRowActions plan={plan} />
-              </li>
-            ))}
-          </ul>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className={headClass}>Name</TableHead>
+                <TableHead className={headClass}>Duration</TableHead>
+                <TableHead className={`${headClass} text-right`}>
+                  Default price
+                </TableHead>
+                <TableHead className={headClass}>Status</TableHead>
+                <TableHead className="w-0">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {plans.map((plan) => (
+                <TableRow key={plan.id}>
+                  <TableCell className="font-medium text-foreground">
+                    {plan.name}
+                  </TableCell>
+                  <TableCell className="font-mono tabular-nums text-muted-foreground">
+                    {durationDaysLabel(plan.durationDays)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {peso(plan.defaultPrice)}
+                  </TableCell>
+                  <TableCell>
+                    <PlanStatus active={plan.isActive} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <PlanRowActions plan={plan} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </CardContent>
 
@@ -256,7 +307,9 @@ function PlanFormDialog({ open, onOpenChange, mode, plan }: DialogProps) {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{mode === "edit" ? "Edit plan" : "New plan"}</DialogTitle>
+          <DialogTitle className="font-display tracking-[var(--b23-track-display)]">
+            {mode === "edit" ? "Edit plan" : "New plan"}
+          </DialogTitle>
           <DialogDescription>
             {mode === "edit"
               ? "Changes apply to future memberships only. Past prices are never rewritten."
@@ -321,7 +374,7 @@ function PlanFormDialog({ open, onOpenChange, mode, plan }: DialogProps) {
                         type="number"
                         step="1"
                         min={1}
-                        className="tabular-nums"
+                        className="font-mono tabular-nums"
                         name={field.name}
                         ref={field.ref}
                         onBlur={field.onBlur}
@@ -350,20 +403,28 @@ function PlanFormDialog({ open, onOpenChange, mode, plan }: DialogProps) {
               name="defaultPrice"
               render={({ field }) => (
                 <FormItem className="max-w-[12rem]">
-                  <FormLabel>Default price (₱)</FormLabel>
+                  <FormLabel>Default price</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      inputMode="decimal"
-                      step="0.01"
-                      min={0}
-                      className="font-mono tabular-nums"
-                      name={field.name}
-                      ref={field.ref}
-                      onBlur={field.onBlur}
-                      value={Number.isNaN(field.value) ? "" : field.value}
-                      onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                    />
+                    <div className="relative">
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-muted-foreground"
+                      >
+                        ₱
+                      </span>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.01"
+                        min={0}
+                        className="pl-7 font-mono tabular-nums"
+                        name={field.name}
+                        ref={field.ref}
+                        onBlur={field.onBlur}
+                        value={Number.isNaN(field.value) ? "" : field.value}
+                        onChange={(e) => field.onChange(e.target.valueAsNumber)}
+                      />
+                    </div>
                   </FormControl>
                   <FormDescription>Overridable at purchase time.</FormDescription>
                   <FormMessage />
@@ -379,7 +440,11 @@ function PlanFormDialog({ open, onOpenChange, mode, plan }: DialogProps) {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="rounded-full bg-[image:var(--b23-grad-primary)] shadow-[var(--b23-glow-btn)] hover:brightness-110"
+              >
                 {isSubmitting
                   ? "Saving…"
                   : mode === "edit"

@@ -1,98 +1,174 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Dark-first: the app defaults to the `.dark` class (see <html> in layout.tsx).
-   Token VALUES are normative per DESIGN-SYSTEM.md §3.2/§3.3/§3.5; the selector
-   arrangement (:root = light, .dark = dark) follows shadcn/Tailwind convention so
-   `dark:` variants and a future theme toggle work. A light toggle = remove the
-   default `.dark` class. */
+/* Dark-only: :root is the single source of truth. Token VALUES are the B23
+   design tokens (docs/DESIGN-TOKENS.MD). The `.dark` selector is retained so
+   shadcn `dark:` variants and any future toggle still resolve, but it declares
+   nothing and inherits every token from :root. */
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.5rem;
+  /* ══════════════════════════════════════════════════════════════
+     B23 DESIGN TOKENS — copied verbatim from docs/DESIGN-TOKENS.MD
+     ══════════════════════════════════════════════════════════════ */
 
-  /* ── Core (light) — DESIGN-SYSTEM §3.2 Light column ── */
-  --background: #ffffff;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #4f46e5; /* indigo-600 */
-  --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --accent: #eef2ff;
-  --accent-foreground: #3730a3;
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-  --border: #e2e8f0;
-  --input: #cbd5e1;
-  --ring: #6366f1;
+  /* ── COLORS ─────────────────────────────────── */
+  --b23-black:          #050504;
+  --b23-bg-deep:        #0C0B09;
+  --b23-bg:             #100F0D;
+  --b23-surface:        #1A1815;
+  --b23-surface-2:      #221F1A;
+  --b23-surface-3:      #2B2721;
+  --b23-border:         #2E2A24;
+  --b23-border-2:       #3C372F;
+  --b23-fg:             #F3F0EA;
+  --b23-fg-2:           #CAC4B8;
+  --b23-muted:          #9C9488;
+  --b23-faint:          #6E675C;
+  --b23-neutral:        #7A7167;
+  --b23-accent:         #8B43F0;
+  --b23-accent-hi:      color-mix(in oklab, var(--b23-accent) 72%, #ffffff);
+  --b23-accent-lo:      color-mix(in srgb, var(--b23-accent) 76%, #000000);
+  --b23-accent-light:   #C6A0FA;
+  --b23-success:        #34D399;
+  --b23-success-solid:  #1FA77B;
+  --b23-success-deep:   #06281D;
+  --b23-warning:        #FBBF24;
+  --b23-warning-solid:  #B4560F;
+  --b23-danger:         #F87171;
+  --b23-danger-rose:    #FB7185;
+  --b23-danger-solid:   #E5484D;
+  --b23-info:           #38BDF8;
+  --b23-at-risk:        #FB923C;
+  --b23-cat-membership: #B69BFF;
+  --b23-cat-product:    #2DD4BF;
+  --b23-cat-walkin:     #FBBF24;
+  --b23-cat-info:       #38BDF8;
+  --b23-canvas:         var(--b23-bg);
+  --b23-text:           var(--b23-fg);
+  --b23-text-muted:     var(--b23-muted);
+  --b23-surface-card:   var(--b23-surface);
+  --b23-primary:        var(--b23-accent);
+  --b23-primary-on:     #FFFFFF;
+  --b23-focus-ring:     color-mix(in srgb, var(--b23-accent) 20%, transparent);
 
-  /* ── Semantic feedback (light) — DESIGN-SYSTEM §3.3 ── */
-  --success: #059669;
-  --success-foreground: #ffffff;
-  --warning: #d97706;
-  --warning-foreground: #ffffff;
-  --info: #0284c7;
-  --info-foreground: #ffffff;
-  --at-risk: #f97316; /* orange — distinct from amber "expiring soon" */
-  --at-risk-foreground: #ffffff;
+  /* ── TYPOGRAPHY ─────────────────────────────── */
+  --b23-display:        'Space Grotesk', system-ui, sans-serif;
+  --b23-sans:           'IBM Plex Sans', system-ui, sans-serif;
+  --b23-mono:           'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+  --b23-w-regular:      400;
+  --b23-w-medium:       500;
+  --b23-w-semibold:     600;
+  --b23-w-bold:         700;
+  --b23-fs-hero:        56px;
+  --b23-fs-display:     30px;
+  --b23-fs-h1:          28px;
+  --b23-fs-kpi:         28px;
+  --b23-fs-h2:          20px;
+  --b23-fs-h3:          16px;
+  --b23-fs-body:        14px;
+  --b23-fs-sm:          13px;
+  --b23-fs-xs:          12px;
+  --b23-fs-micro:       10px;
+  --b23-lh-tight:       1.1;
+  --b23-lh-snug:        1.3;
+  --b23-lh-body:        1.45;
+  --b23-track-display:  -0.02em;
+  --b23-track-eyebrow:  0.08em;
+  --b23-track-nav:      0.16em;
+  --b23-tnum:           tabular-nums;
 
-  /* ── On-canvas semantic text (light) — DESIGN-SYSTEM §3.3 "text/icon on canvas"
-     column. Used for subtle-surface status badges so small badge text stays AA on
-     the canvas (the solid --success/--warning/etc. are tuned for white-on-fill). ── */
-  --success-on: #047857;
-  --warning-on: #b45309;
-  --danger-on: #b91c1c;
-  --info-on: #0369a1;
-  --primary-on: #4f46e5; /* indigo-600 */
+  /* ── SPACING · RADIUS · LAYOUT ──────────────── */
+  --b23-space-0:        0;
+  --b23-space-1:        4px;
+  --b23-space-2:        8px;
+  --b23-space-3:        12px;
+  --b23-space-4:        16px;
+  --b23-space-5:        20px;
+  --b23-space-6:        24px;
+  --b23-space-8:        32px;
+  --b23-space-10:       40px;
+  --b23-space-12:       48px;
+  --b23-space-16:       64px;
+  --b23-card-pad:       20px;
+  --b23-card-pad-lg:    26px;
+  --b23-cell-py:        13px;
+  --b23-cell-px:        16px;
+  --b23-gap-inline:     8px;
+  --b23-gap-grid:       14px;
+  --b23-section-gap:    24px;
+  --b23-radius-sm:      7px;
+  --b23-radius-md:      9px;
+  --b23-radius-lg:      11px;
+  --b23-radius-xl:      14px;
+  --b23-radius-2xl:     16px;
+  --b23-radius-3xl:     20px;
+  --b23-radius-pill:    999px;
+  --b23-topbar-h:       58px;
+  --b23-sidebar-w:      240px;
+  --b23-content-max:    1320px;
+  --b23-content-pad-x:  30px;
+  --b23-content-pad-y:  26px;
 
-  /* ── Charts (light) — light-mode parity re-check deferred, DESIGN-SYSTEM §19 ── */
-  --chart-1: #4f46e5;
-  --chart-2: #059669;
-  --chart-3: #d97706;
-  --chart-4: #0284c7;
-  --chart-5: #db2777;
-  --chart-6: #65a30d;
+  /* ── ELEVATION · GLOW · MOTION ──────────────── */
+  --b23-inset-hi:       inset 0 1px 0 rgba(255,255,255,.04);
+  --b23-shadow-card:    inset 0 1px 0 rgba(255,255,255,.04), 0 12px 30px -24px rgba(0,0,0,.9);
+  --b23-shadow-panel:   inset 0 1px 0 rgba(255,255,255,.04), 0 16px 40px -30px rgba(0,0,0,.9);
+  --b23-shadow-popover: 0 18px 44px -18px rgba(0,0,0,.8);
+  --b23-shadow-dialog:  0 0 0 1px rgba(182,155,255,.04), 0 40px 90px -36px rgba(0,0,0,.95), 0 0 60px -30px var(--b23-accent);
+  --b23-shadow-toast:   0 18px 50px -16px rgba(0,0,0,.8);
+  --b23-glow-hero:      0 24px 60px -34px var(--b23-accent), inset 0 1px 0 rgba(255,255,255,.06);
+  --b23-glow-btn:       0 10px 24px -10px var(--b23-accent);
+  --b23-glow-logo:      0 6px 16px -6px var(--b23-accent);
+  --b23-ring:           0 0 0 3px var(--b23-focus-ring);
+  --b23-scrim:          rgba(8,7,6,.66);
+  --b23-grad-primary:   linear-gradient(150deg, var(--b23-accent), color-mix(in srgb, var(--b23-accent) 76%, #000));
+  --b23-grad-logo:      linear-gradient(150deg, var(--b23-accent), color-mix(in srgb, var(--b23-accent) 68%, #000));
+  --b23-dur-fast:       120ms;
+  --b23-dur-base:       180ms;
+  --b23-dur-slow:       240ms;
+  --b23-ease-out:       cubic-bezier(.2,.7,.3,1);
+  --b23-ease-in:        cubic-bezier(.4,0,.9,.4);
+  --b23-z-base:         0;
+  --b23-z-raised:       10;
+  --b23-z-topbar:       20;
+  --b23-z-popover:      30;
+  --b23-z-scrim:        40;
+  --b23-z-dialog:       50;
+  --b23-z-toast:        60;
+  --b23-z-tooltip:      70;
 
-  /* ── Sidebar (light) ── */
-  --sidebar: #ffffff;
-  --sidebar-foreground: #0f172a;
-  --sidebar-primary: #4f46e5;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eef2ff;
-  --sidebar-accent-foreground: #3730a3;
-  --sidebar-border: #e2e8f0;
-  --sidebar-ring: #6366f1;
-}
+  /* ══════════════════════════════════════════════════════════════
+     shadcn token remaps → B23 (var() references only, no hex)
+     ══════════════════════════════════════════════════════════════ */
+  --background:            var(--b23-bg);
+  --foreground:            var(--b23-fg);
+  --card:                  var(--b23-surface);
+  --card-foreground:       var(--b23-fg);
+  --popover:               var(--b23-surface-2);
+  --popover-foreground:    var(--b23-fg);
+  --primary:               var(--b23-accent);
+  --primary-foreground:    var(--b23-primary-on);
+  --secondary:             var(--b23-surface-2);
+  --secondary-foreground:  var(--b23-fg-2);
+  --muted:                 var(--b23-surface-2);
+  --muted-foreground:      var(--b23-muted);
+  --accent:                var(--b23-surface-3);
+  --accent-foreground:     var(--b23-fg);
+  --destructive:           var(--b23-danger-solid);
+  --destructive-foreground: var(--b23-primary-on);
+  --border:                var(--b23-border);
+  --input:                 var(--b23-surface-2);
+  --ring:                  var(--b23-focus-ring);
+  --radius:                var(--b23-radius-md);
 
-.dark {
-  /* ── Core (dark — DEFAULT theme) — DESIGN-SYSTEM §3.2 Dark column ── */
-  --background: #0f172a; /* slate-900 */
-  --foreground: #f1f5f9; /* slate-100 */
-  --card: #15203a; /* slate-900 lifted */
-  --card-foreground: #f1f5f9;
-  --popover: #1e293b; /* slate-800 */
-  --popover-foreground: #f1f5f9;
-  --primary: #6366f1; /* indigo-500 */
-  --primary-foreground: #ffffff;
-  --secondary: #1e293b;
-  --secondary-foreground: #e2e8f0;
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8; /* slate-400 */
-  --accent: #27344c;
-  --accent-foreground: #f1f5f9;
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-  --border: #283449; /* ~slate-750 */
-  --input: #334155; /* slate-700 */
-  --ring: #818cf8; /* indigo-400 */
+  /* ══════════════════════════════════════════════════════════════
+     Non-remapped project tokens — DARK values promoted into :root
+     (not in the Step 2 remap list; dark-only rendering stays correct)
+     ══════════════════════════════════════════════════════════════ */
 
-  /* ── Semantic feedback (dark) — DESIGN-SYSTEM §3.3 ── */
+  /* Semantic feedback — dark values retained verbatim */
   --success: #059669;
   --success-foreground: #ffffff;
   --warning: #d97706;
@@ -102,31 +178,36 @@
   --at-risk: #f97316;
   --at-risk-foreground: #ffffff;
 
-  /* ── On-canvas semantic text (dark — DEFAULT) — DESIGN-SYSTEM §3.3 "text/icon on
-     canvas" column. Brighter shades so subtle-surface badge text stays AA on slate. ── */
+  /* On-canvas semantic text — dark values retained verbatim */
   --success-on: #34d399; /* emerald-400 */
   --warning-on: #fbbf24; /* amber-400 */
   --danger-on: #f87171; /* red-400 */
   --info-on: #38bdf8; /* sky-400 */
-  --primary-on: #818cf8; /* indigo-400 */
+  --primary-on: #818cf8; /* indigo-400 — distinct from --b23-primary-on */
 
-  /* ── Charts (dark) — DESIGN-SYSTEM §3.5 categorical palette ── */
-  --chart-1: #818cf8; /* indigo-400 — membership / member */
-  --chart-2: #34d399; /* emerald-400 — product */
-  --chart-3: #fbbf24; /* amber-400 — walk-in */
-  --chart-4: #38bdf8; /* sky-400 */
-  --chart-5: #f472b6; /* pink-400 */
-  --chart-6: #a3e635; /* lime-400 */
+  /* Charts — B23 categorical palette */
+  --chart-1: var(--b23-cat-membership);
+  --chart-2: var(--b23-cat-product);
+  --chart-3: var(--b23-cat-walkin);
+  --chart-4: var(--b23-cat-info);
+  --chart-5: var(--b23-danger-rose);
+  --chart-6: var(--b23-success);
 
-  /* ── Sidebar (dark) ── */
-  --sidebar: #15203a;
-  --sidebar-foreground: #f1f5f9;
-  --sidebar-primary: #6366f1;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #27344c;
-  --sidebar-accent-foreground: #f1f5f9;
-  --sidebar-border: #283449;
-  --sidebar-ring: #818cf8;
+  /* Sidebar — B23 */
+  --sidebar:                    var(--b23-surface);
+  --sidebar-foreground:         var(--b23-fg);
+  --sidebar-primary:            var(--b23-accent);
+  --sidebar-primary-foreground: var(--b23-primary-on);
+  --sidebar-accent:             var(--b23-surface-2);
+  --sidebar-accent-foreground:  var(--b23-fg-2);
+  --sidebar-border:             var(--b23-border);
+  --sidebar-ring:               var(--b23-focus-ring);
+}
+
+/* Dark-only: retained as the shadcn `dark:` variant target, but declares
+   nothing so it inherits every token from :root (the single source of truth). */
+.dark {
+  /* intentionally empty — see :root */
 }
 
 @theme inline {
@@ -181,8 +262,9 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--b23-sans);
+  --font-mono: var(--b23-mono);
+  --font-display: var(--b23-display);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -195,8 +277,11 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground font-sans;
-    /* Tabular figures are applied per-context (tables, KPIs, money) via the
-       `tabular-nums` utility, per DESIGN-SYSTEM.md §4. */
+    background-color: var(--b23-bg);
+    color: var(--b23-fg);
+    font-family: var(--b23-sans);
+    font-size: var(--b23-fs-body);
+    line-height: var(--b23-lh-body);
+    -webkit-font-smoothing: antialiased;
   }
 }

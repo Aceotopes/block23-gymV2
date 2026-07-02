@@ -1,0 +1,22 @@
+<!-- @dsCard group="Colors" viewport="700x170" name="Status colors" subtitle="Fixed & distinct from violet — always paired with label + shape" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;padding:20px;background:var(--b23-bg);display:flex;flex-direction:column;gap:14px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;font:500 12px var(--b23-sans)}
+  .dot{width:8px;height:8px;border-radius:999px}
+  .hollow{width:8px;height:8px;border-radius:999px;border:1.5px solid}
+  .h{font:500 11px var(--b23-mono);color:var(--b23-faint)}
+</style></head><body>
+  <div class="row">
+    <span class="badge" style="color:var(--b23-success);background:color-mix(in srgb,var(--b23-success) 15%,transparent);border:1px solid color-mix(in srgb,var(--b23-success) 30%,transparent)"><span class="dot" style="background:var(--b23-success)"></span>Success</span>
+    <span class="badge" style="color:var(--b23-warning);background:color-mix(in srgb,var(--b23-warning) 15%,transparent);border:1px solid color-mix(in srgb,var(--b23-warning) 30%,transparent)">⚠ Warning</span>
+    <span class="badge" style="color:var(--b23-danger);background:color-mix(in srgb,var(--b23-danger) 15%,transparent);border:1px solid color-mix(in srgb,var(--b23-danger) 30%,transparent)">Danger</span>
+    <span class="badge" style="color:var(--b23-info);background:color-mix(in srgb,var(--b23-info) 15%,transparent);border:1px solid color-mix(in srgb,var(--b23-info) 30%,transparent)"><span class="hollow" style="border-color:var(--b23-info)"></span>Info</span>
+    <span class="badge" style="color:var(--b23-at-risk);background:color-mix(in srgb,var(--b23-at-risk) 15%,transparent);border:1px solid color-mix(in srgb,var(--b23-at-risk) 30%,transparent)">At risk</span>
+    <span class="badge" style="color:var(--b23-neutral);background:color-mix(in srgb,var(--b23-neutral) 15%,transparent);border:1px solid color-mix(in srgb,var(--b23-neutral) 30%,transparent)"><span class="hollow" style="border-color:var(--b23-neutral)"></span>Expired</span>
+  </div>
+  <div class="row" style="gap:22px">
+    <span class="h">emerald #34D399</span><span class="h">amber #FBBF24</span><span class="h">red #F87171</span><span class="h">sky #38BDF8</span><span class="h">orange #FB923C</span><span class="h">neutral #7A7167</span>
+  </div>
+</body></html>

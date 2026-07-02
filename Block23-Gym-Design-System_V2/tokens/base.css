@@ -1,0 +1,36 @@
+/* ============================================================
+   Block 23 Gym — Base reset & canvas
+   ============================================================ */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--b23-bg);
+  color: var(--b23-fg);
+  font-family: var(--b23-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Warm dark scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--b23-border);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3A352D;
+  background-clip: padding-box;
+}
+
+::selection { background: color-mix(in srgb, var(--b23-accent) 40%, transparent); color: #fff; }
+
+/* Visible focus on every focusable element (WCAG AA) */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--b23-accent-hi);
+  outline-offset: 2px;
+}

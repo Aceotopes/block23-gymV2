@@ -1,0 +1,609 @@
+# Module Specifications — Gym Management System
+
+Each module is specified with: Purpose, MVP Scope, Key Fields/Forms, Business Rules Enforced, Edge Case Handling, and Deferred (Future) Items.
+
+> **Design Review #1 (2026-06-22):** Module 5 renamed from "Sales" to "Client Payments" and scoped to membership fees and walk-in fees only. New Module 6 (POS & Product Sales) added for product transactions. Client Profile "Purchase History" tab removed. Product entity updated with cost_price, image, product_type, and servings_per_container. Three new reports added. See DECISIONS.md ADR-011 and ADR-012.
+
+> **Design Review #2 (2026-06-23):** Clients Module overhauled after wireframe review — status filter chips, updated table columns, quick-stats strip, context-aware membership button, archive via overflow menu, walk-in conversion signals, attendance tab filters, voided payment indicator, "Show archived" toggle. Dashboard gains a 4th live feed panel (Frequent walk-ins). Membership Module gains Membership Plan catalog management. Settings Module gains "Membership Plans" section. See DECISIONS.md ADR-014, ADR-015, ADR-016.
+
+> **Design Review #3 (2026-06-24):** Attendance Module deep review. Check-In Station screen added as top-level navigation entry (ADR-022). Renewal decision prompt added for expired MEMBER check-in (ADR-018). At-risk member signal introduced: new setting, "At risk" filter chip, Dashboard 5th panel, and report (ADR-019). Walk-in conversion event defined as derived (ADR-020). `created_by` and `correction_note` added to Attendance entity (ADR-021). Six new P0 stories (US-1.8, US-2.11, US-4.8, US-4.9, US-8.13, US-8.14). Total MVP story count: 52 → 58. See DECISIONS.md ADR-018 through ADR-022.
+
+> **Design Review #4 (2026-06-24):** Attendance module restructured as a single top-level navbar module with three internal views: Check-In (default), Attendance History, and Attendance Analytics (ADR-023). ADR-022 amended. Check-In is no longer a standalone top-level navigation entry. Attendance History updated with date filter presets. Attendance Analytics view added as committed MVP scope (US-4.10). Total MVP story count: 58 → 59. See DECISIONS.md ADR-023.
+
+> **Design Review #5 (2026-06-24):** Payments, POS, and Inventory modules comprehensively updated for operational and business value. Dashboard KPI strip expanded to 6 cards; Today's Collections live feed panel added; Inventory alerts enhanced with stockout estimates. Client Payments gains Collections Summary view and structured void reason categories. POS gains cash change calculator, whole-container sale mode, gross margin display, and category tabs. Inventory gains valuation, days-until-stockout, shrinkage indicator, adjustment reason categories, restock cost capture, and reorder_point. Reports gains Gross Profit Report (US-8.12, promoted to P0) and shrinkage breakdown in Inventory Usage Report. See DECISIONS.md ADR-026, ADR-027, ADR-028.
+
+> **Design Review #6 (2026-06-24):** Reports Module comprehensive review and expansion. Eight new P0 reports added (US-8.15–US-8.22). US-8.2 updated — annual and custom-range period options added. US-8.5 updated — full spec with member/walk-in breakdown, period-over-period toggle, and export. US-8.7 updated — slow-moving sort option added. See DECISIONS.md ADR-029.
+
+> **Design Review #7 (2026-06-24):** Planning Phase Exit Review — patch applied. Attendance Record Correction spec updated to reference `Attendance.updated_at` and US-4.11. Settings module System Preferences section now cross-references US-1.9 for the walk-in conversion prompt threshold. ADR-033 (Device Target Strategy) added — desktop-first, mobile-responsive; tablet not a primary target. See DECISIONS.md ADR-033.
+
+> **Blocker Resolution Patch (2026-06-25):** Seven pre-tech-stack blockers resolved across all modules. `Product.is_active` replaced with `Product.deleted_at` throughout (B1/ADR-005); `FORCED_SALE` added to inventory adjustment categories (B2/ADR-034); UTC timestamp strategy documented (B3/ADR-035); Dashboard "Frequent walk-ins" confirmed top-5, not threshold (B4/ADR-036); "Upcoming" filter chip and status added to Client List and Membership (B5/ADR-037); `visit_type` mutability exception documented in Attendance (B6/ADR-038); `Gym.default_membership_fee` removed from Settings (B7/ADR-039). See DECISIONS.md ADR-034 through ADR-039.
+
+> **Architecture Readiness Patch (2026-06-25):** Review findings resolved. Membership: canonical in-effect definition and renewal math (ADR-040), soft cancellation added (ADR-041, US-3.10, Flow 18), ad-hoc custom-duration clarified. Dashboard "Active members" and "Frequent walk-ins" populations tightened. Inventory manual adjustment (Flow 19) and product management (Flow 20) flows referenced; shrinkage zero-sales edge added. Membership has no standalone nav — distributed capability (ADR-042). See DECISIONS.md ADR-040–ADR-044 and `INFORMATION-ARCHITECTURE.md`.
+
+---
+
+## 1. Dashboard Module
+
+**Purpose:** Professional SaaS-style monitoring screen — the owner's daily command center combining operational metrics, trend charts, and actionable alerts in one view.
+
+**MVP Scope:**
+
+**KPI Strip (6 cards, always visible at top):**
+- Active members — count of clients with an in-effect membership (`start_date ≤ today ≤ end_date`; excludes Upcoming and cancelled memberships — ADR-040, ADR-041), with delta vs. last month (e.g., "+3 from last month")
+- Today's check-ins — with delta vs. yesterday
+- MTD (month-to-date) revenue — with % change vs. same period last month
+- Today's Revenue — all completed transactions (CLIENT_TRANSACTION + POS_SALE) collected today, voided excluded (US-5.4, US-8.1)
+- Expiring soon count — highlighted in warning color, using `Gym.expiration_warning_days`
+- Inventory Value — `SUM(current_stock × cost_price)` across all active products where cost_price is not null; products without cost_price excluded with a count noted (US-7.7)
+
+**Period selector:** Today / Week / Month toggle filters all chart data accordingly. KPI cards always show the most contextually relevant period (today for check-ins, MTD for revenue).
+
+**Charts (all rendered client-side from API data):**
+- **Revenue trend** (line chart, multi-series): daily revenue over the selected period, broken into 3 lines — Membership, Walk-In, Product. Sourced from both `CLIENT_TRANSACTION` and `POS_SALE` records.
+- **Membership status breakdown** (donut chart): Active / Expiring Soon / Expired with legend and counts.
+- **Daily attendance** (grouped bar chart): Member vs. Walk-in check-ins per day over the selected period.
+- **Top products** (horizontal bar chart): top 5 products by units/servings sold over the selected period.
+
+**Live feed panels (below charts):**
+- **Recent POS sales:** last 5 product transactions with item summary, payment method, amount, and time-ago.
+- **Expiring soon members:** list of members whose memberships expire within the warning window, sorted by soonest first, with days-remaining indicator and color-coded urgency (red < 7 days, amber 7–14 days).
+- **Inventory alerts:** products below `low_stock_threshold` with remaining count. For `SERVING_BASED_PRODUCT` items, shows remaining servings (e.g., "Whey Protein: 8 servings remaining"). Each alert row also shows the days-until-stockout estimate: "~N days remaining" (from US-7.6; blank if no recent sales data).
+- **Today's Collections:** today's revenue totals by payment method (Cash / GCash / Card / Other) spanning both `CLIENT_TRANSACTION` and `POS_SALE` records. Voided transactions excluded. Links to the full Collections Summary view (US-5.4). Enables daily cash drawer reconciliation from the Dashboard.
+- **Frequent walk-ins:** top 5 **walk-in-only clients** (`client_type = WALK_IN` — zero non-cancelled membership records) sorted by total visit count descending, with last visit date and visit count. No minimum visit threshold — always shows the top 5 regardless of `Gym.walkin_conversion_prompt_visits` (ADR-036). "View all →" links to the Client List filtered to "Walk-in only." Supports same-visit conversion outreach. (ADR-016)
+- **At-risk members:** MEMBER clients with an in-effect membership (`start_date ≤ today ≤ end_date`) whose last visit exceeds `Gym.member_inactivity_warning_days`. Sorted by days since last visit descending. Shows up to 5 clients with: name, days since last visit, and membership expiry date. "View all →" links to the Client List filtered by "At risk." (ADR-019, US-2.11)
+
+**Business Rules Enforced:**
+- All chart and metric data excludes voided transactions (both `CLIENT_TRANSACTION` and `POS_SALE`).
+- "Expiring Soon" threshold uses `Gym.expiration_warning_days` setting throughout.
+- "At-risk members" panel uses `Gym.member_inactivity_warning_days` consistently with the Client List "At risk" filter and the At-risk Members Report.
+- Revenue figures are always MTD when "Month" period is selected; Today's Revenue KPI card always shows the current calendar day regardless of period selector.
+- Attendance charts distinguish total check-ins from unique visitors.
+- Inventory Value KPI excludes products with null `cost_price` — the excluded count is displayed so the owner knows the figure may be understated.
+- Today's Collections live feed panel aggregates from the same Transaction ledger as the Revenue by Payment Method report — figures are consistent.
+
+**Performance requirement:** Must load within 3 seconds (NFR).
+
+**Edge Cases:**
+- Empty state (brand-new gym, zero data) — all charts render with empty axes and a "no data yet" label; KPI cards show zeros; Inventory Value shows ₱0 or "No products with cost price set."
+- Partial period (e.g., "Month" selected on the 3rd) — chart shows available days only.
+- Voided transactions excluded from all revenue metrics and charts consistently.
+- At-risk members panel empty state: if no active MEMBER clients have exceeded the inactivity threshold, panel shows "All active members have visited recently."
+- At-risk panel shows only clients with active memberships — expired members are excluded (they belong to the "Expiring soon" and renewal outreach workflows).
+- Today's Collections panel shows ₱0 with all payment method rows visible if no transactions have been recorded today — never a blank/missing panel.
+- Days-until-stockout estimate in Inventory alerts shows "No recent sales" instead of a number if the product has zero sales in the last 30 days.
+
+**Deferred:**
+- Customizable widget layout.
+- Scheduled summary email.
+- Comparison mode (current period vs. prior period).
+
+---
+
+## 2. Clients Module
+
+**Purpose:** Central client registry replacing scattered paper/Excel records.
+
+**MVP Scope / Forms:**
+
+**Client List:**
+- Status filter chips always visible: `All` · `Active` · `Upcoming` · `At risk` · `Expiring soon` · `Expired` · `Walk-in only` · `Inactive`. Filters combine with name search. Filter state persists within the session. (ADR-014, ADR-017, ADR-019, ADR-037)
+  - `Active` — MEMBER clients with an active membership (`start_date ≤ today ≤ end_date`) + WALK_IN clients whose last visit is within `Gym.walkin_inactivity_threshold_days`
+  - `Upcoming` — MEMBER clients with a future-dated membership (`start_date > today`) and no currently active membership (ADR-037)
+  - `At risk` — MEMBER clients with an in-effect membership (`start_date ≤ today ≤ end_date`) whose last `Attendance.visit_date` exceeds `Gym.member_inactivity_warning_days`, OR in-effect MEMBER clients with no attendance records at all. UPCOMING members are excluded (their period has not begun — ADR-040). Results sort by days since last visit descending by default. Does not overlap with "Inactive" (WALK_IN only). A client can match both "At risk" and "Expiring soon" simultaneously. (ADR-019)
+  - `Expiring soon` — MEMBER clients within `Gym.expiration_warning_days` of membership end
+  - `Expired` — MEMBER clients with no active or upcoming membership; most recent membership has `end_date < today`
+  - `Walk-in only` — all WALK_IN type clients (Active and Inactive walk-ins combined)
+  - `Inactive` — WALK_IN clients whose last visit exceeds `Gym.walkin_inactivity_threshold_days`, or who have never visited
+- Table columns: Full Name, Type (MEMBER / WALK_IN badge), Status (derived), Membership Expiry (members only — blank for walk-in clients), Contact Number, Actions.
+- Name search: partial-match, returns within 2 seconds (NFR).
+- **Show archived toggle:** when enabled, archived clients appear in a visually distinct state (greyed out) interleaved with active results. Default off.
+- "+ New Client" button in the toolbar. (No "+ Add membership" toolbar shortcut — membership is created from the Client Profile.)
+
+**Register/Edit Client forms:**
+- **Register Client:** `full_name` (required), `contact_number` (optional), `notes` (optional).
+- **Edit Client:** all fields editable except system-generated `date_registered`.
+
+**Client Profile:**
+- **Type badge** displayed prominently in the profile header: `MEMBER` or `WALK_IN`. Status badge displayed alongside it (e.g., "MEMBER · Active", "WALK_IN · Inactive").
+- **Quick-stats strip (header):** total all-time visits · visits this month · for MEMBER clients: days until membership expiry · for WALK_IN clients: walk-in visit count and days since last visit.
+- **Walk-in conversion signal:** for WALK_IN type clients, the quick-stats strip prominently shows "X visits — no membership," serving as a direct conversion cue. (ADR-016)
+- **Context-aware membership action button:**
+  - "Add membership" — client has no membership history.
+  - "Renew" — client's membership is expired or expiring soon (within warning threshold).
+  - "Renew early" — client has an active membership not near expiry.
+- **Overflow menu (⋯) on profile header:** Edit profile · Archive client · (if archived: Reactivate client).
+- **Tabs:**
+  - *Membership History:* chronological list of all Membership records. Rows where the associated payment transaction is voided display a "VOID" badge on the payment column — the membership record itself is unchanged, only the financial indicator is flagged.
+  - *Attendance History:* chronological check-in log with date range filter and visit type filter (MEMBER / WALK_IN).
+
+*(Purchase History tab removed — POS product sales are not linked to clients. See ADR-011.)*
+
+**Archive Client (soft delete):**
+- Accessible from the Client Profile overflow menu (⋯), not a primary button.
+- Requires confirmation: "Archive [Name]? They will be hidden from the active client list. All history is preserved."
+- Archived clients are hidden from the default Client List view; visible only with "Show archived" toggle enabled.
+- Archived clients retain all attendance, membership, and payment history — fully intact and queryable.
+- Reactivation (un-archive) available from the same overflow menu.
+
+**Business Rules Enforced:**
+- A client can exist indefinitely with zero memberships (pure walk-in history); their `client_type` is `WALK_IN`.
+- Once a client has any Membership record, `client_type` is permanently `MEMBER` — it does not revert if the membership expires.
+- Soft delete only (`deleted_at`) — a client is never hard-removed if they have any attendance or transaction history.
+- `client_type` and `status` are both derived at query time (ADR-002, ADR-017) — no stored columns, no sync job.
+- The "Expiring soon" filter uses the same `Gym.expiration_warning_days` threshold as the Dashboard widget.
+- The "Inactive" filter uses `Gym.walkin_inactivity_threshold_days` — a separately configurable setting.
+- The "At risk" filter uses `Gym.member_inactivity_warning_days` — a separately configurable setting distinct from walk-in inactivity. At-risk is an orthogonal attendance-recency signal that does not change `Client.status`. (ADR-019)
+
+**Edge Cases:**
+- **Possible duplicate on registration:** fuzzy name check warns before creating, but never blocks.
+- **Client with no contact info at all:** fully valid, must not break search or profile views.
+- **Newly registered walk-in client who has never visited:** `client_type = WALK_IN`, `status = INACTIVE` immediately (no attendance records = last visit exceeds any threshold). This is expected — they were registered but haven't come in yet.
+- **Walk-in client viewed from the Dashboard "Frequent walk-ins" panel:** links directly to Client Profile; context-aware button shows "Add membership."
+- **Future-dated membership:** profile header status badge reads "Upcoming," not "Active," until `start_date` arrives. `client_type` is `MEMBER` from the moment the membership record is created.
+- **Archived client appears in attendance history query:** record is retained and visible in reports; the client row in the list is greyed out under "Show archived."
+- **Walk-in filter + name search + sort by visit count:** all three can be applied simultaneously; each constraint narrows results cumulatively.
+- **Inactivity threshold change:** when the owner updates `walkin_inactivity_threshold_days`, the derived status of all WALK_IN clients recalculates immediately — no backfill needed since it's computed on query.
+- **Active (in-effect) MEMBER client with no attendance records:** treated as at-risk immediately — expected for a newly started membership before the first visit. Upcoming members (membership not yet started) are NOT at-risk — their period has not begun (ADR-040).
+- **At-risk member who visits again:** the at-risk signal clears on the next query automatically (derived at runtime, no stored state to update).
+- **Client simultaneously matching "At risk" and "Expiring soon":** both filter chips show the client. Name search and either filter chip can be combined cumulatively.
+
+**Deferred:**
+- Merge-duplicate-clients tool.
+- Photo/ID upload.
+- Client self-service portal.
+
+---
+
+## 3. Membership Module
+
+**Purpose:** Manage the full lifecycle of paid membership periods per client.
+
+**MVP Scope / Forms:**
+
+**Membership Plan Catalog (managed in Settings → Membership Plans):**
+- The `MembershipPlan` table is the authoritative source for plan options in the Add/Renew modal. (ADR-015)
+- Plans have: `name`, `duration_type` (1 month / 2 months / 3 months / Custom days), `default_price`, `is_active`. Month types map to fixed `duration_days` of 30 / 60 / 90 (ADR-048); "Custom days" stores the entered count.
+- See Module 9 (Settings) for plan management UI specification.
+
+**Create Membership:**
+- Select `MembershipPlan` from the active plan catalog (populated from `MembershipPlan` where `is_active = true`).
+- The selector also offers an inline **"Custom duration"** option that is *not* a saved catalog plan. Selecting it shows a required "Duration (days)" numeric input; the resulting membership has `membership_plan_id = null` ("Custom (ad-hoc)") with `end_date` derived from the duration. Owners who offer a recurring non-standard package can instead save a custom-duration *plan* in Settings (which sets `membership_plan_id`). (ADR-015)
+- `price` defaults from the selected plan's `default_price`, but is always overridable per transaction (price snapshot, not a live reference — ADR-003).
+- `start_date` defaults to today but can be future-dated (pre-purchase).
+- **Blocking state:** the Create Membership action is blocked if the client has any active OR upcoming membership (ADR-037):
+  - **Active membership:** "[Client name] has an active membership until [end date]. Did you mean to Renew instead?" with a "Go to Renew" action.
+  - **Upcoming membership:** "[Client name] has a membership starting [start date]. No new membership can be created until that period ends." No "Go to Renew" redirect.
+
+**Renew Membership:**
+- Same plan/duration selector as Create, same price-override mechanic.
+- System auto-computes new dates per the confirmed renewal math below.
+- The new Membership record is linked to the prior one via `renewed_from_membership_id`, preserving the full renewal chain.
+
+**View Membership History:**
+- Chronological list of all Membership records for a client, including the renewal chain, a VOID badge where the associated payment was voided, and a "Cancelled" badge where the membership itself was cancelled (ADR-041).
+
+**Cancel Membership (soft — corrects an erroneous record):**
+- Accessible from the Membership History row overflow menu on the Client Profile.
+- Requires a cancellation reason. On confirm, `Membership.cancelled_at = now()` and `cancellation_reason` is stored (ADR-041, Flow 18).
+- A cancelled membership is excluded from all status/active/upcoming/expiry/renewal derivations, does not count toward `client_type = MEMBER`, never blocks creating a new membership, and is not counted in "Active members." It remains in Membership History with a "Cancelled" badge and is never hard-deleted.
+- Cancelling does NOT void the associated payment; voiding the payment does NOT cancel the membership. To reverse money, the owner voids the `CLIENT_TRANSACTION` separately (Flow 11). The two corrections are independent.
+- There is no free "edit membership": dates, plan, and price are immutable after creation (snapshot integrity). To fix a wrong duration/plan/client, cancel and recreate.
+
+**Monitor Expiration:**
+- Surfaced via the Dashboard (Expiring Soon panel), the Client List status filter chips (Active / Upcoming / Expiring soon / Expired — operational outreach), and the Membership Reports (US-8.6 — archival/exportable lists). There is no separate standalone "membership list" screen; membership is a distributed capability with no top-level nav entry (ADR-042, see `INFORMATION-ARCHITECTURE.md`).
+
+**Business Rules Enforced:**
+- **One in-effect membership per client at a time (ADR-040)** — a membership is in effect when `start_date ≤ today ≤ end_date`; at most one is in effect per client. Creating a new membership is blocked while the client has an active membership (redirect to "Renew") or an upcoming membership (informational block, no redirect). Cancelled memberships do not count. A client may hold one ACTIVE plus one or more UPCOMING memberships (via early renewal) without violating the rule. (ADR-037, ADR-041)
+- **`Membership.status` is `UPCOMING` / `ACTIVE` / `EXPIRED`, derived (ADR-040):** `EXPIRING_SOON` is a Client-level display state, not a membership status. A future-dated membership is UPCOMING (not ACTIVE) until its `start_date` arrives.
+- **Renewal date math (ADR-040):** new `start_date = max(today, latest_end_date + 1 day)`, new `end_date = start_date + duration_days`, where `latest_end_date` is the greatest `end_date` among the client's non-cancelled memberships with `end_date >= today`.
+  - Renewing while active or upcoming → new period chains onto the latest end date (the new record is UPCOMING until it begins).
+  - Renewing after full expiry → new period starts today.
+  - Stacked early renewals chain onto the furthest-future end date. The previous record is never mutated.
+- **Membership cancellation is soft and additive (ADR-041):** a membership created in error is cancelled via `cancelled_at`; the record is retained, excluded from all derivations, and never blocks a new membership. Cancellation and payment void are independent actions.
+- Membership price is always a **snapshot** (`price_paid`), independent of the plan's current default price (ADR-003).
+- Expired memberships remain fully visible and queryable — never hidden or deleted.
+- An expired member is **not blocked from attendance**; they attend as a walk-in until they renew.
+- Membership cannot be paused/frozen (explicit BRD exclusion).
+- Editing a plan's `default_price` in Settings does not alter any existing `price_paid` snapshots.
+- Retiring a plan (`is_active = false`) does not affect existing memberships created under that plan.
+
+**Edge Cases:**
+- **Future-dated membership start (pre-purchase):** must not count as "active" until `start_date` arrives; profile displays "Upcoming" badge.
+- **Custom duration plans:** support the exact same renewal math as standard duration plans.
+- **Ad-hoc custom duration:** selecting the inline "Custom duration" option (not a saved plan) creates a membership with `membership_plan_id = null` and a custom-derived `end_date`; reports label it "Custom (ad-hoc)" (ADR-015).
+- **Plan retired after membership created:** existing memberships remain valid; plan just no longer appears in the modal selector.
+- **Voided payment on a membership:** the membership record remains fully in effect — voiding a payment never cancels a membership. To remove an erroneous membership, use Cancel Membership (ADR-041); to reverse the money, void the payment. The two are independent.
+- **Membership created for the wrong client / wrong duration:** cancel it (soft, ADR-041) and recreate. There is no free edit of dates/plan/price (snapshot integrity).
+- **Early renewal producing an upcoming membership:** the client shows ACTIVE (precedence) with an UPCOMING record chained on; renewing again chains onto the furthest-future end date (ADR-040).
+- **Client whose only membership is upcoming (not yet begun):** shows neither "Renew" nor "Renew early" — a disabled/informational state until it becomes active (ADR-037).
+
+**Deferred:**
+- Membership freeze/pause.
+- Membership transfer between clients.
+- Family/group membership.
+
+---
+
+## 4. Attendance Module
+
+**Purpose:** Digital check-in log replacing the paper attendance sheet, while preserving accurate historical context of each visit.
+
+**Module Structure (ADR-023):**
+```
+Attendance (single top-level nav entry)
+├── Check-In           (default view)
+├── Attendance History
+└── Attendance Analytics
+```
+
+**MVP Scope / Forms:**
+
+**Check-In Station screen (primary check-in interface — US-4.8, ADR-022):**
+- Default view within the Attendance module; name search field is auto-focused on load. (ADR-023)
+- Result cards show: name, type badge (MEMBER/WALK_IN), membership status, expiry date (MEMBER only), and a "checked in today" indicator if an Attendance record already exists for today.
+- Three check-in branches on client selection:
+  - **Active MEMBER:** duplicate check → single "Check In" action → attendance record created → expiry warning checked post-check-in.
+  - **MEMBER-type, no active membership (expired member):** renewal decision prompt (ADR-018) — "Check in as walk-in" or "Renew membership now."
+  - **WALK_IN or walk-in path:** conversion prompt check (if visit count ≥ `Gym.walkin_conversion_prompt_visits`) → walk-in fee collection → CLIENT_TRANSACTION created.
+- After successful check-in: client appears in Today's Check-Ins list; screen returns to auto-focused search.
+
+**Today's Check-Ins list (US-4.9):**
+- Visible on the Check-In Station screen and as a standalone view in the Attendance section.
+- Reverse-chronological list: client name, visit type, time in. Repeated same-day visits labeled "2nd visit."
+- Shows total check-ins and unique visitors for the current day.
+
+**Attendance History (US-4.3):**
+- Second view within the Attendance module (distinct from the per-client Attendance History tab on the Client Profile).
+- All attendance records across all clients, filterable by date range and visit type.
+- Date filter presets: **Today** (default on open) · Yesterday · Last 7 Days · Last 30 Days · Custom Date Range. Selected filter persists within the session.
+- Columns: client name, visit type, time in, visit date.
+
+**Attendance Record Correction (Flow 15, US-4.11):**
+- Limited to same-day records only; only `time_in` is editable.
+- Required reason note stored in `Attendance.correction_note`.
+- On save, `Attendance.updated_at` is set to the current timestamp — the sole marker of a corrected record; no separate status flag is used.
+- Prior-day records are read-only at MVP; the edit action is not displayed for prior-day records.
+- Attendance records cannot be deleted — correction only.
+
+**Attendance Analytics (US-4.10):**
+- Third view within the Attendance module. Read-only aggregate metrics, trends, and operational signals.
+- **KPI Cards (always visible, fixed periods):** Today's Check-Ins; This Week's Check-Ins; This Month's Check-Ins; Member vs. Walk-In Ratio (percentage split for current month).
+- **Charts (all governed by a period selector — Last 7 Days / Last 30 Days / Last 3 Months / Custom Range):**
+  - Daily Attendance Trend (line chart): total check-ins and unique visitors per day.
+  - Attendance by Day of Week (bar chart): average check-ins per weekday — identifies peak days.
+  - Attendance by Hour (bar chart): check-ins bucketed by hour of day — identifies peak hours.
+- **Member Insights panel:** At-risk Members count (live; links to Client List "At risk" filter); Average Visits Per Member (active MEMBER clients, selected period); Member Utilization Rate (unique visiting members ÷ total active members, selected period).
+- **Walk-In Insights panel:** Frequent Walk-Ins count (walk-in clients with ≥ `Gym.walkin_conversion_prompt_visits` visits and no membership, live; links to Client List "Walk-in only" sorted by visits); Walk-In Conversion Candidates count; Walk-In to Member Conversion Metrics (count and rate for selected period, derived per ADR-020).
+- **Operational Insights panel:** Peak Hours (top 3 busiest hours by check-in volume, selected period); Peak Days (top 3 busiest days of the week, selected period); New vs. Returning Visitors (clients whose first Attendance record falls within the period = New; all others = Returning).
+- **Alerts panel:** Active members inactive beyond `Gym.member_inactivity_warning_days` (live count + "View list" link); Walk-in clients exceeding `Gym.walkin_conversion_prompt_visits` with no membership (live count + "View list" link); Attendance decline warning if current period is ≥ 20% below the equivalent prior period.
+- Attendance-domain scope only: no revenue data, membership financial history, or inventory data.
+- No CSV export from Attendance Analytics — detailed exportable records belong in the Reports module (US-8.5, US-8.13, US-8.14).
+- All derived counts and rates use the same definitions as the Client List filters and Dashboard panels — signals are consistent across the system.
+
+**Business Rules Enforced:**
+- Every attendance record captures `client`, `date`, `time_in`, `visit_type`, and `created_by`.
+- `membership_id` is snapshotted onto the attendance record at check-in time, so later renewals/expirations never retroactively change what a past visit "was."
+- Attendance history is retained regardless of the client's current membership status or even if the client is later soft-deleted.
+- Multiple check-ins for the same client on the same day are **allowed** — but require explicit confirmation before the second record is created. Dashboard/report metrics distinguish "total check-ins" from "unique visitors per day."
+- **Expired MEMBER at check-in (ADR-018):** When `client_type = MEMBER` and no active membership exists, the system presents a binary renewal decision prompt. Silent routing to walk-in is not permitted.
+- **Expiry warning at check-in:** After a successful check-in where the member's active membership is within `Gym.expiration_warning_days`, a non-blocking dismissible renewal notice is displayed.
+- **Pre-fee conversion prompt:** When a walk-in client's visit count reaches `Gym.walkin_conversion_prompt_visits` and they have no Membership record, a conversion prompt is shown before the fee is collected. Dismissible; the fee proceeds if dismissed.
+- **`Attendance.created_by` is mandatory (ADR-021):** Set to the authenticated user at check-in time.
+- **Attendance record correction is time-bounded:** Corrections limited to same-calendar-day records; require a reason note stored in `Attendance.correction_note`; only `time_in` is editable; `Attendance.updated_at` is set to current timestamp on save; no deletions permitted. (US-4.11)
+- **`visit_type` is mutable only via Flow 7 conversion:** Updating `visit_type` from `WALK_IN` to `MEMBER` during the same-visit walk-in → member conversion is a business workflow mutation, not a data correction. `correction_note` and `updated_at` are NOT set during this mutation. In all other contexts, `visit_type` is immutable after creation. (ADR-038)
+- **Attendance Analytics scope boundary:** Analytics panels surface aggregate counts, trends, and operational signals only. Detailed filterable record lists and CSV exports belong in the Reports module (US-8.5, US-8.13, US-8.14). This prevents duplication and maintains a clear boundary between in-module operational intelligence and archive-quality reporting.
+
+**Edge Cases:**
+- **Walk-in with no prior client record:** lightweight client quick-created with name (required) and contact number (optional) via an inline modal. Fuzzy duplicate name warning applies.
+- **Expired MEMBER at check-in:** renewal decision prompt — binary choice between walk-in and renewal. No silent routing. (ADR-018)
+- **Future-dated membership at check-in:** client has an upcoming membership (`start_date > today`). Check-in screen shows: "[Name]'s membership starts [date]. Checking in as walk-in today." Attendance record: `visit_type = WALK_IN`, `membership_id = null`.
+- **Archived (soft-deleted) client check-in attempt:** archived clients are excluded from Check-In Station search results. The owner must first reactivate the client (Flow 12) before check-in is possible.
+- **Walk-in fee voided after attendance recorded:** voiding the transaction (Flow 11) does NOT void or delete the Attendance record. The visit history is preserved. The discrepancy is visible in Client Payment History (VOID transaction alongside an existing attendance record).
+- **Conversion prompt dismissed:** owner proceeds to walk-in fee normally. No re-prompt on the same visit. The visit count still increments; the prompt appears again on the next qualifying visit.
+- **Same-day correction attempted on a prior-day record:** edit is disabled; record is read-only. No escalation path at MVP.
+- **Duplicate check-in confirmed intentionally:** second Attendance record is created normally; labeled "2nd visit" in the Today's Check-Ins list. Total check-in count increments; unique visitor count does not.
+- **Active (in-effect) MEMBER client who has never attended:** at-risk signal triggers immediately. Expected for a newly started membership before the first visit. Upcoming (pre-purchased, not yet started) memberships are not at-risk (ADR-040).
+
+**Deferred:**
+- `time_out` capture and session-duration analytics (field reserved in schema now; analytics view will gain session-duration chart when time_out is available).
+- QR code / RFID-based check-in (explicit BRD exclusion).
+- Retroactive attendance entry (backfilling past dates when the system was unavailable) — explicitly out of scope at MVP.
+- Attendance record deletion — records can be corrected for `time_in` with a required reason note; full deletion is not available at MVP.
+- Owner-configurable attendance decline alert threshold — hardcoded at 20% below prior period for MVP; configurable threshold deferred to a future Settings addition.
+
+---
+
+## 5. Client Payments Module
+
+**Purpose:** Record and audit all money collected directly from clients — membership fees and walk-in fees. Both always require a client. Product sales are handled by the POS module (Module 6) and are entirely separate.
+
+**MVP Scope / Forms:**
+- **Payment Method Selection:** Cash / GCash / Card / Other — captured on every client transaction (walk-in fee or membership payment).
+- **Client Payment History:** chronological list of all `CLIENT_TRANSACTION` records, filterable by date, client, and payment method. Voided transactions shown with VOID badge, void reason category, and void note.
+- **Void Transaction:** owner-initiated reversal with a required `void_reason_category` (structured enum) and an optional detail note. Detail note is required when category = `OTHER`. (ADR-028)
+- **Collections Summary:** daily revenue totals by payment method spanning both `CLIENT_TRANSACTION` and `POS_SALE` records. Enables daily cash drawer and digital payment reconciliation. (US-5.4, Flow 17)
+
+**Collections Summary view:**
+- Accessible from a tab or action within the Client Payments module.
+- Defaults to today; date selector allows viewing any prior day.
+- Displays: Payment Method | Transaction Count | Total Amount, for each of Cash / GCash / Card / Other, with a Grand Total row.
+- Spans both `CLIENT_TRANSACTION` and `POS_SALE` records — all money collected on the selected day.
+- Voided transactions excluded from all totals.
+- This is the primary daily reconciliation surface for the owner — it answers "how much cash should be in my drawer?" without navigating to Reports.
+
+**How client payments are created:**
+Client payment records are always created as a byproduct of other flows — never standalone from this module:
+- A **walk-in fee** transaction is created within the Walk-In Attendance flow (Flow 3).
+- A **membership fee** transaction is created within the Membership Creation or Renewal flow (Flows 5 and 6).
+This module's primary function is the **history/audit view**, the **void action**, and the **collections summary**.
+
+**Business Rules Enforced:**
+- Every `CLIENT_TRANSACTION` requires a `client_id` — anonymous client transactions do not exist.
+- A `CLIENT_TRANSACTION` may only contain `MEMBERSHIP` and `WALK_IN_FEE` line items — `PRODUCT` items are not permitted in client transactions.
+- Price snapshot rule: the price at time of transaction is stored; live catalog prices are never queried to reconstruct past amounts.
+- **Void reason category is required** — the void action cannot be confirmed without selecting a `void_reason_category`. When category = `OTHER`, a detail note is also required. (ADR-028)
+- Voided transactions are excluded from all revenue totals and reports but remain visible in the raw list with a `VOID` status badge, void reason category, and void note.
+- **Voiding a payment does not cancel the associated membership.** Financial correction and membership management are separate actions — the owner handles the membership record independently.
+- **Walk-in fees and membership purchases are always separate `CLIENT_TRANSACTION` records.** A single `CLIENT_TRANSACTION` never contains both `WALK_IN_FEE` and `MEMBERSHIP` line items simultaneously — these represent distinct financial events and are recorded independently regardless of whether they occur in the same visit (ADR-024).
+- **Walk-in fee override note:** when the walk-in fee charged differs from `Gym.default_walkin_fee`, the override reason note is optional but surfaced as a prompt to the owner. Stored in `TransactionLineItem.fee_override_note` on the WALK_IN_FEE line item.
+
+**Edge Cases:**
+- Owner voids a membership payment: the membership record itself is unaffected and remains active. If the owner also needs to cancel or adjust the membership, that is a separate action in the Membership module.
+- Walk-in fee already charged, same visit client decides to buy a membership: see Flow 7 (Walk-in → Member Conversion). The original walk-in fee `CLIENT_TRANSACTION` remains intact — it is not voided. A separate `CLIENT_TRANSACTION` with a single `MEMBERSHIP` line item is created. If the owner wishes to offset the walk-in fee already collected, the price override field on the membership form handles this — no automatic credit calculation (ADR-024).
+- Collections Summary on a day with zero transactions: shows all four payment method rows with ₱0 and transaction count 0. Displays "No transactions recorded for this date" notice. Never blank.
+- Void reason category = `OTHER` with no detail note: blocked — system requires the detail note before confirming.
+
+**Deferred:**
+- Partial refund workflow (US-5.6, void covers MVP's correction need).
+- Receipt printing/emailing (US-5.7).
+
+---
+
+## 6. POS Module
+
+**Purpose:** Lightweight point-of-sale for product transactions. A client is not required — this screen operates independently of the client and membership management flows. Also covers all product catalog management.
+
+**MVP Scope / Forms:**
+
+**Product Management (Flow 20):**
+- **Create/Edit Product:**
+  - `name` (required)
+  - `category` (required — select from ProductCategory)
+  - `image` (optional — upload product photo for POS grid display)
+  - `selling_price` (required — price per unit or per serving)
+  - `cost_price` (optional — purchase cost per unit or serving; snapshotted onto TransactionLineItem at sale time via ADR-026)
+  - **Gross Margin display** (read-only computed field on the form): shows `selling_price − cost_price` in ₱ and % when both are set; shows "— (no cost price set)" if cost_price is null. Updates in real time as either field is edited. (US-6.15)
+  - `product_type` (required — `STANDARD_PRODUCT` or `SERVING_BASED_PRODUCT`)
+  - `servings_per_container` (required if `SERVING_BASED_PRODUCT` — e.g., 70 for a tub of protein)
+  - `container_selling_price` (optional — `SERVING_BASED_PRODUCT` only; enables Per Container mode on the POS screen; ADR-027)
+  - `low_stock_threshold` (required — triggers dashboard alert when `current_stock` falls below this value)
+  - `reorder_point` (optional — the stock level at which the owner should place a reorder; distinct from `low_stock_threshold`; see Module 7 for how it is surfaced in the Inventory view)
+- **Archive Product (soft delete):** sets `Product.deleted_at = now()`; product disappears from POS grid but all sales and inventory history remain fully intact. Archived products can be restored by clearing `deleted_at`. (ADR-005)
+- **Product Categories:** create/edit product categories (e.g., Beverages, Supplements).
+
+**Product Types:**
+- `STANDARD_PRODUCT`: sold per unit (e.g., Water ₱25/bottle, Gatorade ₱45/bottle, Sting ₱25/can). `current_stock` = unit count.
+- `SERVING_BASED_PRODUCT`: sold per scoop/serving (e.g., Gold Standard Whey ₱50/scoop, 70 servings per tub). `current_stock` = remaining serving count. When `container_selling_price` is set, the POS grid also offers Per Container mode (see Flow 16 and US-6.14).
+
+**POS Screen:**
+- **Category Tabs:** displayed above the product grid — one tab per `ProductCategory` that has at least one active product, plus an "All" tab (default on load). Selecting a tab filters the grid to that category. Category filter and name search work simultaneously. (US-6.16)
+- **Product Grid:** displays all active products (`deleted_at IS NULL`) with image, name, and price. Tap to add to cart.
+- **Product Search:** real-time name filter; works alongside the active category tab.
+- **SERVING_BASED_PRODUCT mode toggle:** when `container_selling_price` is set, the product shows a "Per Serving / Per Container" toggle. Default: Per Serving. Selecting Per Container initiates Flow 16.
+- **Shopping Cart:** running list of added items with quantity, unit price, and line total. Cart total visible throughout.
+- **Quantity Adjustment:** increase/decrease quantity or remove items from cart before checkout.
+- **Checkout:** shows cart total → owner selects payment method → (if Cash: "Cash received" input, system shows "Change: ₱X") → owner confirms → sale is recorded. (US-6.13)
+- **Quick Sale Buttons:** optionally configurable shortcuts for top-selling items (UX implementation detail).
+
+**POS History:**
+- **Summary strip at top of POS History:** Today's transaction count and today's POS revenue total — always visible without scrolling. Updates after each completed sale.
+- Chronological log of all `POS_SALE` records, filterable by date and payment method.
+- **Void POS Sale:** requires selecting a `void_reason_category` (structured enum, required) and an optional detail note (required when category = `OTHER`). Reversal is additive (adjustment entries in inventory ledger); original sale record preserved with VOID badge, reason category, and note. (ADR-028)
+
+**Business Rules Enforced:**
+- A client is not required for a POS sale. `client_id` is null on all `POS_SALE` transactions.
+- **Price snapshot:** `unit_price` is copied from `Product.selling_price` (or `container_selling_price` in container mode) at the moment the sale is confirmed. Changing a product's price later never alters a past sale. (ADR-003)
+- **Cost price snapshot:** `cost_price_snapshot` is copied from `Product.cost_price` at the moment the sale is confirmed. Changing cost_price later never alters historical gross profit calculations. Null if cost_price was not set. (ADR-026)
+- Each `PRODUCT` line item in a completed POS sale triggers an `InventoryTransaction` (type=`SALE`) that decrements `current_stock`.
+- **Per Container mode stock deduction:** when a `SERVING_BASED_PRODUCT` is sold in Per Container mode, `current_stock` is decremented by `quantity × servings_per_container` — same effect as the equivalent per-serving sale. (ADR-027)
+- **Stock validation:** selling a quantity that would take stock below zero is blocked by default. Owner can proceed via an explicit "Force Sale" confirmation, which logs a flagged `ADJUSTMENT` entry — the override is never silent. (ADR-009)
+- **Cash change calculator:** when payment method = Cash, the "Cash received" field is displayed and the "Change" amount is computed in real time. Sale cannot be confirmed until cash received ≥ cart total. (US-6.13)
+- **Void reason category required:** the void action cannot be confirmed without selecting a `void_reason_category`. When category = `OTHER`, a detail note is required. (ADR-028)
+- Archived products (`deleted_at IS NOT NULL`) do not appear in the POS grid. They remain available in inventory management and historical reports.
+- Cart state is not persisted between sessions — navigating away without completing checkout discards the cart without creating any transaction record.
+
+**Edge Cases:**
+- **Selling the last serving exactly to zero:** valid, must not be treated as an error.
+- **SERVING_BASED_PRODUCT stock management:** `current_stock` tracks whole servings only. If a partial serving remains in a container after the last "full" serving is recorded as sold, the owner handles any write-off via a manual inventory adjustment.
+- **Product archived mid-transaction:** if a product is soft-deleted (`deleted_at` set) while it exists in an open cart on another session, the cart completes normally — archiving is a catalog-forward action, not a retroactive block.
+- **Container mode: product without container_selling_price:** Per Container toggle is hidden; only Per Serving mode is available.
+- **Container mode: stock check in servings:** Force Sale applies when `quantity × servings_per_container > current_stock`; the warning shows "Only X servings remaining (~Z containers)."
+- **Cash received < cart total:** the sale cannot be confirmed. The "Change" display shows a negative or error state.
+- **Product with cost_price = null at sale time:** `cost_price_snapshot = null`. This sale will not contribute to gross profit totals in the Gross Profit Report (US-8.12). The report flags the gap.
+- **Zero-price product (selling_price = ₱0):** sale completes normally; total = ₱0. Valid for promotional giveaways.
+
+**Deferred:**
+- Discount code / promotional pricing engine (US-6.11).
+- Receipt printing/emailing (US-6.12).
+- Barcode scanning for product entry.
+- Client-linked POS sale (optional client association for loyalty tracking).
+
+---
+
+## 7. Inventory Module
+
+**Purpose:** Track and audit all stock movements — POS sales deductions, restocks, and manual corrections — with full auditability of how stock levels changed over time.
+
+**MVP Scope / Forms:**
+
+**Restock (Record Purchase):**
+- Select product → enter quantity received:
+  - For `STANDARD_PRODUCT`: quantity in units (e.g., 24 bottles of water).
+  - For `SERVING_BASED_PRODUCT`: quantity in containers → system multiplies by `servings_per_container` (e.g., 2 tubs × 70 servings = +140 servings to `current_stock`).
+- Enter optional "Total cost paid" (decimal) — the total invoice amount for this restock event, not per-unit. Stored as `InventoryTransaction.total_restock_cost`. (US-7.5)
+- Creates an `InventoryTransaction` (type=`PURCHASE`); Inventory Movement History shows the total cost paid alongside the entry when present.
+
+**Current Stock View:**
+- All products with current stock level, low-stock visual flagging, and `reorder_point` indicator.
+- `SERVING_BASED_PRODUCT` items show "X of Y servings remaining per container" format.
+- **Days-Until-Stockout estimate:** per product — `current_stock ÷ average daily units/servings sold over the last 30 days` displayed as "~N days remaining." Shows "No recent sales data" when the product has had zero sales in the last 30 days. Calculated at query time, not stored. (US-7.6)
+- **Reorder indicator:** highlights products where `current_stock ≤ reorder_point` (when set), distinct from the `low_stock_threshold` alert — allows the owner to separate "alert me" from "time to order." (ADR-027)
+- **Inventory Valuation total:** a footer row at the bottom of the Current Stock view shows `SUM(current_stock × cost_price)` across all active products where `cost_price` is not null. Products without `cost_price` are counted and excluded from the total with a note: "N product(s) excluded — no cost price set." Also surfaced as a Dashboard KPI. (US-7.7)
+- **Shrinkage column (this month):** per product — total absolute quantity lost via ADJUSTMENT entries with a negative `quantity_delta` in the current calendar month. On hover or expand: breakdown by `adjustment_reason_category`. Zero shrinkage = dash. Non-zero = amber; > 10% of month's total sales quantity = red. (US-7.8)
+
+**Inventory Movement History:**
+- Chronological log of all `InventoryTransaction` records per product (`PURCHASE` / `SALE` / `ADJUSTMENT`).
+- PURCHASE entries show `total_restock_cost` when present.
+- ADJUSTMENT entries show `adjustment_reason_category` (structured label) and `note` (detail text when provided).
+
+**Manual Adjustment (Flow 19):**
+- Enter delta quantity + select `adjustment_reason_category` (required) + optional detail note.
+- `adjustment_reason_category` options (owner-selectable): `DAMAGE` / `EXPIRY` / `THEFT` / `COUNT_CORRECTION` / `NATURAL_WASTAGE` / `PROMOTION` / `OTHER`.
+- `FORCED_SALE` is a system-only category assigned automatically on Force Sale overrides — it does not appear in the owner-facing selector (ADR-034).
+- When category = `OTHER`, a detail note is required.
+- Creates `InventoryTransaction` (type=`ADJUSTMENT`) with `adjustment_reason_category` and `note` stored.
+
+**Business Rules Enforced:**
+- Every stock change — POS sale, restock, or manual correction — is recorded as a discrete `InventoryTransaction` row. `Product.current_stock` is a cached value that must always be reconstructable by summing the movement ledger.
+- **Adjustment reason category is required** for all manual adjustments. When category = `OTHER`, a detail note is also required. This is non-negotiable for auditability and shrinkage analysis.
+- `SERVING_BASED_PRODUCT`: restocking adds `quantity_received × servings_per_container` servings to `current_stock`.
+- **Shrinkage derivation:** shrinkage = total negative `quantity_delta` from ADJUSTMENT entries for a product over a period. This is derived at query time from the ledger — not a stored field. The Inventory Usage Report (US-8.9) includes a shrinkage breakdown by `adjustment_reason_category`.
+- `low_stock_threshold` and `reorder_point` are distinct concepts: `low_stock_threshold` controls the dashboard alert; `reorder_point` is the inventory-planning signal for when to place a supplier order (accounts for lead time). A product may have both, neither, or only one.
+- Archived products (`deleted_at IS NOT NULL`) remain visible in Inventory Management and movement history — the ledger is never hidden.
+- Days-until-stockout estimate is advisory only — the calculation uses the last 30 days of ledger sales and is recalculated on each view load.
+
+**Edge Cases:**
+- **Selling the last serving exactly to zero:** valid, no error.
+- **Force Sale override:** if stock would go below zero, owner must explicitly confirm. The override automatically creates a flagged `InventoryTransaction` (type=`ADJUSTMENT`, `adjustment_reason_category = FORCED_SALE`, note = "Forced sale override — stock went negative") — no owner category selection required. `FORCED_SALE` entries are visually distinct in Inventory Movement History. For `SERVING_BASED_PRODUCT` in container mode, the Force Sale prompt shows "Only X servings remaining (~Z containers)." (ADR-034)
+- **Discontinued product with remaining stock:** product is archived but stock is not zeroed. Owner manually adjusts if needed.
+- **Total cost paid on restock left blank:** fully valid — `total_restock_cost = null`. The Inventory Movement History entry shows no cost data for that row.
+- **Days-until-stockout with zero average sales:** displays "No recent sales data" — no division by zero error.
+- **Shrinkage with no adjustments this month:** shrinkage column shows a dash for the product.
+- **Shrinkage % with zero sales:** when a product has shrinkage but zero sales in the period, the ">10% of sales" red threshold cannot be computed (division by zero). The shrinkage value is shown in amber (non-zero), and the red escalation is suppressed until the product has recorded sales in the period.
+- **Reorder point not set:** the reorder indicator is not shown for that product. `low_stock_threshold` alert remains active independently.
+- **Adjustment category = OTHER with no detail note:** blocked — system requires the detail note before the adjustment can be confirmed.
+- **Product with null cost_price:** excluded from the Inventory Valuation total. The excluded count is shown so the owner knows the figure may be understated.
+
+**Deferred:**
+- Per-unit supplier cost tracking and supplier entity management (US-7.9 rescoped from per-restock to per-unit is deferred). `total_restock_cost` on `InventoryTransaction` covers the MVP need.
+- Automated reorder notifications (US-7.9).
+- Barcode scanning for restock entry.
+- Expiry date tracking per product or per restock lot.
+
+---
+
+## 8. Reports Module
+
+**Purpose:** Turn raw transactional and attendance data into the business insight the owner needs.
+
+**MVP Scope:**
+
+- **Revenue Reports:** Daily / Weekly / Monthly / **This Year** / **Custom Date Range**, broken down by source (Membership / Walk-In / Product). Draws from both `CLIENT_TRANSACTION` and `POS_SALE` records. Voided transactions excluded. (US-8.2)
+- **Revenue by Payment Method:** total revenue per payment method (Cash / GCash / Card / Other) over any selected period. Covers both client transactions and POS sales.
+- **Revenue by Product Category:** total product revenue per category (Beverages, Supplements, etc.) over any selected period.
+- **Attendance Reports:** Period selector: Daily / Weekly / Monthly / This Year / Custom Date Range. One row per period unit — columns: total check-ins, unique visitors, member check-ins, walk-in check-ins, member unique visitors, walk-in unique visitors. Optional period-over-period comparison toggle (equivalent prior period side-by-side, with % change). Voided transactions do not affect Attendance records. Exportable to CSV. (US-8.5)
+- **Membership Reports:** Active / Expired / Expiring Soon lists, filterable and exportable.
+- **Best Sellers:** top products by units/servings sold and by revenue over a selected period. Secondary sort option (ascending) surfaces lowest-performing items. For dedicated dead-stock analysis, see Slow-Moving / Dead Stock Report (US-8.21). (US-8.7)
+- **Frequent Walk-In Report:** clients with high visit count and no active membership — ranked by visit count, directly supports the conversion-tracking goal. Conversion detection uses the derived definition: MEMBER clients with WALK_IN attendance records predating their earliest Membership.created_at (ADR-020).
+- **Inventory Usage Report:** stock movement summary per product over a date range — units sold, restocked, and manually adjusted. Includes a **Shrinkage section**: total negative adjustment quantity per product, broken down by `adjustment_reason_category` where set. Surfaces discrepancies between expected and actual stock. (US-8.9)
+- **Gross Profit Report:** per product, for the selected period — units/servings sold, revenue (sum of `unit_price × quantity`), COGS (sum of `cost_price_snapshot × quantity`), gross profit (revenue − COGS), and gross margin % (gross profit ÷ revenue × 100). Products with null `cost_price_snapshot` on any line items are flagged. Summary row shows blended totals and margin. Filterable by date range and product category. (US-8.12)
+- **Member Engagement Report:** for each active MEMBER client — total all-time visits, visits this month, visits last month, days since last visit. Default sort: days since last visit descending (least engaged first). Filterable by date range. (US-8.13)
+- **At-risk Members Report:** MEMBER clients with an in-effect membership (`start_date ≤ today ≤ end_date`) whose last attendance date exceeds `Gym.member_inactivity_warning_days`. Columns: name, membership expiry date, last visit date, days since last visit, total all-time visits. Sorted by days since last visit descending. (US-8.14)
+- **Void Analysis Report:** aggregated voided transactions by `void_reason_category` and period, spanning both `CLIENT_TRANSACTION` and `POS_SALE`. Summary section: count and total voided amount per category. Detail section: individual voided transactions with date, type, amount, void reason category, void note, and payment method. Filterable by period and transaction type. Grand total row per period. Delivers the void pattern-detection benefit stated in ADR-028. (US-8.15)
+- **New vs. Renewals Report:** new memberships (`renewed_from_membership_id IS NULL`) vs. renewals (`IS NOT NULL`) per period — count, revenue, and renewal rate % per row. Filterable by period and membership plan. Summary row with blended renewal rate % for the full range. (US-8.16)
+- **Membership Plan Performance Report:** per `MembershipPlan` (including retired plans with sales in the period) — memberships sold, total revenue, average price paid, plan status. Note on form: price comparison is against the current default price, which may differ from the default at time of sale if later edited. Filterable by period and plan status. (US-8.17)
+- **Restock Cost Report:** inventory spend aggregated from `InventoryTransaction.total_restock_cost` where `type = PURCHASE`. Detail rows per restock event; subtotal per product; grand total for the period. Null `total_restock_cost` entries listed separately with footnote and excluded from totals. Filterable by period and product category. (US-8.18)
+- **Membership Net Change Report:** per month — new memberships, renewals, expired memberships, net change (new + renewals − expired), cumulative active member count at end of period. Positive net change highlighted green; negative highlighted red. Default range: last 12 months. (US-8.19)
+- **Period-over-Period Revenue Comparison:** current period revenue vs. equivalent prior period side-by-side, broken down by source (Membership / Walk-In / Product / Total). % change column per row. Period presets: This Week vs. Last Week · This Month vs. Last Month · This Year vs. Last Year · Custom Range (prior range auto-matched to same duration). Voided transactions excluded. (US-8.20)
+- **Slow-Moving / Dead Stock Report:** active products (`deleted_at IS NULL`) with zero sales in a configurable lookback window (30 / 60 / 90 days, default 30). Columns: product, category, current stock, cost value locked in stock (`current_stock × cost_price`; "—" if null), last sale date, days since last sale. Default sort: longest-inactive first. Archived products (`deleted_at IS NOT NULL`) excluded. (US-8.21)
+- **Converted Walk-Ins Report:** clients who converted from walk-in to member (derived per ADR-020) with conversion date within the selected period. Columns: client name, first walk-in date, walk-in visits before conversion, conversion date, days from first visit to conversion, membership plan purchased, price paid. Summary row: total conversions, average visits before conversion, average days to convert. (US-8.22)
+- **CSV Export:** every report listed above can be exported to CSV.
+
+**Business Rules Enforced:**
+- All reports read from the `Transaction` / `TransactionLineItem` ledger and the `Attendance` table directly.
+- Reports respect the price-snapshot rule: a report for last month reflects what was actually charged last month, even if prices have since changed. (ADR-003)
+- Reports respect the cost-snapshot rule: the Gross Profit Report uses `TransactionLineItem.cost_price_snapshot`, not the live `Product.cost_price` — historical gross profit figures are permanently correct. (ADR-026)
+- Voided transactions (`status = VOID`) are excluded from all revenue and profit totals consistently.
+- Revenue by Payment Method and Revenue by Category span both transaction types (`CLIENT_TRANSACTION` and `POS_SALE`).
+- Member Engagement and At-risk reports use `Gym.member_inactivity_warning_days` consistently with the Dashboard panel and Client List filter.
+- Gross Profit Report: line items where `cost_price_snapshot = null` are excluded from COGS and gross profit totals; the report flags the count of sales without cost data so the owner knows the margin may be understated.
+- Shrinkage in Inventory Usage Report is calculated from ADJUSTMENT entries only — it does not include discrepancies between the ledger total and `Product.current_stock` (those are system integrity issues, not business-level shrinkage).
+- **Void Analysis Report** uses `Transaction.void_reason_category` to enable pattern detection across periods — the primary analytical benefit stated in ADR-028. Both `CLIENT_TRANSACTION` and `POS_SALE` voids use the same category enum and are queryable together or separately.
+- **New vs. Renewals derivation** is exact: `renewed_from_membership_id IS NULL` = new membership; `IS NOT NULL` = renewal. This is a structural property of the schema (ADR self-referencing FK), not a heuristic.
+- **Converted Walk-Ins derivation** follows ADR-020 exactly — consistent with the definition used in US-8.8 (Frequent Walk-In Report), US-2.10 (profile conversion signal), and the Attendance Analytics Walk-In Insights panel. All surfaces must use the same derivation query.
+- **Period-over-Period Revenue Comparison** excludes voided transactions from both the current and prior period figures — consistency with all other revenue reports.
+- **Restock Cost Report** excludes restock events where `total_restock_cost = null` from period totals and subtotals. The count of excluded events is always displayed so the owner knows the spend figure may be understated.
+- **Membership Plan Performance Report** compares `price_paid` to the plan's current `default_price` — not the default at time of sale (which is not stored). The report surfaces this limitation to the owner.
+
+**Edge Cases:**
+- Date range spanning a price or cost change — reports show historically accurate figures (guaranteed by snapshot design for both selling and cost prices).
+- Empty date ranges — render a clear "no data for this period" state, not a blank crash.
+- Gross Profit Report with all null cost_price_snapshot values — shows "No cost data available for this period" and does not render a margin %.
+- Void Analysis Report with zero voids in the period — summary section shows all categories at zero count and ₱0; does not collapse to empty.
+- New vs. Renewals Report with zero memberships in the period — shows all-zero row(s); does not hide the period.
+- Membership Plan Performance Report: a plan with zero memberships sold in the period is still shown with zero counts (not hidden), so the owner can see all plans at a glance.
+- Restock Cost Report with all null `total_restock_cost` entries for the period — shows "No cost data recorded for this period" and grand total of ₱0 with excluded-count notice.
+- Membership Net Change Report when the gym has fewer than 12 months of data — shows only available months, no error.
+- Period-over-Period Revenue Comparison when the prior period has no data (new gym or period before first transaction) — prior period column shows "—" and % change shows "N/A."
+- Slow-Moving / Dead Stock Report with no products matching the lookback window — shows an empty state: "All active products have sales in the last N days."
+- Converted Walk-Ins Report with zero conversions in the period — shows "No conversions recorded in this period" with the summary row all zeros.
+
+**Deferred:**
+- PDF report export (US-8.11).
+- Scheduled / automated report emails.
+
+---
+
+## 9. Settings Module
+
+**Purpose:** Centralize gym-specific configuration.
+
+**MVP Scope / Forms:**
+- **Gym Information:** name, address, contact info, timezone (IANA identifier, e.g., "Asia/Manila" — governs all date/time display and "today" comparisons, ADR-035).
+- **Pricing:** default walk-in fee only. Membership pricing is set per plan in the Membership Plans section — there is no gym-level default membership fee (ADR-039).
+- **System Preferences:** membership expiration warning period (days) (US-1.4); walk-in inactivity threshold (days, default: 7) (US-1.7); at-risk member threshold (days since last visit, default: 14) (US-1.8); walk-in conversion prompt threshold (visits, default: 5) — governs the check-in conversion prompt, Attendance Analytics Walk-In Insights, and Frequent Walk-Ins Report (US-1.9). Does NOT govern the Dashboard "Frequent walk-ins" panel (ADR-036).
+- **Membership Plans:** create, edit, and retire membership plan catalog entries. (ADR-015)
+
+**Membership Plans section:**
+- Displays all plans as a table: Name · Duration · Default Price · Status (Active / Inactive).
+- **Add plan:** name (required), duration type (1 month / 2 months / 3 months / Custom days), default price (required), active status (default: active).
+- **Edit plan:** all fields editable. Editing `default_price` does not alter past `price_paid` snapshots (ADR-003).
+- **Retire plan:** sets `is_active = false`. Plan disappears from the Add/Renew membership modal. Existing memberships under the plan are unaffected.
+- Retired plans remain listed in Settings (with an "Inactive" badge) and can be reactivated.
+- At least one active plan must exist at all times — the UI prevents deactivating the last active plan.
+
+**Business Rules Enforced:**
+- Changing the default walk-in fee in Gym Information, or changing a `default_price` in a Membership Plan, affects only *future* transactions — it must never retroactively alter `price_paid` snapshots on existing records (enforced structurally by the Domain Model's snapshot design, ADR-003).
+- Deactivating a plan does not cascade to existing memberships created under that plan.
+- When `member_inactivity_warning_days` is updated, the at-risk signal for all active MEMBER clients recalculates immediately on the next query — no backfill required (computed at runtime from Attendance records).
+- Setting `member_inactivity_warning_days` or `walkin_conversion_prompt_visits` to zero or a negative value is blocked with a validation error (same rule as all other numeric threshold settings).
+
+**Edge Cases:**
+- Owner sets an unrealistic value (e.g., negative price, zero warning days, zero inactivity threshold) — basic input validation required for all numeric settings.
+- Owner attempts to deactivate the last active plan — blocked with a message: "At least one active plan is required."
+
+**Deferred:**
+- Multi-user permission settings.
+- Branch-level settings.
+- Localization/language settings.
+
+---
+
+## Resolved Scope Decisions
+
+| Decision | Resolution | Reasoning |
+|---|---|---|
+| Insufficient stock at sale time | Block by default, with an explicit logged "Force Sale" override | Prevents silent data corruption while still allowing the rare legitimate edge case |
+| Same-day multiple check-ins | Allowed; dashboard/reports distinguish total check-ins from unique visitors | Matches real-world usage |
+| Walk-in-fee credit toward membership (Flow 7) | No automatic credit; manual price-override field covers it | Keeps checkout logic simple |
+| Reports export | CSV export is committed MVP scope; PDF/formatted export remains deferred | High value relative to build cost for an owner transitioning off Excel |
+| POS sales and client linking | POS sales do not require a client | Product purchases are quick cash transactions; the business value is inventory and revenue tracking, not per-customer purchase history |
+| Mixed checkout (client + products in one transaction) | Removed — client transactions and POS sales are separate flows | Does not reflect how the gym actually operates; adds UI complexity for the dominant use case |
+| cost_price on Product | Promoted to MVP scope | Zero marginal cost when building the POS module; enables future margin reporting without a schema migration |
+| cost_price_snapshot on TransactionLineItem | Added — same snapshot principle as unit_price | Historical gross profit must not be rewritten by future cost changes (ADR-026) |
+| Void reason tracking | Structured category enum required; free-text note becomes optional detail | Free text cannot be analyzed; category enums enable void pattern analysis (ADR-028) |
+| Adjustment reason tracking | Structured category enum required on all ADJUSTMENT entries | Enables shrinkage analysis by cause; same principle as void reason categories |
+| Whole-container sale for SERVING_BASED_PRODUCT | container_selling_price field + Per Container mode in POS | Entering serving count as quantity is error-prone and produces misleading transactions (ADR-027) |
+| End-of-day collections reconciliation | Collections Summary view in Client Payments module, spanning both transaction types | Owner's most frequent daily question cannot require navigating to Reports |
+| Gross profit reporting | Promoted to P0 (US-8.12) once cost_price_snapshot is in schema | With cost_price_snapshot added, gross profit is computable from existing data; no further schema work needed |
+| Daily revenue visibility | Today's Revenue KPI card added to Dashboard (distinct from MTD) | MTD is not useful for daily operational awareness; today's total is the owner's most actionable number |

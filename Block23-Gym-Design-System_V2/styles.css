@@ -1,0 +1,11 @@
+/* ============================================================
+   Block 23 Gym Design System — global entry point
+   Consumers link THIS file only. Import order matters:
+   fonts & tokens first, base reset last.
+   ============================================================ */
+
+@import url('tokens/typography.css'); /* @font-face / Google fonts + type scale */
+@import url('tokens/colors.css');
+@import url('tokens/spacing.css');
+@import url('tokens/elevation.css');
+@import url('tokens/base.css');

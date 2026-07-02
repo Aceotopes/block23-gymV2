@@ -1,0 +1,96 @@
+<!-- @dsCard group="Components" viewport="700x760" name="Core primitives" subtitle="Buttons, badges, chips, KPI, inputs, money, avatar, wordmark" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  body { margin: 0; padding: 22px; background: var(--b23-bg); }
+  .grid { display: flex; flex-direction: column; gap: 20px; max-width: 656px; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .lbl { font: 600 10px var(--b23-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--b23-faint); margin-bottom: 2px; }
+  .box { display: flex; flex-direction: column; gap: 9px; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .forms { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+</style>
+</head>
+<body>
+<div id="root" class="grid"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script type="text/babel">
+const { Button, Badge, Chip, KpiCard, Card, Input, Money, Avatar, Wordmark } = window.Block23GymDesignSystem_acdb54;
+const I = (d, w=16) => <svg width={w} height={w} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>;
+const plus = I("M12 5v14M5 12h14", 16);
+const tri  = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>;
+const ban  = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>;
+
+function Section({label, children, cls}) {
+  return <div className="box"><div className="lbl">{label}</div><div className={cls||'row'}>{children}</div></div>;
+}
+
+function Demo() {
+  const [sel, setSel] = React.useState('active');
+  return (
+    <React.Fragment>
+      <Section label="Buttons">
+        <Button leadingIcon={plus}>New Client</Button>
+        <Button variant="secondary">Export</Button>
+        <Button variant="ghost">Cancel</Button>
+        <Button variant="destructive" leadingIcon={ban}>Void</Button>
+        <Button size="sm" variant="secondary">Small</Button>
+        <Button disabled>Disabled</Button>
+      </Section>
+
+      <Section label="Status badges">
+        <Badge variant="success">Active</Badge>
+        <Badge variant="info" shape="hollow">Upcoming</Badge>
+        <Badge variant="warning" icon={tri}>Expiring soon</Badge>
+        <Badge variant="neutral" shape="hollow">Expired</Badge>
+        <Badge variant="atRisk">At risk</Badge>
+        <Badge variant="primary">Member</Badge>
+        <Badge variant="danger" outline icon={ban}>VOID</Badge>
+      </Section>
+
+      <Section label="Filter chips">
+        <Chip selected={sel==='all'} onClick={()=>setSel('all')} count={296}>All</Chip>
+        <Chip selected={sel==='active'} onClick={()=>setSel('active')} dot="var(--b23-success)" count={284}>Active</Chip>
+        <Chip selected={sel==='exp'} onClick={()=>setSel('exp')} dot="var(--b23-warning)" count={12}>Expiring soon</Chip>
+        <Chip selected={sel==='risk'} onClick={()=>setSel('risk')} dot="var(--b23-at-risk)" count={5}>At risk</Chip>
+      </Section>
+
+      <Section label="KPI cards" cls="kpis">
+        <KpiCard label="Active members" value="284" delta={{dir:'up', value:'+3', note:'from last month'}} />
+        <KpiCard label="Today's check-ins" value="96" delta={{dir:'up', value:'+8', note:'vs. yesterday'}} />
+        <KpiCard label="Expiring soon" value="12" accentBorder="var(--b23-warning)" icon={<span style={{color:'var(--b23-warning)'}}>{tri}</span>} />
+      </Section>
+
+      <Section label="Money" cls="row">
+        <Money amount={18450} size={20} variant="strong" />
+        <Money amount={9200} />
+        <Money amount={500} variant="void" />
+        <Money amount={120} variant="negative" />
+      </Section>
+
+      <Section label="Form fields" cls="forms">
+        <Input label="Full name" required placeholder="e.g. Maria Santos" />
+        <Input label="Amount" prefix="₱" placeholder="0.00" inputMode="decimal" />
+        <Input label="Plan" error="Full name is required." value="" />
+        <Input label="Date registered" readOnly value="Jan 11, 2026" />
+      </Section>
+
+      <Section label="Avatar & wordmark" cls="row">
+        <Avatar initials="MS" />
+        <Avatar initials="MR" accent size={34} />
+        <div style={{width:16}} />
+        <Wordmark />
+      </Section>
+    </React.Fragment>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script>
+</body>
+</html>

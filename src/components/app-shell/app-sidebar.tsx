@@ -13,9 +13,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useSidebarStore } from "./sidebar-store";
 
-// Desktop primary navigation (DESIGN-SYSTEM §5.4/§12). Hidden < md (mobile uses
-// the bottom nav). Active item: indigo left-accent bar + --accent fill +
-// --primary text. Collapses to a 64px icon rail with tooltip labels.
+// Desktop primary navigation (DESIGN-SYSTEM §5.4/§12 / Block 23 Console prototype).
+// Hidden < md (mobile uses the bottom nav). 240px rail on the warm canvas with a
+// hairline right border; MENU eyebrow; active item = violet-tinted fill + violet
+// text + left accent bar. Collapses to a 64px icon rail with tooltip labels.
 export function AppSidebar() {
   const pathname = usePathname();
   const collapsed = useSidebarStore((s) => s.collapsed);
@@ -24,11 +25,17 @@ export function AppSidebar() {
   return (
     <aside
       className={cn(
-        "sticky top-14 hidden h-[calc(100dvh-3.5rem)] shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 md:flex",
+        "sticky top-[58px] hidden h-[calc(100dvh-58px)] shrink-0 flex-col border-r border-border transition-[width] duration-200 md:flex",
         collapsed ? "w-16" : "w-60",
       )}
     >
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+      <nav className="flex-1 space-y-[3px] overflow-y-auto p-[14px]">
+        {!collapsed && (
+          <div className="px-4 pt-1 pb-2.5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--b23-faint)]">
+            Menu
+          </div>
+        )}
+
         {NAV_ITEMS.map((item) => {
           const active = isNavItemActive(pathname, item.href);
           const link = (
@@ -36,14 +43,18 @@ export function AppSidebar() {
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "relative flex items-center gap-3 rounded-[var(--b23-radius-md)] px-4 py-2.5 text-sm transition-colors",
                 active
-                  ? "bg-sidebar-accent text-sidebar-primary before:absolute before:top-1.5 before:bottom-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-sidebar-primary"
-                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                collapsed && "justify-center",
+                  ? "bg-[color-mix(in_srgb,var(--b23-accent)_14%,transparent)] font-medium text-[var(--b23-accent-light)] before:absolute before:top-2 before:bottom-2 before:left-0 before:w-[3px] before:rounded-full before:bg-[var(--b23-accent)]"
+                  : "text-[var(--b23-fg-2)] hover:bg-[color-mix(in_srgb,var(--b23-fg)_7%,transparent)]",
+                collapsed && "justify-center px-0",
               )}
             >
-              <item.icon className="size-5 shrink-0" aria-hidden />
+              <item.icon
+                className="size-[18px] shrink-0"
+                strokeWidth={1.7}
+                aria-hidden
+              />
               {!collapsed && <span className="truncate">{item.label}</span>}
             </Link>
           );
@@ -59,7 +70,7 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-3">
+      <div className="border-t border-border p-3">
         <Button
           variant="ghost"
           size="sm"

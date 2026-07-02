@@ -1,5 +1,7 @@
 # Design System — Block23 Gym Management System
 
+> **⚠️ Superseded palette/type — refresh in progress (ADR-049, 2026-07-02).** The color, surface, and typography values described in this document (indigo on slate + Geist, per ADR-045 §3–§4) are **superseded** by the **"Block 23 Console"** language (ADR-049): warm near-black canvas `#100F0D`, **violet primary `#8B43F0`** (action/active only — never status), **Space Grotesk + IBM Plex Sans/Mono**. The authoritative **token values** now live in **`docs/DESIGN-TOKENS.MD`** (the `--b23-*` set), applied via `src/app/globals.css`. This document's **structural rules** (dark-first, tokens-as-CSS-variables, status = color + label + shape, spacing/layout, component standards, WCAG 2.1 AA) remain in force. The narrative body below is being rewritten to ADR-049 — until then, read palette/type against `DESIGN-TOKENS.MD` + ADR-049, and everything else here as current.
+
 This is the **single source of truth** for the visual and interaction language of Block23 Gym V2. Every screen, component, and interaction state is specified here in measurable, enforceable terms. When implementation code and this document disagree, this document wins — and the discrepancy is fixed in code.
 
 **Scope:** This document defines the *system* (tokens, rules, component standards, patterns). It does not contain application component source — implementation follows `TECH-STACK.md` (Server Components by default, shadcn/ui primitives, Tailwind v4 utilities, tokens from CSS variables).
@@ -8,7 +10,7 @@ This is the **single source of truth** for the visual and interaction language o
 
 | Foundation | Source | What it fixes for this document |
 |---|---|---|
-| Design language: dark-first, professional indigo accent on neutral slate | ADR-045 | The palette, fonts, shadcn style, and "status never by color alone" rule |
+| Design language: dark-only, warm-violet "Block 23 Console" (values in `DESIGN-TOKENS.MD`) | ADR-049 (supersedes ADR-045) | The palette, fonts, shadcn style, and "status never by color alone" rule |
 | Desktop-first, mobile-responsive, **no tablet target** | ADR-033 | Every surface is designed at `lg`/`xl` first; mobile adapts read-heavy surfaces only |
 | 8 top-level nav entries; Membership is distributed | ADR-042, `INFORMATION-ARCHITECTURE.md` | The app shell, sidebar, and screen map |
 | Stack: shadcn/ui (`new-york`) + Radix on Tailwind CSS v4, Recharts, lucide-react | `TECH-STACK.md` | The only component, styling, chart, and icon libraries permitted |

@@ -1,0 +1,44 @@
+/* ============================================================
+   Block 23 Gym — Spacing, Radius & Layout
+   4px base grid. No off-scale values.
+   ============================================================ */
+
+:root {
+  /* ---- Spacing scale (4px base) ---- */
+  --b23-space-0:  0;
+  --b23-space-1:  4px;
+  --b23-space-2:  8px;
+  --b23-space-3:  12px;
+  --b23-space-4:  16px;
+  --b23-space-5:  20px;
+  --b23-space-6:  24px;
+  --b23-space-8:  32px;
+  --b23-space-10: 40px;
+  --b23-space-12: 48px;
+  --b23-space-16: 64px;
+
+  /* ---- Applied spacing (from the prototype) ---- */
+  --b23-card-pad:      20px; /* card / panel interior            */
+  --b23-card-pad-lg:   26px; /* hero card interior               */
+  --b23-cell-py:       13px; /* table cell vertical padding      */
+  --b23-cell-px:       16px; /* table cell horizontal padding    */
+  --b23-gap-inline:     8px; /* icon ↔ label                     */
+  --b23-gap-grid:      14px; /* KPI / card grid gutter           */
+  --b23-section-gap:   24px; /* between sections                 */
+
+  /* ---- Radius ---- */
+  --b23-radius-sm:   7px;  /* small controls, chips inside cards  */
+  --b23-radius-md:   9px;  /* menu items, small buttons           */
+  --b23-radius-lg:   11px; /* inputs, buttons, list rows          */
+  --b23-radius-xl:   14px; /* panels, report cards                */
+  --b23-radius-2xl:  16px; /* KPI cards, tables                   */
+  --b23-radius-3xl:  20px; /* modals, hero card                   */
+  --b23-radius-pill: 999px;/* pills, chips, badges, avatars       */
+
+  /* ---- App shell dimensions ---- */
+  --b23-topbar-h:    58px;
+  --b23-sidebar-w:   240px;
+  --b23-content-max: 1320px;
+  --b23-content-pad-x: 30px;
+  --b23-content-pad-y: 26px;
+}

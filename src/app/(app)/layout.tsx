@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { getCurrentGym } from "@/lib/gym";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { Topbar } from "@/components/app-shell/topbar";
@@ -22,10 +23,15 @@ export default async function AppLayout({
   const { name, email } = session.user;
   const role = (session.user as { role?: string }).role ?? "OWNER";
 
+  // Gym timezone drives the topbar clock (ADR-035). Falls back to the app's
+  // Manila default if the gym record is somehow unavailable.
+  const gym = await getCurrentGym();
+  const timezone = gym?.timezone ?? "Asia/Manila";
+
   return (
     <TooltipProvider delayDuration={0}>
       <div className="min-h-dvh">
-        <Topbar name={name} email={email} role={role} />
+        <Topbar name={name} email={email} role={role} timezone={timezone} />
         <div className="flex">
           <AppSidebar />
           <main className="min-w-0 flex-1 p-4 pb-20 md:p-6 md:pb-6">

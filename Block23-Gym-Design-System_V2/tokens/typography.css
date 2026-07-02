@@ -1,0 +1,50 @@
+/* ============================================================
+   Block 23 Gym — Typography
+   Display : Space Grotesk  (headings, KPI values, wordmark)
+   Body    : IBM Plex Sans  (all UI text)
+   Mono    : IBM Plex Mono  (money, counts, IDs, timestamps)
+   Numbers line up everywhere → tabular figures on all data.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ---- Families ---- */
+  --b23-display: 'Space Grotesk', system-ui, sans-serif; /* @kind font */
+  --b23-sans:    'IBM Plex Sans', system-ui, sans-serif; /* @kind font */
+  --b23-mono:    'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace; /* @kind font */
+
+  /* ---- Weights (limited to 400 / 500 / 600 · 700 rare display only) ---- */
+  --b23-w-regular: 400;  /* @kind font */
+  --b23-w-medium:  500;  /* @kind font */
+  --b23-w-semibold:600;  /* @kind font */
+  --b23-w-bold:    700;  /* @kind font */
+
+  /* ---- Type scale (px · data-dense, default body 14px) ---- */
+  --b23-fs-hero:   56px; /* hero KPI value (display, tabular)    */
+  --b23-fs-display:30px; /* page hero / greeting (display)       */
+  --b23-fs-h1:     28px; /* page title (display)                 */
+  --b23-fs-kpi:    28px; /* KPI card value (display, tabular)    */
+  --b23-fs-h2:     20px; /* section / card title (display)       */
+  --b23-fs-h3:     16px; /* sub-section, dialog title            */
+  --b23-fs-body:   14px; /* default UI text                      */
+  --b23-fs-sm:     13px; /* table cells, secondary               */
+  --b23-fs-xs:     12px; /* badges, captions, chips              */
+  --b23-fs-micro:  10px; /* mono eyebrow labels (letter-spaced)  */
+
+  /* ---- Line heights ---- */
+  --b23-lh-tight: 1.1;   /* @kind font */
+  --b23-lh-snug:  1.3;   /* @kind font */
+  --b23-lh-body:  1.45;  /* @kind font */
+
+  /* ---- Tracking ---- */
+  --b23-track-display: -0.02em; /* @kind font */
+  --b23-track-eyebrow:  0.08em; /* @kind font */
+  --b23-track-nav:      0.16em; /* @kind font */
+
+  /* ---- Numeric treatment (apply to all data) ---- */
+  --b23-tnum: tabular-nums; /* @kind font */
+}
+
+/* Utility: any element carrying data figures should line up */
+.b23-tabular { font-variant-numeric: tabular-nums; }
